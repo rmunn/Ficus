@@ -1,2 +1,2 @@
-#### 0.1.0 - 2017-03-17
-* Initial release
+#### 0.0.1 - 2018-03-04
+* Initial pre-alpha
