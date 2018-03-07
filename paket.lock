@@ -5,8 +5,12 @@ NUGET
       FSharp.Core (>= 4.0.1.7-alpha) - restriction: >= netstandard1.6
       NETStandard.Library (>= 1.6) - restriction: >= netstandard1.6
       System.Xml.XDocument (>= 4.0.11) - restriction: >= netstandard1.6
-    dotnet-mono (0.3.4) - clitool: true
+    Chessie (0.6) - restriction: >= netcoreapp1.0
+      FSharp.Core (>= 4.0.1.7-alpha) - restriction: >= netstandard1.6
+      NETStandard.Library (>= 1.6) - restriction: >= netstandard1.6
+    dotnet-mono (0.5.1) - clitool: true
       Argu (>= 3.7) - restriction: >= netcoreapp1.0
+      Chessie (>= 0.6) - restriction: >= netcoreapp1.0
       FSharp.Core (>= 4.1.17) - restriction: >= netcoreapp1.0
       Microsoft.Build (>= 15.5.180) - restriction: >= netcoreapp1.0
       Microsoft.Build.Utilities.Core (>= 15.5.180) - restriction: >= netcoreapp1.0
@@ -14,19 +18,15 @@ NUGET
       Microsoft.NETCore.App (>= 2.0) - restriction: >= netcoreapp2.0
       System.Runtime.Loader (>= 4.3) - restriction: && (>= netcoreapp1.0) (< netcoreapp2.0)
       System.ValueTuple (>= 4.4) - restriction: && (>= netcoreapp1.0) (< netcoreapp2.0)
-    Expecto (5.1.2)
+    Expecto (6.0)
       Argu (>= 3.7) - restriction: || (>= net461) (>= netstandard1.6)
       FSharp.Core (>= 4.1.18) - restriction: || (>= net461) (>= netstandard1.6)
       Mono.Cecil (>= 0.10.0-beta7) - restriction: || (>= net461) (>= netstandard1.6)
-      NETStandard.Library (>= 1.6.1) - restriction: && (< net461) (>= netstandard1.6) (< netstandard2.0)
       System.Diagnostics.FileVersionInfo (>= 4.3) - restriction: || (&& (< net461) (>= netstandard1.6) (< netstandard2.0)) (&& (< net461) (>= netstandard2.0))
-      System.ValueTuple (>= 4.4) - restriction: || (>= net461) (&& (>= netstandard1.6) (< netstandard2.0))
-    Expecto.FsCheck (5.1.2)
-      Expecto (>= 5.1.2) - restriction: || (>= net461) (>= netstandard1.6)
+    Expecto.FsCheck (6.0)
+      Expecto (>= 6.0) - restriction: || (>= net461) (>= netstandard1.6)
       FsCheck (>= 2.10.4) - restriction: || (>= net461) (>= netstandard1.6)
       FSharp.Core (>= 4.1.18) - restriction: || (>= net461) (>= netstandard1.6)
-      NETStandard.Library (>= 1.6.1) - restriction: && (< net461) (>= netstandard1.6) (< netstandard2.0)
-      System.ValueTuple (>= 4.4) - restriction: || (>= net461) (&& (>= netstandard1.6) (< netstandard2.0))
     FsCheck (2.10.8) - restriction: || (>= net461) (>= netstandard1.6)
       FSharp.Core (>= 4.0.0.1) - restriction: || (>= net452) (&& (< netstandard1.6) (>= portable-net45+win8)) (&& (< portable-net45+win8) (>= portable-net45+win8+wp8)) (&& (< portable-net45+win8+wp8) (>= portable-net45+win8+wp8+wpa81))
       FSharp.Core (>= 4.2.3) - restriction: && (< net452) (>= netstandard1.6)
@@ -336,7 +336,7 @@ NUGET
       System.Security.Cryptography.Algorithms (>= 4.2) - restriction: && (< net35) (>= netstandard1.3)
       System.Security.Cryptography.Csp (>= 4.0) - restriction: && (< net35) (>= netstandard1.3)
       System.Threading (>= 4.0.11) - restriction: && (< net35) (>= netstandard1.3)
-    NETStandard.Library (2.0.1) - restriction: && (< net461) (>= netstandard1.6) (< netstandard2.0)
+    NETStandard.Library (2.0.1) - restriction: >= netstandard1.6
       Microsoft.NETCore.Platforms (>= 1.1) - restriction: || (>= monoandroid) (>= monotouch) (&& (>= net45) (< portable-net451+win81+wpa81)) (&& (< net45) (>= netstandard1.1) (< portable-net451+win81+wpa81)) (&& (< net45) (>= netstandard1.2) (< netstandard1.3) (< wpa81)) (&& (< net45) (>= netstandard1.3) (< netstandard1.4) (< wpa81)) (&& (< net45) (>= netstandard1.4) (< netstandard1.5) (< wpa81)) (&& (< net45) (>= netstandard1.5) (< netstandard1.6) (< wpa81)) (&& (< net45) (>= netstandard1.6) (< netstandard2.0) (< wpa81)) (&& (< net45) (>= netstandard2.0)) (&& (>= net451) (< netstandard1.3)) (&& (>= net46) (< netstandard1.4)) (>= net461) (>= netcoreapp2.0) (&& (>= netstandard1.0) (< portable-net45+win8+wpa81)) (&& (< netstandard1.0) (>= portable-net45+win8+wp8+wpa81) (< portable-net45+win8+wpa81)) (&& (< netstandard1.0) (>= portable-net45+win8+wpa81) (< portable-net451+win81+wpa81)) (&& (< netstandard1.0) (>= portable-net451+win81+wpa81)) (&& (< netstandard1.3) (>= wpa81)) (&& (< netstandard1.5) (>= uap10.0)) (>= uap10.1) (>= xamarinios) (>= xamarinmac) (>= xamarintvos) (>= xamarinwatchos)
       Microsoft.Win32.Primitives (>= 4.3) - restriction: || (&& (< monoandroid) (< monotouch) (< net45) (>= netstandard1.6) (< netstandard2.0) (< wpa81) (< xamarinios) (< xamarinmac) (< xamarintvos) (< xamarinwatchos)) (&& (< monoandroid) (< net45) (>= netstandard1.3) (< netstandard1.4) (< wpa81)) (&& (< monoandroid) (< net45) (>= netstandard1.4) (< netstandard1.5) (< wpa81)) (&& (< monoandroid) (< net45) (>= netstandard1.5) (< netstandard1.6) (< wpa81)) (&& (>= net46) (< netstandard1.4)) (&& (< netstandard1.5) (>= uap10.0) (< uap10.1))
       System.AppContext (>= 4.3) - restriction: || (&& (< monoandroid) (< monotouch) (< net45) (>= netstandard1.6) (< netstandard2.0) (< wpa81) (< xamarinios) (< xamarinmac) (< xamarintvos) (< xamarinwatchos)) (&& (< monoandroid) (< net45) (>= netstandard1.3) (< netstandard1.4) (< wpa81)) (&& (< monoandroid) (< net45) (>= netstandard1.4) (< netstandard1.5) (< wpa81)) (&& (< monoandroid) (< net45) (>= netstandard1.5) (< netstandard1.6) (< wpa81)) (&& (>= net46) (< netstandard1.4)) (&& (< netstandard1.5) (>= uap10.0) (< uap10.1))
