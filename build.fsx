@@ -146,6 +146,7 @@ Target "AssemblyInfo" (fun _ ->
           Attribute.Version release.AssemblyVersion
           Attribute.Metadata("ReleaseDate", release.Date.Value.ToString("o"))
           Attribute.FileVersion release.AssemblyVersion
+          Attribute.InternalsVisibleTo "Ficus.Tests"  // TODO: Get the DLL name automatically
           Attribute.InformationalVersion release.AssemblyVersion
           Attribute.Metadata("ReleaseChannel", releaseChannel)
           Attribute.Metadata("GitHash", Information.getCurrentSHA1(null))
