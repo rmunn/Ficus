@@ -111,9 +111,11 @@ module RRBHelpers =
         else
             getItemFromLeaf (down shift) nextLvlIdx (child :?> Node)
 
-    let rec replaceItemAt shift treeIdx newItem (node:Node) =
-        if shift <= 0 then
-            node.Array |> Array.copyAndSet treeIdx newItem |> mkNode
+    let rec replaceItemAt shift treeIdx (newItem : 'T) (node:Node) =
+        if shift <= Literals.blockSizeShift then
+            let localIdx, child, nextIdx = radixIndexOrSearch shift treeIdx node
+            let newLeaf = (child :?> 'T[]) |> Array.copyAndSet nextIdx newItem |> box
+            node.Array |> Array.copyAndSet localIdx newLeaf |> mkNode
         else
             let localIdx, child, nextIdx = radixIndexOrSearch shift treeIdx node
             let newNode = replaceItemAt (down shift) nextIdx newItem (child :?> Node)
@@ -194,8 +196,8 @@ module RRBHelpers =
     let inline copyAndSubtractNFromSizeTable decIdx n oldST =
         copyAndAddNToSizeTable decIdx (-n) oldST
 
-    let inline fullNodeIsTrulyFull shift node =
-        node |> isEmpty || shift < Literals.blockSizeShift || treeSize (down shift) (getLastChildNode node) >= (1 <<< (down shift))
+    let inline fullNodeIsTrulyFull<'T> shift node =
+        shift < Literals.blockSizeShift || node |> isEmpty || treeSize<'T> (down shift) (Array.last node.Array) >= (1 <<< (down shift))
 
     // Note: childSize should be *tree* size, not *node* size. In other words, something appropriate for the size table at this level.
     let replaceChildAt<'T> shift localIdx newChild childSize (n:Node) =
@@ -225,14 +227,14 @@ module RRBHelpers =
             mkRRBNodeWithSizeTable shift entries' sizeTable'
         | _ ->
             // FullNodes are allowed to have their last item be non-full, so we have to check that
-            if node |> fullNodeIsTrulyFull shift then
+            if node |> fullNodeIsTrulyFull<'T> shift then
                 node.Array |> Array.copyAndAppend newChild |> mkNode
             else
                 node.Array |> Array.copyAndAppend newChild |> mkRRBNode<'T> shift
 
     let rec appendLeafWithoutGrowingTree shift (newLeaf : 'T[]) leafLen (rootNode : Node) =
         if shift <= Literals.blockSizeShift then
-            if nodeSize rootNode >= Literals.blockSize then None else appendChild shift (box newLeaf) leafLen rootNode |> Some
+            if nodeSize rootNode >= Literals.blockSize then None else appendChild<'T> shift (box newLeaf) leafLen rootNode |> Some
         else
             match appendLeafWithoutGrowingTree (down shift) newLeaf leafLen (Array.last rootNode.Array :?> Node) with
             | Some result -> rootNode.Array |> Array.copyAndSetLast (box result) |> mkRRBNode<'T> shift |> Some  // Using replaceChildAt here turned out to be slower
@@ -349,48 +351,56 @@ module RRBHelpers =
     //              "right slice" = slice the tree and keep the right half = "Skip"
 
     let rec leftSlice<'T> shift idx (node:Node) =
-        if shift > 0 then
-            let localIdx, child, nextIdx = radixIndexOrSearch shift idx node
-            let child' = if nextIdx = 0 then (child :?> Node) else leftSlice (down shift) nextIdx (child :?> Node)
-            let lastIdx = if nextIdx = 0 then localIdx - 1 else localIdx
-            let items = node.Array.[..lastIdx]
+        let localIdx, child, nextIdx = radixIndexOrSearch shift idx node
+        let lastIdx = if nextIdx = 0 then localIdx - 1 else localIdx
+        let items = node.Array.[..lastIdx]
+        let mutable newChildSize = 0
+        if shift <= Literals.blockSizeShift then
+            let leaf = child :?> 'T[]
+            let leaf' = if nextIdx = 0 then leaf else leaf.[..nextIdx-1]
+            if nextIdx > 0 then
+                items.[lastIdx] <- box leaf'
+                newChildSize <- treeSize<'T> (down shift) leaf'
+        else
+            let child' = if nextIdx = 0 then (child :?> Node) else leftSlice<'T> (down shift) nextIdx (child :?> Node)
             if nextIdx > 0 then
                 items.[lastIdx] <- box child'
-            match node with
-            | :? RRBNode as tree ->
-                let sizeTable = tree.SizeTable.[..lastIdx]
-                if nextIdx > 0 then
-                    let diff = treeSize (down shift) (child :?> Node) - treeSize (down shift) child'
-                    sizeTable.[lastIdx] <- sizeTable.[lastIdx] - diff
-                mkRRBNodeWithSizeTable shift items sizeTable
-            | _ -> mkRRBNode<'T> shift items
-        else
-            let items = Array.sub node.Array 0 idx
-            // There are no tree nodes at leaf level (shift = 0)
-            mkNode items
+                newChildSize <- treeSize<'T> (down shift) child'
+        match node with
+        | :? RRBNode as tree ->
+            let sizeTable = tree.SizeTable.[..lastIdx]
+            if nextIdx > 0 then
+                let diff = treeSize (down shift) (child :?> Node) - newChildSize
+                sizeTable.[lastIdx] <- sizeTable.[lastIdx] - diff
+            mkRRBNodeWithSizeTable shift items sizeTable
+        | _ -> mkRRBNode<'T> shift items
 
     let rec rightSlice<'T> shift idx (node:Node) =
-        if shift > 0 then
-            let localIdx, child, nextIdx = radixIndexOrSearch shift idx node
-            let items = node.Array.[localIdx..]
-            let child' = if nextIdx = 0 then (child :?> Node) else rightSlice (down shift) nextIdx (child :?> Node)
+        let localIdx, child, nextIdx = radixIndexOrSearch shift idx node
+        let items = node.Array.[localIdx..]
+        let mutable newChildSize = 0
+        if shift <= Literals.blockSizeShift then
+            let leaf = child :?> 'T[]
+            let leaf' = if nextIdx = 0 then leaf else leaf.[nextIdx..]
+            if nextIdx > 0 then
+                items.[0] <- box leaf'
+                newChildSize <- treeSize<'T> (down shift) leaf'
+        else
+            let child' = if nextIdx = 0 then (child :?> Node) else rightSlice<'T> (down shift) nextIdx (child :?> Node)
             if nextIdx > 0 then
                 items.[0] <- box child'
-            match node with
-            | :? RRBNode as tree ->
-                let sizeTable = tree.SizeTable.[localIdx..]
-                let diff = if nextIdx > 0 then sizeTable.[0] - treeSize (down shift) child'
-                           elif localIdx > 0 then tree.SizeTable.[localIdx - 1]
-                           else 0
-                if diff > 0 then
-                    for i = 0 to sizeTable.Length - 1 do
-                        sizeTable.[i] <- sizeTable.[i] - diff
-                mkRRBNodeWithSizeTable shift items sizeTable
-            | _ -> mkRRBNode<'T> shift items
-        else
-            let items = node.Array.[idx..]
-            // There are no tree nodes at leaf level (shift = 0)
-            mkNode items
+                newChildSize <- treeSize<'T> (down shift) child'
+        match node with
+        | :? RRBNode as tree ->
+            let sizeTable = tree.SizeTable.[localIdx..]
+            let diff = if nextIdx > 0 then sizeTable.[0] - newChildSize
+                        elif localIdx > 0 then tree.SizeTable.[localIdx - 1]
+                        else 0
+            if diff > 0 then
+                for i = 0 to sizeTable.Length - 1 do
+                    sizeTable.[i] <- sizeTable.[i] - diff
+            mkRRBNodeWithSizeTable shift items sizeTable
+        | _ -> mkRRBNode<'T> shift items
 
 
     // APPEND ALGORITHM
@@ -1088,7 +1098,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
             // We don't have to slice into the tree at all: just promote new tail as if we'd just popped the last item from the old tail
             RRBTree<'T>.promoteTail shift root takeCount :> RRBVector<'T>
         else
-            let newRoot = RRBHelpers.leftSlice shift takeCount root
+            let newRoot = RRBHelpers.leftSlice<'T> shift takeCount root
             RRBTree<'T>.promoteTail shift newRoot takeCount :> RRBVector<'T>
 
     override this.Skip skipCount =
@@ -1100,7 +1110,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
         elif skipCount = tailOffset then
             RRBTree<'T>(count - skipCount, 0, RRBHelpers.emptyNode, tail, 0) :> RRBVector<'T>
         else
-            let newRoot = RRBHelpers.rightSlice shift skipCount root
+            let newRoot = RRBHelpers.rightSlice<'T> shift skipCount root
             RRBTree<'T>(count - skipCount, shift, newRoot, tail, tailOffset - skipCount).AdjustTree() // :> RRBVector<'T>
 
     override this.Split splitIdx =
@@ -1211,7 +1221,10 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
         else
             if root.Array.Length > 1 then this :> RRBVector<'T>
             elif root.Array.Length = 0 then RRBTree<'T>(count, 0, root, tail, tailOffset) :> RRBVector<'T>
-            else RRBTree<'T>(count, RRBHelpers.down shift, (root |> RRBHelpers.getChildNode 0), tail, tailOffset).ShortenTree()
+            elif shift <= Literals.blockSizeShift then
+                RRBSapling<'T>(count, 0, (root.Array.[0] :?> 'T[]), tail, tailOffset) :> RRBVector<'T>
+            else
+                RRBTree<'T>(count, RRBHelpers.down shift, (root |> RRBHelpers.getChildNode 0), tail, tailOffset).ShortenTree()
 
     member internal this.ShiftNodesFromTailIfNeeded() =
         // Minor optimization: save most-often-needed thistor properties in locals so we don't hit property accesses over and over
