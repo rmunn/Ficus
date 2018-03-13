@@ -16,10 +16,10 @@ let isFull (node : Node) = not (isRRB node)
 let items (node : Node) = if isTwig node then node.Array else [||]
 let children (node : Node) = if isNotTwig node then node.Array else [||]
 
-let rec itemCount (node : Node) =
+let rec itemCount<'T> (node : Node) =
     if isEmpty node then 0
-    elif node |> isTwig then node.Array.Length
-    else node.Array |> Array.sumBy (fun n -> n :?> Node |> itemCount)
+    elif node |> isTwig then node.Array |> Array.sumBy (fun leaf -> (leaf :?> 'T[]).Length)
+    else node.Array |> Array.sumBy (fun n -> n :?> Node |> itemCount<'T>)
 
 let inline down shift = shift - Literals.blockSizeShift
 
@@ -47,7 +47,7 @@ let properties = [
         | :? RRBSapling<'T> as sapling ->
             Array.length sapling.Root + Array.length sapling.Tail = sapling.Length
         | :? RRBTree<'T> as tree ->
-            itemCount tree.Root + Array.length tree.Tail = tree.Length
+            itemCount<'T> tree.Root + Array.length tree.Tail = tree.Length
 
     "Unless the vector is empty, the tail should never be empty", fun (vec : RRBVector<'T>) ->
         match vec with
@@ -65,8 +65,9 @@ let properties = [
 
     "The number of items in each node should be <= the branching factor (Literals.blockSize)", fun (vec : RRBVector<'T>) ->
         let rec check shift (node : Node) =
-            if shift <= 0 then
-                node.Array.Length <= Literals.blockSize
+            if shift <= Literals.blockSizeShift then
+                node.Array.Length <= Literals.blockSize &&
+                node.Array |> Array.forall (fun n -> (n :?> 'T []).Length <= Literals.blockSize)
             else
                 node.Array.Length <= Literals.blockSize &&
                 node.Array |> Array.forall (fun n -> n :?> Node |> check (down shift))
@@ -84,16 +85,20 @@ let properties = [
             tree.Tail.Length <= Literals.blockSize
 
     "The size table of any tree node should match the number of items its descendent leaves contain", fun (vec : RRBVector<'T>) ->
-        let rec check (node : Node) =
+        let rec check shift (node : Node) =
             match node with
             | :? RRBNode as n ->
-                let expectedSizeTable = node.Array |> Array.map (fun n -> n :?> Node |> itemCount) |> Array.scan (+) 0 |> Array.skip 1
+                let expectedSizeTable =
+                    if shift <= Literals.blockSizeShift then
+                        node.Array |> Array.map (fun n -> (n :?> 'T[]).Length) |> Array.scan (+) 0 |> Array.skip 1
+                    else
+                        node.Array |> Array.map (fun n -> n :?> Node |> itemCount<'T>) |> Array.scan (+) 0 |> Array.skip 1
                 n.SizeTable = expectedSizeTable
             | _ -> true
         match vec with
         | :? RRBSapling<'T> as sapling -> true // Sapling roots are leaves, which don't have a size table
         | :? RRBTree<'T> as tree ->
-            check tree.Root
+            check tree.Shift tree.Root
 
     "The size table of any tree node should have as many entries as its # of direct child nodes", fun (vec : RRBVector<'T>) ->
         let rec check (node : Node) =
@@ -108,21 +113,32 @@ let properties = [
     "A full node should never contain less-than-full children except as its last child", fun (vec : RRBVector<'T>) ->
         let rec check shift (node : Node) =
             if shift <= 0 then true else
-            match node with
-            | :? RRBNode ->
-                node.Array |> Array.forall (fun n -> check (down shift) (n :?> Node))
-            | _ ->
-                let fullCheck (n : Node) =
-                    if shift <= Literals.blockSize then
-                        isFull n && n.Array.Length = Literals.blockSize
-                    else
-                        isFull n
-                if node.Array.Length <= 1 then
-                    check (down shift) (node.Array.[0] :?> Node)
-                else
+            if shift <= Literals.blockSizeShift then
+                match node with
+                | :? RRBNode -> true // RRBNode twigs satisfy the property without need for further checking, since their children are leaves
+                | _ ->
+                    if node.Array.Length <= 1 then true else
                     node.Array.[..node.Array.Length - 2] |> Array.forall (fun n ->
-                        fullCheck (n :?> Node) && check (down shift) (n :?> Node)
-                    ) && check (down shift) ((Array.last node.Array) :?> Node)
+                        (n :?> 'T[]).Length = Literals.blockSize)
+            else
+                match node with
+                | :? RRBNode ->
+                    if shift <= Literals.blockSizeShift then
+                        true // RRBNode twigs satisfy the property without need for further checking, since their children are leaves
+                    else
+                        node.Array |> Array.forall (fun n -> check (down shift) (n :?> Node))
+                | _ ->
+                    let fullCheck (n : Node) =
+                        if shift <= Literals.blockSizeShift then
+                            isFull n && n.Array.Length = Literals.blockSize
+                        else
+                            isFull n
+                    if node.Array.Length <= 1 then
+                        check (down shift) (node.Array.[0] :?> Node)
+                    else
+                        node.Array.[..node.Array.Length - 2] |> Array.forall (fun n ->
+                            fullCheck (n :?> Node) && check (down shift) (n :?> Node)
+                        ) && check (down shift) ((Array.last node.Array) :?> Node)
         match vec with
         | :? RRBSapling<'T> as sapling -> true // Not applicable to saplings
         | :? RRBTree<'T> as tree ->
@@ -141,7 +157,7 @@ let properties = [
                 if node |> isEmpty then
                     false
                 elif node |> isTwig then
-                    node.Array |> Array.length = Literals.blockSize
+                    ((node.Array |> Array.last) :?> 'T[]).Length = Literals.blockSize
                 else
                     let arr = node.Array
                     Array.length arr > 0 && arr |> Array.last |> (fun n -> n :?> Node |> check)
@@ -237,8 +253,16 @@ let properties = [
         let rec check shift (node : Node) =
             if shift <= 0 then true else // No RRBNodes at leaf level
             match node with
-            | :? RRBNode as n -> not (RRBHelpers.isSizeTableFullAtShift shift n.SizeTable) && n.Array |> Array.forall (fun n -> n :?> Node |> check (down shift))
-            | _ -> node.Array |> Array.forall (fun n -> n :?> Node |> check (down shift))
+            | :? RRBNode as n ->
+                if shift <= Literals.blockSizeShift then
+                    not (RRBHelpers.isSizeTableFullAtShift shift n.SizeTable)  // No need to descend further as there are no RRBNodes at the leaf level
+                else
+                    not (RRBHelpers.isSizeTableFullAtShift shift n.SizeTable) && n.Array |> Array.forall (fun n -> n :?> Node |> check (down shift))
+            | _ ->
+                if shift <= Literals.blockSizeShift then
+                    true  // No need to descend further as there are no RRBNodes at the leaf level
+                else
+                    node.Array |> Array.forall (fun n -> n :?> Node |> check (down shift))
         match vec with
         | :? RRBSapling<'T> as sapling -> true // Not applicable to saplings
         | :? RRBTree<'T> as tree ->
@@ -266,7 +290,7 @@ let properties = [
             if tree.Root |> isEmpty then
                 true // We test this condition in the "If the root node is empty ..." check above, not here.
             else // Non-empty root, so we can meaningfully check the height of the tree
-                (height 0 tree.Root) * Literals.blockSizeShift = tree.Shift
+                (height 1 tree.Root) * Literals.blockSizeShift = tree.Shift
 ]
 
 // Other properties to add at some point:
@@ -294,8 +318,11 @@ let combine r1 r2 = (r1 @ r2)
 
 open RRBVecGen
 
+let getPropertyResults vec =
+    properties |> List.map (fun (name,pred) -> checkProperty name pred vec) |> List.fold combine []
+
 let checkProperties vec label =
-    let result = properties |> List.map (fun (name,pred) -> checkProperty name pred vec) |> List.fold combine []
+    let result = getPropertyResults vec
     match result with
     | [] -> ()
     | errors -> Expecto.Tests.failtestf "%s %A\nRepr: %s\nfailed the following RRBVector invariants:\n%A" label vec (vecToTreeReprStr vec) errors
