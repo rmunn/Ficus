@@ -173,9 +173,9 @@ let rec genRRBNode g level childCount = gen {
     )
     let childrenGenerators =
         if level <= 1 then
-            childSizes |> Array.map (fun n -> g |> Gen.arrayOfLength n |> Gen.map (arrayToObjArray >> mkLeaf))
+            childSizes |> Array.map (fun n -> g |> Gen.arrayOfLength n |> Gen.map box)
         else
-            childSizes |> Array.map (genRRBNode g (level - 1))
+            childSizes |> Array.map (genRRBNode g (level - 1) >> Gen.map box)
     let! children = Gen.sequence childrenGenerators
     logger.verbose(
         eventX "genRRBNode called for level {level} with childCount {childCount}. Calculated slotCount {slotCount} and children:\n{children}"
@@ -184,7 +184,7 @@ let rec genRRBNode g level childCount = gen {
         >> setField "slotCount" slotCount
         >> setField "children" (sprintf "%A" children)
     )
-    let node = children |> Array.ofList |> arrayToObjArray |> mkNode level
+    let node = children |> Array.ofList |> mkNode level
     logger.verbose (
         eventX "genRRBNode at level {level} with childCount {childCount} generated node:\n{node}"
         >> setField "level" level
@@ -198,10 +198,10 @@ let rec genFullNode g level childCount = gen {
     let childSizes = Array.create childCount Literals.blockSize
     let children =
         if level <= 1 then
-            childSizes |> Array.map (fun n -> g |> Gen.arrayOfLength n |> Gen.map (arrayToObjArray >> mkLeaf))
+            childSizes |> Array.map (fun n -> g |> Gen.arrayOfLength n |> Gen.map box)
         else
-            childSizes |> Array.map (genFullNode g (level - 1))
-    return! children |> Gen.sequence |> Gen.map (Array.ofList >> arrayToObjArray >> mkNode level)
+            childSizes |> Array.map (genFullNode g (level - 1) >> Gen.map box)
+    return! children |> Gen.sequence |> Gen.map (Array.ofList >> mkNode level)
 }
 
 let genNode g level childCount =

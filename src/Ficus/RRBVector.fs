@@ -820,9 +820,10 @@ type RRBSapling<'T> internal (count, shift : int, root : 'T [], tail : 'T [], ta
             let extraRootItems = Literals.blockSize - rootLen
             Array.blit root 0 root' 0 rootLen
             Array.blit tail 0 root' rootLen extraRootItems
-            let tail' = Array.zeroCreate (tailLen + 1)
-            Array.blit tail extraRootItems tail' 0 tailLen
-            tail'.[tailLen] <- item
+            let tailLenMinusExtra = tailLen - extraRootItems
+            let tail' = Array.zeroCreate (tailLenMinusExtra + 1)
+            Array.blit tail extraRootItems tail' 0 tailLenMinusExtra
+            tail'.[tailLenMinusExtra] <- item
             RRBSapling<'T>(count + 1, shift, root', tail', Literals.blockSize) :> RRBVector<'T>
         else
             // Full root and full tail means we're upgrading to a full tree
@@ -837,24 +838,25 @@ type RRBSapling<'T> internal (count, shift : int, root : 'T [], tail : 'T [], ta
         if count - tailOffset > 1 then
             RRBSapling<'T>(count - 1, shift, root, Array.copyAndPop tail, tailOffset) :> RRBVector<'T>
         else
-            RRBSapling<'T>(count - 1, shift, Array.empty, root, tailOffset) :> RRBVector<'T>
+            RRBSapling<'T>(count - 1, shift, Array.empty, root, 0) :> RRBVector<'T>
 
     override this.Take takeCount =
+        let newLen = Operators.min count takeCount
         if takeCount < tailOffset then
-            RRBSapling<'T>(takeCount, 0, Array.empty, root |> Array.take takeCount, 0) :> RRBVector<'T>
+            RRBSapling<'T>(newLen, 0, Array.empty, root |> Array.truncate newLen, 0) :> RRBVector<'T>
         elif takeCount = tailOffset then
-            RRBSapling<'T>(takeCount, 0, Array.empty, root, 0) :> RRBVector<'T>
+            RRBSapling<'T>(newLen, 0, Array.empty, root, 0) :> RRBVector<'T>
         else
-            RRBSapling<'T>(takeCount, 0, root, tail |> Array.take (takeCount - tailOffset), tailOffset) :> RRBVector<'T>
+            RRBSapling<'T>(newLen, 0, root, tail |> Array.truncate (newLen - tailOffset), tailOffset) :> RRBVector<'T>
 
     override this.Skip skipCount =
         if skipCount < tailOffset then
             // TODO: Should we rebalance the root here so that it's a full blockSize items? Answer: No, that invariant isn't needed for saplings
-            RRBSapling<'T>(skipCount, 0, root |> Array.skip skipCount, tail, tailOffset - skipCount) :> RRBVector<'T>
+            RRBSapling<'T>(count - skipCount, 0, root |> Array.skip skipCount, tail, tailOffset - skipCount) :> RRBVector<'T>
         elif skipCount = tailOffset then
-            RRBSapling<'T>(skipCount, 0, Array.empty, tail, tailOffset) :> RRBVector<'T>
+            RRBSapling<'T>(count - skipCount, 0, Array.empty, tail, 0) :> RRBVector<'T>
         else
-            RRBSapling<'T>(skipCount, 0, Array.empty, tail |> Array.skip (skipCount - tailOffset), 0) :> RRBVector<'T>
+            RRBSapling<'T>(count - skipCount, 0, Array.empty, tail |> Array.skip (skipCount - tailOffset), 0) :> RRBVector<'T>
 
     override this.Split splitIdx = this.Take splitIdx, this.Skip splitIdx
 
@@ -1083,7 +1085,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
             let tailCount = takeCount - tailOffset
             RRBTree<'T>(takeCount, shift, root, Array.sub tail 0 tailCount, tailOffset) :> RRBVector<'T>
         elif takeCount = tailOffset then
-            // Promote new tail, and we might also need to shorten the tree (if root ends up length 1 after promoting new tail)
+            // We don't have to slice into the tree at all: just promote new tail as if we'd just popped the last item from the old tail
             RRBTree<'T>.promoteTail shift root takeCount :> RRBVector<'T>
         else
             let newRoot = RRBHelpers.leftSlice shift takeCount root
