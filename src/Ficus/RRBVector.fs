@@ -107,12 +107,12 @@ module RRBHelpers =
         else node |> getLastChildNode |> getRightmostTwig (down shift)
 
     // Find the leaf containing index `idx`, and the local index of `idx` in that leaf
-    let rec findLeafAndLeafIdx<'T> shift treeIdx node =
+    let rec getItemFromLeaf<'T> shift treeIdx node =
         let _, child, nextLvlIdx = radixIndexOrSearch shift treeIdx node
-        if shift <= 0 then
-            child :?> LeafNode<'T>, treeIdx
+        if shift <= Literals.blockSizeShift then
+            (child :?> 'T []).[nextLvlIdx]
         else
-            findLeafAndLeafIdx (down shift) nextLvlIdx (child :?> Node)
+            getItemFromLeaf (down shift) nextLvlIdx (child :?> Node)
 
     let rec replaceItemAt shift treeIdx newItem (node:Node) =
         if shift <= 0 then
@@ -317,9 +317,9 @@ module RRBHelpers =
 
     // These iterate only the tree; the methods on the RRBVector class will include the tail in their interations
 
-    let rec iterLeaves shift (arr:obj[]) =
+    let rec iterLeaves<'T> shift (arr:obj[]) : seq<'T []> =
         seq {
-            if shift <= 0 then yield arr
+            if shift <= Literals.blockSizeShift then yield! (arr |> Seq.cast<'T []>)
             else
                 for child in arr do
                     yield! iterLeaves (down shift) (child :?> Node).Array
@@ -327,7 +327,9 @@ module RRBHelpers =
 
     let rec revIterLeaves shift (arr:obj[]) =
         seq {
-            if shift <= 0 then yield arr
+            if shift <= Literals.blockSizeShift then
+                for i = arr.Length - 1 downto 0 do
+                    yield (arr.[i] :?> 'T [])
             else
                 for i = arr.Length - 1 downto 0 do
                     yield! revIterLeaves (down shift) (arr.[i] :?> Node).Array
@@ -650,20 +652,20 @@ module RRBHelpers =
     let buildTree (items : 'T[]) =
         let itemsLen = Array.length items
         if itemsLen <= Literals.blockSize then
-            RRBVector<'T>(itemsLen, 0, emptyNode :> obj, items, 0)
+            RRBSapling<'T>(itemsLen, 0, Array.empty, items, 0) :> RRBInterface<'T>
         elif itemsLen <= Literals.blockSize * 2 then
-            let root,tail = items |> arrayToObjArray |> Array.splitAt Literals.blockSize
-            RRBVector<'T>(itemsLen, 0, mkNode root :> obj, tail, Literals.blockSize)
+            let root,tail = items |> Array.splitAt Literals.blockSize
+            RRBSapling<'T>(itemsLen, 0, root, tail, Literals.blockSize) :> RRBInterface<'T>
         else
             let twigCount = (itemsLen - 1) >>> Literals.blockSizeShift
             let tailOffset = twigCount <<< Literals.blockSizeShift
             let remaining = itemsLen - tailOffset
             let twigArray = Array.zeroCreate twigCount
             for i=0 to twigCount-1 do
-                twigArray.[i] <- Array.sub items (i <<< Literals.blockSizeShift) Literals.blockSize |> arrayToObjArray |> mkNode |> box
+                twigArray.[i] <- Array.sub items (i <<< Literals.blockSizeShift) Literals.blockSize |> box
             let tail = Array.sub items tailOffset remaining
             let shift, root = buildRoot Literals.blockSizeShift twigArray
-            RRBVector<'T>(itemsLen, shift, root, tail |> arrayToObjArray, tailOffset)
+            RRBTree<'T>(itemsLen, shift, root, tail, tailOffset) :> RRBInterface<'T>
 
     let rec buildRootOfSeqWithKnownSize (shift : int) (children : seq<obj>) (inputLen : int) =
         if inputLen <= Literals.blockSize then
@@ -677,14 +679,14 @@ module RRBHelpers =
 
     let buildTreeOfSeqWithKnownSize itemsLen (items : seq<'T>) =
         if itemsLen <= Literals.blockSize then
-            RRBVector<'T>(itemsLen, 0, emptyNode, items |> Seq.cast |> seqToArrayKnownSize itemsLen, 0)
+            RRBTree<'T>(itemsLen, 0, emptyNode, items |> Seq.cast |> seqToArrayKnownSize itemsLen, 0)
         else
             let leafCount = (itemsLen - 1) >>> Literals.blockSizeShift
             let tailOffset = leafCount <<< Literals.blockSizeShift
             let tailCount = itemsLen - tailOffset
             let treeItems, tailItems = items |> seqSplitAt tailOffset
             let shift, root = buildRootOfSeqWithKnownSize 0 (treeItems |> Seq.cast) tailOffset
-            RRBVector<'T>(itemsLen, shift, root, tailItems |> Seq.cast |> seqToArrayKnownSize tailCount, tailOffset)
+            RRBTree<'T>(itemsLen, shift, root, tailItems |> Seq.cast |> seqToArrayKnownSize tailCount, tailOffset)
 
     // Helper function for RRBVector.Append (optimized construction of vector from two "saplings" - root+tail vectors)
     let buildTreeFromTwoSaplings (aRoot : Node) aTail (bRoot : Node) bTail =
@@ -693,33 +695,33 @@ module RRBHelpers =
             let items = Array.append3 aTail bRoot.Array bTail
             let len = items.Length
             if len <= Literals.blockSize then
-                RRBVector<'T>(len + Literals.blockSize, 0, aRoot, items, Literals.blockSize)
+                RRBTree<'T>(len + Literals.blockSize, 0, aRoot, items, Literals.blockSize)
             elif len <= Literals.blockSize * 2 then
                 let newRoot = mkNode [|box aRoot; Array.sub items 0 Literals.blockSize |> mkNodeThenBox|]
-                RRBVector<'T>(len + Literals.blockSize, Literals.blockSizeShift, newRoot, items.[Literals.blockSize..], Literals.blockSize * 2)
+                RRBTree<'T>(len + Literals.blockSize, Literals.blockSizeShift, newRoot, items.[Literals.blockSize..], Literals.blockSize * 2)
             else
                 let newRoot = mkNode [|box aRoot
                                        Array.sub items 0 Literals.blockSize |> mkNodeThenBox
                                        Array.sub items Literals.blockSize Literals.blockSize |> mkNodeThenBox|]
-                RRBVector<'T>(len + Literals.blockSize, Literals.blockSizeShift, newRoot, items.[Literals.blockSize*2..], Literals.blockSize * 3)
+                RRBTree<'T>(len + Literals.blockSize, Literals.blockSizeShift, newRoot, items.[Literals.blockSize*2..], Literals.blockSize * 3)
         else
             // Can't reuse any nodes
             let items = Array.append4 aRoot.Array aTail bRoot.Array bTail
             let len = items.Length
             if len <= Literals.blockSize then
-                RRBVector<'T>(len, 0, emptyNode, items, 0)
+                RRBTree<'T>(len, 0, emptyNode, items, 0)
             elif len <= Literals.blockSize * 2 then
                 let newRoot = mkNode (Array.sub items 0 Literals.blockSize)
-                RRBVector<'T>(len, 0, newRoot, items.[Literals.blockSize..], Literals.blockSize)
+                RRBTree<'T>(len, 0, newRoot, items.[Literals.blockSize..], Literals.blockSize)
             elif len <= Literals.blockSize * 3 then
                 let newRoot = mkNode [|mkNodeThenBox (Array.sub items 0 Literals.blockSize)
                                        mkNodeThenBox (Array.sub items Literals.blockSize Literals.blockSize)|]
-                RRBVector<'T>(len, Literals.blockSizeShift, newRoot, items.[Literals.blockSize*2..], Literals.blockSize * 2)
+                RRBTree<'T>(len, Literals.blockSizeShift, newRoot, items.[Literals.blockSize*2..], Literals.blockSize * 2)
             else
                 let newRoot = mkNode [|mkNodeThenBox (Array.sub items 0 Literals.blockSize)
                                        mkNodeThenBox (Array.sub items Literals.blockSize Literals.blockSize)
                                        mkNodeThenBox (Array.sub items (Literals.blockSize * 2) Literals.blockSize)|]
-                RRBVector<'T>(len, Literals.blockSizeShift, newRoot, items.[Literals.blockSize*3..], Literals.blockSize * 3)
+                RRBTree<'T>(len, Literals.blockSizeShift, newRoot, items.[Literals.blockSize*3..], Literals.blockSize * 3)
 
     // ==============
     // TREE-ADJUSTING functions (shortenTree, etc.)
@@ -732,18 +734,18 @@ module RRBHelpers =
     // that might have NOT been full, we have to first try to make it full (by adding items to it from other nodes). If that's not an option, then we
     // have to post-process the tree by shifting some nodes from the new tail into the new rightmost leaf.
 
-    let rec adjustTree (vec : RRBVector<'T>) =
+    let rec adjustTree (vec : RRBTree<'T>) =
         vec |> shortenTree |> shiftNodesFromTailIfNeeded
 
-    and shortenTree (vec : RRBVector<'T>) =
+    and shortenTree (vec : RRBTree<'T>) =
         if vec.Shift <= 0 then vec
         else
             let root : Node = vec.Root  // For some reason the compiler doesn't seem to like "vec.Root.Array.Length" in the line below, but this fixes it
             if root.Array.Length > 1 then vec
-            elif root |> isEmpty then RRBVector<'T>(vec.Length, 0, root, vec.Tail, vec.TailOffset)
-            else RRBVector<'T>(vec.Length, down vec.Shift, (root |> getChildNode 0), vec.Tail, vec.TailOffset) |> shortenTree
+            elif root |> isEmpty then RRBTree<'T>(vec.Length, 0, root, vec.Tail, vec.TailOffset)
+            else RRBTree<'T>(vec.Length, down vec.Shift, (root |> getChildNode 0), vec.Tail, vec.TailOffset) |> shortenTree
 
-    and shiftNodesFromTailIfNeeded (vec : RRBVector<'T>) =
+    and shiftNodesFromTailIfNeeded (vec : RRBTree<'T>) =
         // Minor optimization: save most-often-needed vector properties in locals so we don't hit property accesses over and over
         let shift = vec.Shift
         let root : Node = vec.Root
@@ -752,10 +754,10 @@ module RRBHelpers =
             if len = 0 || len = Literals.blockSize then vec else
             let items = Array.append root.Array vec.Tail
             if items.Length <= Literals.blockSize then
-                RRBVector<'T>(vec.Length, 0, emptyNode, items, 0)
+                RRBTree<'T>(vec.Length, 0, emptyNode, items, 0)
             else
                 let root', tail' = items |> Array.splitAt Literals.blockSize
-                RRBVector<'T>(vec.Length, 0, mkNode root', tail', Literals.blockSize)
+                RRBTree<'T>(vec.Length, 0, mkNode root', tail', Literals.blockSize)
         else
             let lastTwig = getRightmostTwig shift root
             match lastTwig with
@@ -771,20 +773,21 @@ module RRBHelpers =
                     let lastLeaf, root' = root |> removeLastLeaf shift
                     let tail' = tail |> Array.append lastLeaf.Array
                     // In certain rare cases, we might need to recurse. For example, the vector [M 5] [5] T1 will become [M 5] T6, which then needs to become M T11.
-                    RRBVector<'T>(vec.Length, shift, root', tail') |> adjustTree
+                    RRBTree<'T>(vec.Length, shift, root', tail') |> adjustTree
                 else
                     let nodesToShift, tail' = tail |> Array.splitAt shiftCount
                     let lastLeaf' = Array.append (lastLeaf :?> Node).Array nodesToShift |> mkNode
                     let root' = root |> replaceLastLeaf shift lastLeaf'
-                    RRBVector<'T>(vec.Length, shift, root', tail')
+                    RRBTree<'T>(vec.Length, shift, root', tail')
 
     let promoteTail shift root newLength =
         let newTail, newRoot = removeLastLeaf shift root
-        RRBVector<'T>(newLength, shift, newRoot :> obj, newTail.Array) |> adjustTree
+        RRBTree<'T>(newLength, shift, newRoot :> obj, newTail.Array) |> adjustTree
 
 
-type IRRBVector<'T> =
-    abstract member Empty : IRRBVector<'T>  // Or maybe it should be unit -> IRRBVector<'T>
+[<AbstractClass>]
+type RRBVector<'T>() =
+    abstract member Empty : RRBVector<'T>  // Or maybe it should be unit -> RRBVector<'T>
     abstract member IsEmpty : unit -> bool
     // abstract member StringRepr : unit -> string
     abstract member Length : int
@@ -793,28 +796,53 @@ type IRRBVector<'T> =
     abstract member IterItems : unit -> seq<'T>
     abstract member RevIterItems : unit -> seq<'T>
     // abstract member GetEnumerator : unit -> IEnumerator<'T>
-    abstract member Push : 'T -> IRRBVector<'T>
+    abstract member Push : 'T -> RRBVector<'T>
     abstract member Peek : unit -> 'T
-    abstract member Pop : unit -> IRRBVector<'T>
-    abstract member Take : int -> IRRBVector<'T>
-    abstract member Skip : int -> IRRBVector<'T>
-    abstract member Split : int -> IRRBVector<'T> * IRRBVector<'T>
-    abstract member Slice : int * int -> IRRBVector<'T>
-    abstract member GetSlice : int option * int option -> IRRBVector<'T>
-    abstract member Append : IRRBVector<'T> -> IRRBVector<'T> -> IRRBVector<'T>
-    abstract member Insert : int -> 'T -> IRRBVector<'T>
-    abstract member Remove : int -> IRRBVector<'T>
-    abstract member Update : int -> 'T -> IRRBVector<'T>
+    abstract member Pop : unit -> RRBVector<'T>
+    abstract member Take : int -> RRBVector<'T>
+    abstract member Skip : int -> RRBVector<'T>
+    abstract member Split : int -> RRBVector<'T> * RRBVector<'T>
+    abstract member Slice : int * int -> RRBVector<'T>
+    abstract member GetSlice : int option * int option -> RRBVector<'T>
+    abstract member Append : RRBVector<'T> -> RRBVector<'T> -> RRBVector<'T>
+    abstract member Insert : int -> 'T -> RRBVector<'T>
+    abstract member Remove : int -> RRBVector<'T>
+    abstract member Update : int -> 'T -> RRBVector<'T>
     abstract member Item : int -> 'T
 
-type internal IRRBVectorInternal<'T> =
-    abstract member InsertIntoTail : int -> 'T -> IRRBVector<'T>
-    abstract member RemoveFromTailAtTailIdx : int -> IRRBVector<'T>
-    abstract member RemoveImpl : bool -> int -> IRRBVector<'T>
-    abstract member RemoveWithoutRebalance : int -> IRRBVector<'T>
+type RRBInterface<'T> =
+    abstract member Empty : RRBInterface<'T>  // Or maybe it should be unit -> RRBInterface<'T>
+    abstract member IsEmpty : unit -> bool
+    // abstract member StringRepr : unit -> string
+    abstract member Length : int
+    abstract member IterLeaves : unit -> seq<'T []>
+    abstract member RevIterLeaves : unit -> seq<'T []>
+    abstract member IterItems : unit -> seq<'T>
+    abstract member RevIterItems : unit -> seq<'T>
+    // abstract member GetEnumerator : unit -> IEnumerator<'T>
+    abstract member Push : 'T -> RRBInterface<'T>
+    abstract member Peek : unit -> 'T
+    abstract member Pop : unit -> RRBInterface<'T>
+    abstract member Take : int -> RRBInterface<'T>
+    abstract member Skip : int -> RRBInterface<'T>
+    abstract member Split : int -> RRBInterface<'T> * RRBInterface<'T>
+    abstract member Slice : int * int -> RRBInterface<'T>
+    abstract member GetSlice : int option * int option -> RRBInterface<'T>
+    abstract member Append : RRBInterface<'T> -> RRBInterface<'T> -> RRBInterface<'T>
+    abstract member Insert : int -> 'T -> RRBInterface<'T>
+    abstract member Remove : int -> RRBInterface<'T>
+    abstract member Update : int -> 'T -> RRBInterface<'T>
+    abstract member Item : int -> 'T
+
+type internal RRBInterfaceInternal<'T> =
+    abstract member InsertIntoTail : int -> 'T -> RRBInterface<'T>
+    abstract member RemoveFromTailAtTailIdx : int -> RRBInterface<'T>
+    abstract member RemoveImpl : bool -> int -> RRBInterface<'T>
+    abstract member RemoveWithoutRebalance : int -> RRBInterface<'T>
 
 type RRBSapling<'T> internal (count, shift : int, root : 'T [], tail : 'T [], tailOffset : int)  =
-    // A "sapling" is a short tree, with shift = 0
+    inherit RRBVector<'T>()
+    // A "sapling" is a short tree, with shift = 0 (e.g., no more than two leaves, one in the root and one in the tail)
     let hashCode = ref None
     static member Empty : RRBSapling<'T> = RRBSapling<'T>(0,0,Array.empty,Array.empty,0)
 
@@ -837,68 +865,84 @@ type RRBSapling<'T> internal (count, shift : int, root : 'T [], tail : 'T [], ta
             Seq.forall2 (Unchecked.equals) this other
         | _ -> false
 
-    interface IRRBVector<'T> with
-        member this.Empty = RRBSapling<'T>(0,0,Array.empty,Array.empty,0) :> IRRBVector<'T>
-        member this.IsEmpty() = count = 0
-        member this.Length = count
-        member this.IterLeaves() = if root.Length = 0 then Seq.singleton tail else seq { yield root; yield tail }
-        member this.RevIterLeaves() = if root.Length = 0 then Seq.singleton tail else seq { yield tail; yield root }
-        member this.IterItems() = seq { yield! root; yield! tail }
-        member this.RevIterItems() = seq {
-            for i = tail.Length - 1 downto 0 do
-                yield tail.[i]
-            for i = root.Length - 1 downto 0 do
-                yield root.[i] }
-        member this.Push item =
-            let tailLen = count - tailOffset
-            if tailLen < Literals.blockSize then
-                // Easy: just add new item in tail and we're done
-                RRBSapling<'T>(count + 1, shift, root, tail |> Array.copyAndAppend item, tailOffset) :> IRRBVector<'T>
-            elif root.Length < Literals.blockSize then
-                // While we're building a new root anyway, let's ensure that it's a full array
-                let root' = Array.zeroCreate Literals.blockSize
-                let rootLen = root.Length
-                let extraRootItems = Literals.blockSize - rootLen
-                Array.blit root 0 root' 0 rootLen
-                Array.blit tail 0 root' rootLen extraRootItems
-                let tail' = Array.zeroCreate (tailLen + 1)
-                Array.blit tail extraRootItems tail' 0 tailLen
-                tail'.[tailLen] <- item
-                RRBSapling<'T>(count + 1, shift, root', tail', Literals.blockSize) :> IRRBVector<'T>
-            else
-                // Full root and full tail means we're upgrading to a full tree
-                let treeRoot = Node(ref null, [|box root; box tail|])
-                RRBVector<'T>(count + 1, Literals.blockSizeShift, treeRoot, [|item|], Literals.blockSize * 2) :> IRRBVector<'T>
+    override this.Empty = RRBSapling<'T>(0,0,Array.empty,Array.empty,0) :> RRBVector<'T>
+    override this.IsEmpty() = count = 0
+    override this.Length = count
+    override this.IterLeaves() = if root.Length = 0 then Seq.singleton tail else seq { yield root; yield tail }
+    override this.RevIterLeaves() = if root.Length = 0 then Seq.singleton tail else seq { yield tail; yield root }
+    override this.IterItems() = seq { yield! root; yield! tail }
+    override this.RevIterItems() = seq {
+        for i = tail.Length - 1 downto 0 do
+            yield tail.[i]
+        for i = root.Length - 1 downto 0 do
+            yield root.[i] }
+    override this.Push item =
+        let tailLen = count - tailOffset
+        if tailLen < Literals.blockSize then
+            // Easy: just add new item in tail and we're done
+            RRBSapling<'T>(count + 1, shift, root, tail |> Array.copyAndAppend item, tailOffset) :> RRBVector<'T>
+        elif root.Length < Literals.blockSize then
+            // While we're building a new root anyway, let's ensure that it's a full array
+            let root' = Array.zeroCreate Literals.blockSize
+            let rootLen = root.Length
+            let extraRootItems = Literals.blockSize - rootLen
+            Array.blit root 0 root' 0 rootLen
+            Array.blit tail 0 root' rootLen extraRootItems
+            let tail' = Array.zeroCreate (tailLen + 1)
+            Array.blit tail extraRootItems tail' 0 tailLen
+            tail'.[tailLen] <- item
+            RRBSapling<'T>(count + 1, shift, root', tail', Literals.blockSize) :> RRBVector<'T>
+        else
+            // Full root and full tail means we're upgrading to a full tree
+            let treeRoot = Node(ref null, [|box root; box tail|])
+            RRBTree<'T>(count + 1, Literals.blockSizeShift, treeRoot, [|item|], Literals.blockSize * 2) :> RRBVector<'T>
 
-        member this.Peek() = if count = 0 then failwith "Can't peek an empty vector" else tail |> Array.last
+    override this.Peek() = if count = 0 then failwith "Can't peek an empty vector" else tail |> Array.last
 
-        member this.Pop() =
-            if count <= 0 then invalidOp "Can't pop from an empty vector" else
-            if count = 1 then RRBSapling<'T>.Empty :> IRRBVector<'T> else
-            if count - tailOffset > 1 then
-                RRBSapling<'T>(count - 1, shift, root, Array.copyAndPop tail, tailOffset) :> IRRBVector<'T>
-            else
-                RRBSapling<'T>(count - 1, shift, Array.empty, root, tailOffset) :> IRRBVector<'T>
+    override this.Pop() =
+        if count <= 0 then invalidOp "Can't pop from an empty vector" else
+        if count = 1 then RRBSapling<'T>.Empty :> RRBVector<'T> else
+        if count - tailOffset > 1 then
+            RRBSapling<'T>(count - 1, shift, root, Array.copyAndPop tail, tailOffset) :> RRBVector<'T>
+        else
+            RRBSapling<'T>(count - 1, shift, Array.empty, root, tailOffset) :> RRBVector<'T>
 
-        member this.Take : int -> IRRBVector<'T>
-        member this.Skip : int -> IRRBVector<'T>
-        member this.Split : int -> IRRBVector<'T> * IRRBVector<'T>
-        member this.Slice : int * int -> IRRBVector<'T>
-        member this.GetSlice : int option * int option -> IRRBVector<'T>
-        member this.Append : IRRBVector<'T> -> IRRBVector<'T> -> IRRBVector<'T>
-        member this.Insert : int -> 'T -> IRRBVector<'T>
-        member this.Remove : int -> IRRBVector<'T>
-        member this.Update : int -> 'T -> IRRBVector<'T>
-        member this.Item : int -> 'T
+    override this.Take takeCount =
+        if takeCount < tailOffset then
+            RRBSapling<'T>(takeCount, 0, Array.empty, root |> Array.take takeCount, 0) :> RRBVector<'T>
+        elif takeCount = tailOffset then
+            RRBSapling<'T>(takeCount, 0, Array.empty, root, 0) :> RRBVector<'T>
+        else
+            RRBSapling<'T>(takeCount, 0, root, tail |> Array.take (takeCount - tailOffset), tailOffset) :> RRBVector<'T>
+
+    override this.Skip skipCount =
+        if skipCount < tailOffset then
+            // TODO: Should we rebalance the root here so that it's a full blockSize items?
+            RRBSapling<'T>(skipCount, 0, root |> Array.skip skipCount, tail, tailOffset - skipCount) :> RRBVector<'T>
+        elif skipCount = tailOffset then
+            RRBSapling<'T>(skipCount, 0, Array.empty, tail, tailOffset) :> RRBVector<'T>
+        else
+            RRBSapling<'T>(skipCount, 0, Array.empty, tail |> Array.skip (skipCount - tailOffset), 0) :> RRBVector<'T>
+
+    override this.Split splitIdx = this.Take splitIdx, this.Skip splitIdx
+
+    override this.Slice : int * int -> RRBVector<'T>
+    override this.GetSlice : int option * int option -> RRBVector<'T>
+    override this.Append : RRBVector<'T> -> RRBVector<'T> -> RRBVector<'T>
+    override this.Insert : int -> 'T -> RRBVector<'T>
+    override this.Remove : int -> RRBVector<'T>
+    override this.Update : int -> 'T -> RRBVector<'T>
+    override this.Item : int -> 'T
 
 
-and [<StructuredFormatDisplay("{StringRepr}")>] RRBVector<'T> internal (count, shift : int, root : Node, tail : 'T [], tailOffset : int)  =
+and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shift : int, root : Node, tail : 'T [], tailOffset : int)  =
+    inherit RRBVector<'T>()
     let hashCode = ref None
-    static member Empty() : RRBVector<'T> = RRBVector<'T>(0,0,RRBHelpers.emptyNode,Array.empty,0)
+    static member Empty() : RRBTree<'T> = RRBTree<'T>(0,0,RRBHelpers.emptyNode,Array.empty,0)
 
     new (vecLen,shift:int,root:obj,tail:'T[]) =
         let tailLen = Array.length tail
-        RRBVector<'T>(vecLen, shift, root, tail, vecLen - tailLen)
+        RRBTree<'T>(vecLen, shift, root, tail, vecLen - tailLen)
 
     override this.GetHashCode() =
         // This MUST follow the same algorithm as the GetHashCode() method from PersistentVector so that the Equals() logic will be valid
@@ -913,7 +957,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBVector<'T> internal (count, s
 
     override this.Equals(other) =
         match other with
-        | :? RRBVector<'T> as other ->
+        | :? RRBTree<'T> as other ->
             if this.Length <> other.Length then false else
             if this.GetHashCode() <> other.GetHashCode() then false else
             Seq.forall2 (Unchecked.equals) this other
@@ -923,43 +967,10 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBVector<'T> internal (count, s
         sprintf "RRBVector<length=%d,shift=%d,tailOffset=%d,root=%A,tail=%A>" count shift tailOffset root tail
 
     member this.StringRepr = this.ToString()
-
-    member this.Length = count
-
     member internal this.Shift = shift
     member internal this.Root = root
     member internal this.Tail = tail
     member internal this.TailOffset = tailOffset
-
-    member this.IterLeaves() =
-        if shift = 0 then
-            seq {
-                yield (root :?> LeafNode<'T>).Array
-                yield tail
-            }
-        else
-            seq {
-                yield! RRBHelpers.iterLeaves shift (root :?> Node).Array
-                yield tail
-            }
-
-    member this.RevIterLeaves() =
-        if (root |> unbox<Node>).Array.Length = 0
-        then Seq.singleton tail
-        else
-            seq {
-                yield tail
-                yield! RRBHelpers.revIterLeaves shift root.Array
-            }
-
-    member this.IterItems() = seq { for arr in this.IterLeaves() do for x in arr do yield x :?> 'T }
-
-    member this.RevIterItems() =
-        seq {
-            for arr in this.RevIterLeaves() do
-                for i = (arr.Length - 1) downto 0 do
-                    yield arr.[i] :?> 'T
-        }
 
     interface System.Collections.Generic.IEnumerable<'T> with
         member this.GetEnumerator() = this.IterItems().GetEnumerator()
@@ -967,229 +978,248 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBVector<'T> internal (count, s
     interface System.Collections.IEnumerable with
         member this.GetEnumerator() = this.IterItems().GetEnumerator() :> System.Collections.IEnumerator
 
-    member this.Push item =
-        if count - tailOffset < Literals.blockSize then
-            // Easy: just add new item in tail and we're done
-            RRBVector<'T>(count + 1, shift, root, tail |> Array.copyAndAppend item)
-        else
-            let root', shift' = RRBHelpers.pushTailDown shift tail root  // This does all the work
-            RRBVector<'T>(count + 1, shift', root', [|item|])
+    interface RRBInterface<'T> with
 
-    member this.Peek() =
-        if count = 0
-        then failwith "Can't peek an empty vector"
-        else tail |> Array.last :?> 'T
+        member this.Length = count
 
-    member internal this.InsertIntoTail tailIdx item =
-        if count - tailOffset < Literals.blockSize then
-            // Easy: just add new item in tail and we're done
-            RRBVector<'T>(count + 1, shift, root, tail |> Array.copyAndInsertAt tailIdx item)
-        else
-            let tailItemsToPush, remaining =
-                tail
-                |> Array.copyAndInsertAt tailIdx item
-                |> Array.splitAt Literals.blockSize
-            let root', shift' = RRBHelpers.pushTailDown shift tailItemsToPush root  // This does all the work
-            RRBVector<'T>(count + 1, shift', root', remaining)
+        member this.IterLeaves() =
+            seq { yield! RRBHelpers.iterLeaves shift (root :?> Node).Array
+                  yield tail }
 
-    member this.Pop() =
-        if count <= 0 then invalidOp "Can't pop from an empty vector" else
-        if count = 1 then RRBVector<'T>.Empty() else
-        if count - tailOffset > 1 then
-            RRBVector<'T>(count - 1, shift, root, Array.copyAndPop tail)
-        else
-            RRBHelpers.promoteTail shift root (count - 1)
+        member this.RevIterLeaves() =
+            seq { yield tail
+                  yield! RRBHelpers.revIterLeaves shift root.Array }
 
-    member internal this.RemoveFromTailAtTailIdx idx =
-        if count <= 0 then invalidOp "Can't remove from an empty vector" else
-        if count = 1 then RRBVector<'T>.Empty() else
-        if count - tailOffset > 1 then
-            RRBVector<'T>(count - 1, shift, root, Array.copyAndRemoveAt idx tail)
-        else
-            RRBHelpers.promoteTail shift root (count - 1)
+        member this.IterItems() = seq { for arr in this.IterLeaves() do yield! arr }
 
-    member this.Take takeCount =
-        if takeCount >= count then this
-        elif takeCount <= 0 then RRBVector<'T>.Empty()   // TODO: Decide whether a negative count in Take() should be an exception or not
-        elif takeCount > tailOffset then
-            let tailCount = takeCount - tailOffset
-            RRBVector<'T>(takeCount, shift, root, Array.sub tail 0 tailCount, tailOffset)
-        elif takeCount = tailOffset then
-            // Promote new tail, and we might also need to shorten the tree (if root ends up length 1 after promoting new tail)
-            RRBHelpers.promoteTail shift root takeCount
-        else
-            let newRoot = RRBHelpers.leftSlice shift takeCount root
-            RRBHelpers.promoteTail shift newRoot takeCount
+        member this.RevIterItems() =
+            seq {
+                for arr in this.RevIterLeaves() do
+                    for i = (arr.Length - 1) downto 0 do
+                        yield arr.[i]
+            }
 
-    member this.Skip skipCount =
-        if skipCount >= count then RRBVector<'T>.Empty()
-        elif skipCount <= 0 then this   // TODO: Decide whether a negative count in Skip() should be an exception or not
-        elif skipCount > tailOffset then
-            let tailStart = skipCount - tailOffset
-            RRBVector<'T>(count - skipCount, 0, RRBHelpers.emptyNode, tail.[tailStart..], 0)
-        elif skipCount = tailOffset then
-            RRBVector<'T>(count - skipCount, 0, RRBHelpers.emptyNode, tail, 0)
-        else
-            let newRoot = RRBHelpers.rightSlice shift skipCount root
-            RRBVector<'T>(count - skipCount, shift, newRoot, tail, tailOffset - skipCount) |> RRBHelpers.adjustTree
-
-    member this.Split splitIdx =
-        this.Take splitIdx, this.Skip splitIdx
-
-    member this.Slice (fromIdx, toIdx) =
-        (this.Skip fromIdx).Take (toIdx - fromIdx + 1)
-
-    // Slice notation vec.[from..to] turns into a this.GetSlice call with option indices
-    member this.GetSlice (fromIdx, toIdx) =
-        let step1 = match fromIdx with
-                    | None -> this
-                    | Some idx -> this.Skip idx
-        let step2 = match toIdx with
-                    | None -> step1
-                    | Some idx -> step1.Take (idx - (defaultArg fromIdx 0) + 1)
-        step2
-
-    member this.Append (b : RRBVector<'T>) =  // Appends vector B at the end of this vector
-        if count = 0 then b
-        elif b.Length = 0 then this
-
-        elif b.Root |> RRBHelpers.isEmpty then
-            if tail.Length + b.Tail.Length <= Literals.blockSize then
-                let newTail = Array.append tail b.Tail
-                RRBVector<'T>(count + b.Length, shift, root, newTail, tailOffset)
+        member this.Push item =
+            if count - tailOffset < Literals.blockSize then
+                // Easy: just add new item in tail and we're done
+                RRBTree<'T>(count + 1, shift, root, tail |> Array.copyAndAppend item)
             else
-                let newLeaf, newTail = Array.appendAndSplitAt Literals.blockSize tail b.Tail
-                let newRoot, newShift = RRBHelpers.pushTailDown shift newLeaf root
-                RRBVector<'T>(count + b.Length, newShift, newRoot, newTail)
+                let root', shift' = RRBHelpers.pushTailDown shift tail root  // This does all the work
+                RRBTree<'T>(count + 1, shift', root', [|item|])
 
-        elif b.Shift < Literals.blockSizeShift then
-            if shift >= Literals.blockSizeShift then
-                // B is root+tail, left is full tree
-                let lastTwig = RRBHelpers.getRightmostTwig shift root
-                let tLen = tail.Length
-                if (lastTwig :? RRBNode && lastTwig.Array.Length < Literals.blockSize) || tLen = Literals.blockSize then
-                    // Can safely push tail without messing up the invariant
-                    let tempRoot, tempShift = root |> RRBHelpers.pushTailDown shift tail
-                    let newRoot, newShift = tempRoot |> RRBHelpers.appendLeafWithGrowth tempShift b.Root
-                    RRBVector<'T>(count + b.Length, newShift, newRoot, b.Tail)
+        member this.Peek() =
+            if count = 0
+            then failwith "Can't peek an empty vector"
+            else tail |> Array.last :?> 'T
+
+        member internal this.InsertIntoTail tailIdx item =
+            if count - tailOffset < Literals.blockSize then
+                // Easy: just add new item in tail and we're done
+                RRBTree<'T>(count + 1, shift, root, tail |> Array.copyAndInsertAt tailIdx item)
+            else
+                let tailItemsToPush, remaining =
+                    tail
+                    |> Array.copyAndInsertAt tailIdx item
+                    |> Array.splitAt Literals.blockSize
+                let root', shift' = RRBHelpers.pushTailDown shift tailItemsToPush root  // This does all the work
+                RRBTree<'T>(count + 1, shift', root', remaining)
+
+        member this.Pop() =
+            if count <= 0 then invalidOp "Can't pop from an empty vector" else
+            if count = 1 then RRBTree<'T>.Empty() else
+            if count - tailOffset > 1 then
+                RRBTree<'T>(count - 1, shift, root, Array.copyAndPop tail)
+            else
+                RRBHelpers.promoteTail shift root (count - 1)
+
+        member internal this.RemoveFromTailAtTailIdx idx =
+            if count <= 0 then invalidOp "Can't remove from an empty vector" else
+            if count = 1 then RRBTree<'T>.Empty() else
+            if count - tailOffset > 1 then
+                RRBTree<'T>(count - 1, shift, root, Array.copyAndRemoveAt idx tail)
+            else
+                RRBHelpers.promoteTail shift root (count - 1)
+
+        member this.Take takeCount =
+            if takeCount >= count then this
+            elif takeCount <= 0 then RRBTree<'T>.Empty()   // TODO: Decide whether a negative count in Take() should be an exception or not
+            elif takeCount > tailOffset then
+                let tailCount = takeCount - tailOffset
+                RRBTree<'T>(takeCount, shift, root, Array.sub tail 0 tailCount, tailOffset)
+            elif takeCount = tailOffset then
+                // Promote new tail, and we might also need to shorten the tree (if root ends up length 1 after promoting new tail)
+                RRBHelpers.promoteTail shift root takeCount
+            else
+                let newRoot = RRBHelpers.leftSlice shift takeCount root
+                RRBHelpers.promoteTail shift newRoot takeCount
+
+        member this.Skip skipCount =
+            if skipCount >= count then RRBTree<'T>.Empty()
+            elif skipCount <= 0 then this   // TODO: Decide whether a negative count in Skip() should be an exception or not
+            elif skipCount > tailOffset then
+                let tailStart = skipCount - tailOffset
+                RRBTree<'T>(count - skipCount, 0, RRBHelpers.emptyNode, tail.[tailStart..], 0)
+            elif skipCount = tailOffset then
+                RRBTree<'T>(count - skipCount, 0, RRBHelpers.emptyNode, tail, 0)
+            else
+                let newRoot = RRBHelpers.rightSlice shift skipCount root
+                RRBTree<'T>(count - skipCount, shift, newRoot, tail, tailOffset - skipCount) |> RRBHelpers.adjustTree
+
+        member this.Split splitIdx =
+            this.Take splitIdx, this.Skip splitIdx
+
+        member this.Slice (fromIdx, toIdx) =
+            (this.Skip fromIdx).Take (toIdx - fromIdx + 1)
+
+        // Slice notation vec.[from..to] turns into a this.GetSlice call with option indices
+        member this.GetSlice (fromIdx, toIdx) =
+            let step1 = match fromIdx with
+                        | None -> this
+                        | Some idx -> this.Skip idx
+            let step2 = match toIdx with
+                        | None -> step1
+                        | Some idx -> step1.Take (idx - (defaultArg fromIdx 0) + 1)
+            step2
+
+        member this.Append (b : RRBTree<'T>) =  // Appends vector B at the end of this vector
+            if count = 0 then b
+            elif b.Length = 0 then this
+
+            elif b.Root |> RRBHelpers.isEmpty then
+                if tail.Length + b.Tail.Length <= Literals.blockSize then
+                    let newTail = Array.append tail b.Tail
+                    RRBTree<'T>(count + b.Length, shift, root, newTail, tailOffset)
                 else
-                    // Have to shift some nodes, so there's no advantage in keeping the right tree's root and tail intact.
-                    let items = Array.append3 tail b.Root.Array b.Tail
-                    let len = items.Length
-                    if len <= Literals.blockSize then
-                        RRBVector<'T>(count + b.Length, shift, root, items, tailOffset)
-                    elif len <= Literals.blockSize * 2 then
-                        let newLeaf, newTail = items |> Array.splitAt Literals.blockSize
-                        let newRoot, newShift = root |> RRBHelpers.pushTailDown shift newLeaf
-                        RRBVector<'T>(count + b.Length, newShift, newRoot, newTail)
+                    let newLeaf, newTail = Array.appendAndSplitAt Literals.blockSize tail b.Tail
+                    let newRoot, newShift = RRBHelpers.pushTailDown shift newLeaf root
+                    RRBTree<'T>(count + b.Length, newShift, newRoot, newTail)
+
+            elif b.Shift < Literals.blockSizeShift then
+                if shift >= Literals.blockSizeShift then
+                    // B is root+tail, left is full tree
+                    let lastTwig = RRBHelpers.getRightmostTwig shift root
+                    let tLen = tail.Length
+                    if (lastTwig :? RRBNode && lastTwig.Array.Length < Literals.blockSize) || tLen = Literals.blockSize then
+                        // Can safely push tail without messing up the invariant
+                        let tempRoot, tempShift = root |> RRBHelpers.pushTailDown shift tail
+                        let newRoot, newShift = tempRoot |> RRBHelpers.appendLeafWithGrowth tempShift b.Root
+                        RRBTree<'T>(count + b.Length, newShift, newRoot, b.Tail)
                     else
-                        let newLeaf1, rest = items |> Array.splitAt Literals.blockSize
-                        let newLeaf2, newTail = rest |> Array.splitAt Literals.blockSize
-                        let tempRoot, tempShift = root |> RRBHelpers.pushTailDown shift newLeaf1
-                        let newRoot, newShift = tempRoot |> RRBHelpers.pushTailDown tempShift newLeaf2
-                        RRBVector<'T>(count + b.Length, newShift, newRoot, newTail)
-            else
-                RRBHelpers.buildTreeFromTwoSaplings root tail b.Root b.Tail
-
-        else
-            let aRoot, aShift =
-                if root |> RRBHelpers.isEmpty then root, Literals.blockSizeShift
-                elif shift < Literals.blockSizeShift then RRBHelpers.mkRRBNode Literals.blockSizeShift [|box root|], Literals.blockSizeShift
-                else root, shift
-            let aTwig = RRBHelpers.getRightmostTwig aShift aRoot
-            let bTwig = RRBHelpers.getLeftmostTwig b.Shift b.Root
-            let aRoot, aShift, aTail =
-                if RRBHelpers.isThereRoomToMergeTheTail aTwig bTwig tail.Length then
-                    aRoot, aShift, tail
+                        // Have to shift some nodes, so there's no advantage in keeping the right tree's root and tail intact.
+                        let items = Array.append3 tail b.Root.Array b.Tail
+                        let len = items.Length
+                        if len <= Literals.blockSize then
+                            RRBTree<'T>(count + b.Length, shift, root, items, tailOffset)
+                        elif len <= Literals.blockSize * 2 then
+                            let newLeaf, newTail = items |> Array.splitAt Literals.blockSize
+                            let newRoot, newShift = root |> RRBHelpers.pushTailDown shift newLeaf
+                            RRBTree<'T>(count + b.Length, newShift, newRoot, newTail)
+                        else
+                            let newLeaf1, rest = items |> Array.splitAt Literals.blockSize
+                            let newLeaf2, newTail = rest |> Array.splitAt Literals.blockSize
+                            let tempRoot, tempShift = root |> RRBHelpers.pushTailDown shift newLeaf1
+                            let newRoot, newShift = tempRoot |> RRBHelpers.pushTailDown tempShift newLeaf2
+                            RRBTree<'T>(count + b.Length, newShift, newRoot, newTail)
                 else
-                    // Push a's tail down, then merge the resulting tree
-                    let thisRootAfterPush, aShift' = RRBHelpers.pushTailDown aShift tail root
-                    thisRootAfterPush, aShift', [||]
-            let higherShift = max aShift b.Shift
-            // Occasionally, we can end up with a vector that needs adjusting (e.g., because the tail that was pushed down was short, so the invariant is no longer true).
-            match RRBHelpers.mergeTree aShift aRoot b.Shift b.Root aTail with
-            | [||], rootItems
-            | rootItems, [||] -> RRBVector<'T>(count + b.Length, higherShift, RRBHelpers.mkRRBNode higherShift rootItems, b.Tail, count + b.TailOffset) |> RRBHelpers.adjustTree
-            | rootItemsL, rootItemsR ->
-                let rootL = RRBHelpers.mkRRBNode higherShift rootItemsL
-                let rootR = RRBHelpers.mkRRBNode higherShift rootItemsR
-                let newShift = RRBHelpers.up higherShift
-                let newRoot = RRBHelpers.mkRRBNode newShift [|box rootL; box rootR|]
-                RRBVector<'T>(count + b.Length, newShift, newRoot, b.Tail, count + b.TailOffset) |> RRBHelpers.adjustTree
+                    RRBHelpers.buildTreeFromTwoSaplings root tail b.Root b.Tail
 
-    member this.Insert idx item =
-        let idx = if idx < 0 then idx + count else idx
-        if idx > count then
-            invalidArg "idx" "Tried to insert past the end of the vector"
-        elif idx = count then
-            this.Push item
-        elif idx >= tailOffset then
-            this.InsertIntoTail (idx - tailOffset) item
-        elif shift = 0 then
-            // We already know the root is not empty, otherwise we would have hit "idx >= tailOffset" just above
-            if root.Array.Length < Literals.blockSize then
-                let root' = root.Array |> Array.copyAndInsertAt idx item |> RRBHelpers.mkNode
-                RRBVector<'T>(count + 1, 0, root', tail, tailOffset + 1)
-            elif tail.Length < Literals.blockSize then
-                let newRootItems = root.Array |> Array.copyAndInsertAt idx item
-                let root' = Array.sub newRootItems 0 Literals.blockSize |> RRBHelpers.mkNode
-                let tail' = tail |> Array.copyAndInsertAt 0 (Array.last newRootItems)
-                RRBVector<'T>(count + 1, 0, root', tail', tailOffset)
             else
-                // Full root and full tail at shift 0: handle this case specially for efficiency's sake
-                let newItems = Array.appendAndInsertAt idx item root.Array tail
-                let a = newItems.[..Literals.blockSize-1]
-                let b = newItems.[Literals.blockSize..Literals.blockSize*2-1]
-                let tail' = newItems.[Literals.blockSize*2..]
-                let root' = RRBHelpers.mkNode [|RRBHelpers.mkNodeThenBox a; RRBHelpers.mkNodeThenBox b|]
-                RRBVector<'T>(count + 1, Literals.blockSizeShift, root', tail', Literals.blockSize*2)
-        else
-            match RRBHelpers.insertIntoTree shift idx item None 0 root with
-            | RRBHelpers.SlideResult.SimpleInsertion newRootItems ->
-                RRBVector<'T>(count + 1, shift, RRBHelpers.mkRRBNode shift newRootItems, tail, tailOffset + 1) |> RRBHelpers.adjustTree
-            | RRBHelpers.SlideResult.SlidItemsLeft (l,r)
-            | RRBHelpers.SlideResult.SlidItemsRight (l,r)
-            | RRBHelpers.SlideResult.SplitNode (l,r) ->
-                let a = RRBHelpers.mkRRBNode shift l
-                let b = RRBHelpers.mkRRBNode shift r
-                RRBVector<'T>(count + 1, (RRBHelpers.up shift), RRBHelpers.mkRRBNode (RRBHelpers.up shift) [|a;b|], tail, tailOffset + 1) |> RRBHelpers.adjustTree
+                let aRoot, aShift =
+                    if root |> RRBHelpers.isEmpty then root, Literals.blockSizeShift
+                    elif shift < Literals.blockSizeShift then RRBHelpers.mkRRBNode Literals.blockSizeShift [|box root|], Literals.blockSizeShift
+                    else root, shift
+                let aTwig = RRBHelpers.getRightmostTwig aShift aRoot
+                let bTwig = RRBHelpers.getLeftmostTwig b.Shift b.Root
+                let aRoot, aShift, aTail =
+                    if RRBHelpers.isThereRoomToMergeTheTail aTwig bTwig tail.Length then
+                        aRoot, aShift, tail
+                    else
+                        // Push a's tail down, then merge the resulting tree
+                        let thisRootAfterPush, aShift' = RRBHelpers.pushTailDown aShift tail root
+                        thisRootAfterPush, aShift', [||]
+                let higherShift = max aShift b.Shift
+                // Occasionally, we can end up with a vector that needs adjusting (e.g., because the tail that was pushed down was short, so the invariant is no longer true).
+                match RRBHelpers.mergeTree aShift aRoot b.Shift b.Root aTail with
+                | [||], rootItems
+                | rootItems, [||] -> RRBTree<'T>(count + b.Length, higherShift, RRBHelpers.mkRRBNode higherShift rootItems, b.Tail, count + b.TailOffset) |> RRBHelpers.adjustTree
+                | rootItemsL, rootItemsR ->
+                    let rootL = RRBHelpers.mkRRBNode higherShift rootItemsL
+                    let rootR = RRBHelpers.mkRRBNode higherShift rootItemsR
+                    let newShift = RRBHelpers.up higherShift
+                    let newRoot = RRBHelpers.mkRRBNode newShift [|box rootL; box rootR|]
+                    RRBTree<'T>(count + b.Length, newShift, newRoot, b.Tail, count + b.TailOffset) |> RRBHelpers.adjustTree
 
-    member internal this.RemoveImpl shouldCheckForRebalancing idx =
-        let idx = if idx < 0 then idx + count else idx
-        if idx >= count then
-            invalidArg "idx" "Tried to remove past the end of the vector"
-        elif count = 0 then
-            failwith "Can't remove from an empty vector"
-        elif idx >= tailOffset then
-            this.RemoveFromTailAtTailIdx(idx - tailOffset)
-        elif shift = 0 then
-            let newRoot = root.Array |> Array.copyAndRemoveAt idx |> RRBHelpers.mkNode
-            RRBVector<'T>(count - 1, 0, newRoot, tail, tailOffset - 1) |> RRBHelpers.shortenTree  // No need for adjustTree at 0 shift
-        else
-            let newRoot = RRBHelpers.removeFromTree shift shouldCheckForRebalancing idx root |> RRBHelpers.mkRRBNode shift
-            RRBVector<'T>(count - 1, shift, newRoot, tail, tailOffset - 1) |> RRBHelpers.adjustTree
-
-    member this.Remove idx = this.RemoveImpl true idx
-    member internal this.RemoveWithoutRebalance idx = this.RemoveImpl false idx // Will be used in RRBVector.windowed implementation
-
-    member this.Update idx newItem =
-        let idx = if idx < 0 then idx + count else idx
-        if idx >= count then
-            invalidArg "idx" "Tried to update item past the end of the vector"
-        if idx >= tailOffset then
-            let newTail = tail |> Array.copyAndSet (idx - tailOffset) newItem
-            RRBVector<'T>(count, shift, root, newTail, tailOffset)
-        else
-            let newRoot = root |> RRBHelpers.replaceItemAt shift idx newItem
-            RRBVector<'T>(count, shift, newRoot, tail, tailOffset)
-
-    member this.Item
-        with get idx =
-            if idx < tailOffset then
-                let leaf, leafIdx = RRBHelpers.findLeafAndLeafIdx shift idx root
-                leaf.Array.[leafIdx]
+        member this.Insert idx item =
+            let idx = if idx < 0 then idx + count else idx
+            if idx > count then
+                invalidArg "idx" "Tried to insert past the end of the vector"
+            elif idx = count then
+                this.Push item
+            elif idx >= tailOffset then
+                this.InsertIntoTail (idx - tailOffset) item
+            elif shift = 0 then
+                // We already know the root is not empty, otherwise we would have hit "idx >= tailOffset" just above
+                if root.Array.Length < Literals.blockSize then
+                    let root' = root.Array |> Array.copyAndInsertAt idx item |> RRBHelpers.mkNode
+                    RRBTree<'T>(count + 1, 0, root', tail, tailOffset + 1)
+                elif tail.Length < Literals.blockSize then
+                    let newRootItems = root.Array |> Array.copyAndInsertAt idx item
+                    let root' = Array.sub newRootItems 0 Literals.blockSize |> RRBHelpers.mkNode
+                    let tail' = tail |> Array.copyAndInsertAt 0 (Array.last newRootItems)
+                    RRBTree<'T>(count + 1, 0, root', tail', tailOffset)
+                else
+                    // Full root and full tail at shift 0: handle this case specially for efficiency's sake
+                    let newItems = Array.appendAndInsertAt idx item root.Array tail
+                    let a = newItems.[..Literals.blockSize-1]
+                    let b = newItems.[Literals.blockSize..Literals.blockSize*2-1]
+                    let tail' = newItems.[Literals.blockSize*2..]
+                    let root' = RRBHelpers.mkNode [|RRBHelpers.mkNodeThenBox a; RRBHelpers.mkNodeThenBox b|]
+                    RRBTree<'T>(count + 1, Literals.blockSizeShift, root', tail', Literals.blockSize*2)
             else
-                tail.[idx - tailOffset]
+                match RRBHelpers.insertIntoTree shift idx item None 0 root with
+                | RRBHelpers.SlideResult.SimpleInsertion newRootItems ->
+                    RRBTree<'T>(count + 1, shift, RRBHelpers.mkRRBNode shift newRootItems, tail, tailOffset + 1) |> RRBHelpers.adjustTree
+                | RRBHelpers.SlideResult.SlidItemsLeft (l,r)
+                | RRBHelpers.SlideResult.SlidItemsRight (l,r)
+                | RRBHelpers.SlideResult.SplitNode (l,r) ->
+                    let a = RRBHelpers.mkRRBNode shift l
+                    let b = RRBHelpers.mkRRBNode shift r
+                    RRBTree<'T>(count + 1, (RRBHelpers.up shift), RRBHelpers.mkRRBNode (RRBHelpers.up shift) [|a;b|], tail, tailOffset + 1) |> RRBHelpers.adjustTree
+
+        member internal this.RemoveImpl shouldCheckForRebalancing idx =
+            let idx = if idx < 0 then idx + count else idx
+            if idx >= count then
+                invalidArg "idx" "Tried to remove past the end of the vector"
+            elif count = 0 then
+                failwith "Can't remove from an empty vector"
+            elif idx >= tailOffset then
+                this.RemoveFromTailAtTailIdx(idx - tailOffset)
+            elif shift = 0 then
+                let newRoot = root.Array |> Array.copyAndRemoveAt idx |> RRBHelpers.mkNode
+                RRBTree<'T>(count - 1, 0, newRoot, tail, tailOffset - 1) |> RRBHelpers.shortenTree  // No need for adjustTree at 0 shift
+            else
+                let newRoot = RRBHelpers.removeFromTree shift shouldCheckForRebalancing idx root |> RRBHelpers.mkRRBNode shift
+                RRBTree<'T>(count - 1, shift, newRoot, tail, tailOffset - 1) |> RRBHelpers.adjustTree
+
+        member this.Remove idx = this.RemoveImpl true idx
+        member internal this.RemoveWithoutRebalance idx = this.RemoveImpl false idx // Will be used in RRBVector.windowed implementation
+
+        member this.Update idx newItem =
+            let idx = if idx < 0 then idx + count else idx
+            if idx >= count then
+                invalidArg "idx" "Tried to update item past the end of the vector"
+            if idx >= tailOffset then
+                let newTail = tail |> Array.copyAndSet (idx - tailOffset) newItem
+                RRBTree<'T>(count, shift, root, newTail, tailOffset)
+            else
+                let newRoot = root |> RRBHelpers.replaceItemAt shift idx newItem
+                RRBTree<'T>(count, shift, newRoot, tail, tailOffset)
+
+        member this.Item
+            with get idx =
+                if idx < tailOffset
+                then RRBHelpers.getItemFromLeaf shift idx root
+                else tail.[idx - tailOffset]
 
 // BASIC API
 
@@ -1441,10 +1471,10 @@ module RRBVector =
                 while count < windowSize && itemEnumerator.MoveNext() do
                     tail.[count] <- itemEnumerator.Current
                     count <- count + 1
-                yield RRBVector<'T>(windowSize, 0, RRBHelpers.emptyNode, tail |> RRBHelpers.arrayToObjArray, windowSize)
+                yield RRBSapling<'T>(windowSize, 0, Array.empty, tail, windowSize) :> RRBInterface<'T>
                 while itemEnumerator.MoveNext() do
                     tail <- tail |> Array.popFirstAndPush itemEnumerator.Current
-                    yield RRBVector<'T>(windowSize, 0, RRBHelpers.emptyNode, tail |> RRBHelpers.arrayToObjArray, windowSize)
+                    yield RRBSapling<'T>(windowSize, 0, Array.empty, tail, windowSize)
             }
         elif windowSize <= Literals.blockSize * 2 then
             // Sequence of root+tail vectors (always-full root)
