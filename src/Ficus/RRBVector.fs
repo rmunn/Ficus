@@ -724,60 +724,6 @@ module RRBHelpers =
     // that might have NOT been full, we have to first try to make it full (by adding items to it from other nodes). If that's not an option, then we
     // have to post-process the tree by shifting some nodes from the new tail into the new rightmost leaf.
 
-    // TODO: Convert these to methods on RRBTree
-    let rec adjustTree (vec : RRBTree<'T>) =
-        vec |> shortenTree |> shiftNodesFromTailIfNeeded
-
-    and shortenTree (vec : RRBTree<'T>) =
-        // TODO: Convert to sapling if shift hits 0
-        if vec.Shift <= 0 then vec
-        else
-            let root : Node = vec.Root  // For some reason the compiler doesn't seem to like "vec.Root.Array.Length" in the line below, but this fixes it
-            if root.Array.Length > 1 then vec
-            elif root |> isEmpty then RRBTree<'T>(vec.Length, 0, root, vec.Tail, vec.TailOffset)
-            else RRBTree<'T>(vec.Length, down vec.Shift, (root |> getChildNode 0), vec.Tail, vec.TailOffset) |> shortenTree
-
-    and shiftNodesFromTailIfNeeded (vec : RRBTree<'T>) =
-        // Minor optimization: save most-often-needed vector properties in locals so we don't hit property accesses over and over
-        let shift = vec.Shift
-        let root : Node = vec.Root
-        if shift < Literals.blockSizeShift then
-            // Can't happen now that we've split RRBTrees and RRBSaplings
-            vec
-            // let len = root.Array.Length
-            // if len = 0 || len = Literals.blockSize then vec else
-            // let items = Array.append root.Array vec.Tail
-            // if items.Length <= Literals.blockSize then
-            //     RRBTree<'T>(vec.Length, 0, emptyNode, items, 0)
-            // else
-            //     let root', tail' = items |> Array.splitAt Literals.blockSize
-            //     RRBTree<'T>(vec.Length, 0, mkNode root', tail', Literals.blockSize)
-        else
-            let lastTwig = getRightmostTwig shift root
-            match lastTwig with
-            | :? RRBNode -> vec  // Only need to shift nodes from tail if the last twig was a full node
-            | _ ->
-                let tail = vec.Tail
-                let lastLeaf = (Array.last lastTwig.Array) :?> 'T []
-                let shiftCount = Literals.blockSize - lastLeaf.Length
-                if shiftCount = 0 then
-                    vec
-                elif shiftCount >= tail.Length then
-                    // Would shift everything out of the tail, so instead we'll promote a new tail
-                    let lastLeaf, root' = root |> removeLastLeaf shift
-                    let tail' = tail |> Array.append lastLeaf
-                    // In certain rare cases, we might need to recurse. For example, the vector [M 5] [5] T1 will become [M 5] T6, which then needs to become M T11.
-                    RRBTree<'T>(vec.Length, shift, root', tail') |> adjustTree
-                else
-                    let nodesToShift, tail' = tail |> Array.splitAt shiftCount
-                    let lastLeaf' = Array.append lastLeaf nodesToShift
-                    let root' = root |> replaceLastLeaf shift lastLeaf'
-                    RRBTree<'T>(vec.Length, shift, root', tail')
-
-    let promoteTail shift root newLength =
-        let newTail, newRoot = removeLastLeaf shift root
-        RRBTree<'T>(newLength, shift, newRoot, newTail) |> adjustTree
-
 
 [<AbstractClass>]
 type RRBVector<'T>() =
@@ -822,7 +768,7 @@ type RRBSapling<'T> internal (count, shift : int, root : 'T [], tail : 'T [], ta
     inherit RRBVector<'T>()
     // A "sapling" is a short tree, with shift = 0 (e.g., no more than two leaves, one in the root and one in the tail)
     let hashCode = ref None
-    static member Empty : RRBSapling<'T> = RRBSapling<'T>(0,0,Array.empty,Array.empty,0)
+    static member EmptyTree : RRBSapling<'T> = RRBSapling<'T>(0,0,Array.empty,Array.empty,0)
 
     override this.GetHashCode() =
         // This MUST follow the same algorithm as the GetHashCode() method from PersistentVector so that the Equals() logic will be valid
@@ -885,7 +831,7 @@ type RRBSapling<'T> internal (count, shift : int, root : 'T [], tail : 'T [], ta
 
     override this.Pop() =
         if count <= 0 then invalidOp "Can't pop from an empty vector" else
-        if count = 1 then RRBSapling<'T>.Empty :> RRBVector<'T> else
+        if count = 1 then RRBSapling<'T>.EmptyTree :> RRBVector<'T> else
         if count - tailOffset > 1 then
             RRBSapling<'T>(count - 1, shift, root, Array.copyAndPop tail, tailOffset) :> RRBVector<'T>
         else
@@ -948,13 +894,13 @@ type RRBSapling<'T> internal (count, shift : int, root : 'T [], tail : 'T [], ta
                 // Occasionally, we can end up with a vector that needs adjusting (e.g., because the tail that was pushed down was short, so the invariant is no longer true).
                 match RRBHelpers.mergeTree Literals.blockSizeShift treeRoot b.Shift b.Root tail with
                 | [||], rootItems
-                | rootItems, [||] -> RRBTree<'T>(count + b.Length, b.Shift, RRBHelpers.mkRRBNode b.Shift rootItems, b.Tail, count + b.TailOffset) |> RRBHelpers.adjustTree :> RRBVector<'T>
+                | rootItems, [||] -> RRBTree<'T>(count + b.Length, b.Shift, RRBHelpers.mkRRBNode b.Shift rootItems, b.Tail, count + b.TailOffset).AdjustTree() // :> RRBVector<'T>
                 | rootItemsL, rootItemsR ->
                     let rootL = RRBHelpers.mkRRBNode b.Shift rootItemsL
                     let rootR = RRBHelpers.mkRRBNode b.Shift rootItemsR
                     let newShift = RRBHelpers.up b.Shift
                     let newRoot = RRBHelpers.mkRRBNode newShift [|box rootL; box rootR|]
-                    RRBTree<'T>(count + b.Length, newShift, newRoot, b.Tail, count + b.TailOffset) |> RRBHelpers.adjustTree :> RRBVector<'T>
+                    RRBTree<'T>(count + b.Length, newShift, newRoot, b.Tail, count + b.TailOffset).AdjustTree() // :> RRBVector<'T>
 
     override this.Insert idx item =
         let idx = if idx < 0 then idx + count else idx
@@ -1019,7 +965,7 @@ type RRBSapling<'T> internal (count, shift : int, root : 'T [], tail : 'T [], ta
 
         member this.RemoveFromTailAtTailIdx idx =
             if count <= 0 then invalidOp "Can't remove from an empty vector" else
-            if count = 1 then RRBSapling<'T>.Empty :> RRBVector<'T> else
+            if count = 1 then RRBSapling<'T>.EmptyTree :> RRBVector<'T> else
             if count - tailOffset > 1 then
                 RRBSapling<'T>(count - 1, shift, root, Array.copyAndRemoveAt idx tail, tailOffset) :> RRBVector<'T>
             else
@@ -1122,27 +1068,27 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
 
     override this.Pop() =
         if count <= 0 then invalidOp "Can't pop from an empty vector" else
-        if count = 1 then RRBSapling<'T>.Empty :> RRBVector<'T> else
+        if count = 1 then RRBSapling<'T>.EmptyTree :> RRBVector<'T> else
         if count - tailOffset > 1 then
             RRBTree<'T>(count - 1, shift, root, Array.copyAndPop tail) :> RRBVector<'T>
         else
-            RRBHelpers.promoteTail shift root (count - 1) :> RRBVector<'T>
+            RRBTree<'T>.promoteTail shift root (count - 1) :> RRBVector<'T>
 
     override this.Take takeCount =
         if takeCount >= count then this :> RRBVector<'T>
-        elif takeCount <= 0 then RRBSapling<'T>.Empty :> RRBVector<'T>   // TODO: Decide whether a negative count in Take() should be an exception or not
+        elif takeCount <= 0 then RRBSapling<'T>.EmptyTree :> RRBVector<'T>   // TODO: Decide whether a negative count in Take() should be an exception or not
         elif takeCount > tailOffset then
             let tailCount = takeCount - tailOffset
             RRBTree<'T>(takeCount, shift, root, Array.sub tail 0 tailCount, tailOffset) :> RRBVector<'T>
         elif takeCount = tailOffset then
             // Promote new tail, and we might also need to shorten the tree (if root ends up length 1 after promoting new tail)
-            RRBHelpers.promoteTail shift root takeCount :> RRBVector<'T>
+            RRBTree<'T>.promoteTail shift root takeCount :> RRBVector<'T>
         else
             let newRoot = RRBHelpers.leftSlice shift takeCount root
-            RRBHelpers.promoteTail shift newRoot takeCount :> RRBVector<'T>
+            RRBTree<'T>.promoteTail shift newRoot takeCount :> RRBVector<'T>
 
     override this.Skip skipCount =
-        if skipCount >= count then RRBSapling<'T>.Empty :> RRBVector<'T>
+        if skipCount >= count then RRBSapling<'T>.EmptyTree :> RRBVector<'T>
         elif skipCount <= 0 then this :> RRBVector<'T>   // TODO: Decide whether a negative count in Skip() should be an exception or not
         elif skipCount > tailOffset then
             let tailStart = skipCount - tailOffset
@@ -1151,7 +1097,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
             RRBTree<'T>(count - skipCount, 0, RRBHelpers.emptyNode, tail, 0) :> RRBVector<'T>
         else
             let newRoot = RRBHelpers.rightSlice shift skipCount root
-            RRBTree<'T>(count - skipCount, shift, newRoot, tail, tailOffset - skipCount) |> RRBHelpers.adjustTree :> RRBVector<'T>
+            RRBTree<'T>(count - skipCount, shift, newRoot, tail, tailOffset - skipCount).AdjustTree() // :> RRBVector<'T>
 
     override this.Split splitIdx =
         this.Take splitIdx, this.Skip splitIdx
@@ -1222,13 +1168,13 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
                 // Occasionally, we can end up with a vector that needs adjusting (e.g., because the tail that was pushed down was short, so the invariant is no longer true).
                 match RRBHelpers.mergeTree aShift aRoot b.Shift b.Root aTail with
                 | [||], rootItems
-                | rootItems, [||] -> RRBTree<'T>(count + b.Length, higherShift, RRBHelpers.mkRRBNode higherShift rootItems, b.Tail, count + b.TailOffset) |> RRBHelpers.adjustTree :> RRBVector<'T>
+                | rootItems, [||] -> RRBTree<'T>(count + b.Length, higherShift, RRBHelpers.mkRRBNode higherShift rootItems, b.Tail, count + b.TailOffset).AdjustTree() // :> RRBVector<'T>
                 | rootItemsL, rootItemsR ->
                     let rootL = RRBHelpers.mkRRBNode higherShift rootItemsL
                     let rootR = RRBHelpers.mkRRBNode higherShift rootItemsR
                     let newShift = RRBHelpers.up higherShift
                     let newRoot = RRBHelpers.mkRRBNode newShift [|box rootL; box rootR|]
-                    RRBTree<'T>(count + b.Length, newShift, newRoot, b.Tail, count + b.TailOffset) |> RRBHelpers.adjustTree :> RRBVector<'T>
+                    RRBTree<'T>(count + b.Length, newShift, newRoot, b.Tail, count + b.TailOffset).AdjustTree() // :> RRBVector<'T>
 
     override this.Insert idx (item : 'T) =
         let idx = if idx < 0 then idx + count else idx
@@ -1241,13 +1187,68 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
         else
             match RRBHelpers.insertIntoTree shift idx item None 0 root with
             | RRBHelpers.SlideResult.SimpleInsertion newRootItems ->
-                RRBTree<'T>(count + 1, shift, RRBHelpers.mkRRBNode shift newRootItems, tail, tailOffset + 1) |> RRBHelpers.adjustTree :> RRBVector<'T>
+                RRBTree<'T>(count + 1, shift, RRBHelpers.mkRRBNode shift newRootItems, tail, tailOffset + 1).AdjustTree() // :> RRBVector<'T>
             | RRBHelpers.SlideResult.SlidItemsLeft (l,r)
             | RRBHelpers.SlideResult.SlidItemsRight (l,r)
             | RRBHelpers.SlideResult.SplitNode (l,r) ->
                 let a = RRBHelpers.mkRRBNode shift l
                 let b = RRBHelpers.mkRRBNode shift r
-                RRBTree<'T>(count + 1, (RRBHelpers.up shift), RRBHelpers.mkRRBNode (RRBHelpers.up shift) [|a;b|], tail, tailOffset + 1) |> RRBHelpers.adjustTree :> RRBVector<'T>
+                RRBTree<'T>(count + 1, (RRBHelpers.up shift), RRBHelpers.mkRRBNode (RRBHelpers.up shift) [|a;b|], tail, tailOffset + 1).AdjustTree() // :> RRBVector<'T>
+
+    member internal this.AdjustTree() =
+        let shorter : RRBVector<'T> = this.ShortenTree()
+        match shorter with
+        | :? RRBTree<'T> as tree -> tree.ShiftNodesFromTailIfNeeded()
+        | _ -> shorter // No need to shift nodes on a sapling
+
+    member internal this.ShortenTree() =
+        // TODO: Convert to sapling if shift hits 0
+        if shift <= 0 then this :> RRBVector<'T>
+        else
+            if root.Array.Length > 1 then this :> RRBVector<'T>
+            elif root.Array.Length = 0 then RRBTree<'T>(count, 0, root, tail, tailOffset) :> RRBVector<'T>
+            else RRBTree<'T>(count, RRBHelpers.down shift, (root |> RRBHelpers.getChildNode 0), tail, tailOffset).ShortenTree()
+
+    member internal this.ShiftNodesFromTailIfNeeded() =
+        // Minor optimization: save most-often-needed thistor properties in locals so we don't hit property accesses over and over
+        let shift = this.Shift
+        let root : Node = this.Root
+        if shift < Literals.blockSizeShift then
+            // Can't happen now that we've split RRBTrees and RRBSaplings
+            this :> RRBVector<'T>
+            // let len = root.Array.Length
+            // if len = 0 || len = Literals.blockSize then this else
+            // let items = Array.append root.Array this.Tail
+            // if items.Length <= Literals.blockSize then
+            //     RRBTree<'T>(this.Length, 0, emptyNode, items, 0)
+            // else
+            //     let root', tail' = items |> Array.splitAt Literals.blockSize
+            //     RRBTree<'T>(this.Length, 0, mkNode root', tail', Literals.blockSize)
+        else
+            let lastTwig = RRBHelpers.getRightmostTwig shift root
+            match lastTwig with
+            | :? RRBNode -> this :> RRBVector<'T>  // Only need to shift nodes from tail if the last twig was a full node
+            | _ ->
+                let tail = this.Tail
+                let lastLeaf = (Array.last lastTwig.Array) :?> 'T []
+                let shiftCount = Literals.blockSize - lastLeaf.Length
+                if shiftCount = 0 then
+                    this :> RRBVector<'T>
+                elif shiftCount >= tail.Length then
+                    // Would shift everything out of the tail, so instead we'll promote a new tail
+                    let lastLeaf, root' = root |> RRBHelpers.removeLastLeaf shift
+                    let tail' = tail |> Array.append lastLeaf
+                    // In certain rare cases, we might need to recurse. For example, the vector [M 5] [5] T1 will become [M 5] T6, which then needs to become M T11.
+                    RRBTree<'T>(this.Length, shift, root', tail').AdjustTree()
+                else
+                    let nodesToShift, tail' = tail |> Array.splitAt shiftCount
+                    let lastLeaf' = Array.append lastLeaf nodesToShift
+                    let root' = root |> RRBHelpers.replaceLastLeaf shift lastLeaf'
+                    RRBTree<'T>(this.Length, shift, root', tail') :> RRBVector<'T>
+
+    static member internal promoteTail shift root newLength =
+        let newTail, newRoot = RRBHelpers.removeLastLeaf shift root
+        RRBTree<'T>(newLength, shift, newRoot, newTail).AdjustTree()
 
     interface IRRBInternal<'T> with
 
@@ -1265,11 +1266,11 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
 
         member this.RemoveFromTailAtTailIdx idx =
             if count <= 0 then invalidOp "Can't remove from an empty vector" else
-            if count = 1 then RRBSapling<'T>.Empty :> RRBVector<'T> else
+            if count = 1 then RRBSapling<'T>.EmptyTree :> RRBVector<'T> else
             if count - tailOffset > 1 then
                 RRBTree<'T>(count - 1, shift, root, Array.copyAndRemoveAt idx tail) :> RRBVector<'T>
             else
-                RRBHelpers.promoteTail shift root (count - 1) :> RRBVector<'T>
+                RRBTree<'T>.promoteTail shift root (count - 1) :> RRBVector<'T>
 
         member this.RemoveImpl shouldCheckForRebalancing idx =
             let idx = if idx < 0 then idx + count else idx
@@ -1281,10 +1282,10 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
                 (this :> IRRBInternal<'T>).RemoveFromTailAtTailIdx(idx - tailOffset)
             elif shift = 0 then
                 let newRoot = root.Array |> Array.copyAndRemoveAt idx |> RRBHelpers.mkNode
-                RRBTree<'T>(count - 1, 0, newRoot, tail, tailOffset - 1) |> RRBHelpers.shortenTree :> RRBVector<'T>  // No need for adjustTree at 0 shift
+                RRBTree<'T>(count - 1, 0, newRoot, tail, tailOffset - 1).ShortenTree() // :> RRBVector<'T>  // No need for adjustTree at 0 shift
             else
                 let newRoot = RRBHelpers.removeFromTree shift shouldCheckForRebalancing idx root |> RRBHelpers.mkRRBNode shift
-                RRBTree<'T>(count - 1, shift, newRoot, tail, tailOffset - 1) |> RRBHelpers.adjustTree :> RRBVector<'T>
+                RRBTree<'T>(count - 1, shift, newRoot, tail, tailOffset - 1).AdjustTree() // :> RRBVector<'T>
 
         member this.RemoveWithoutRebalance idx = (this :> IRRBInternal<'T>).RemoveImpl false idx // Will be used in RRBVector.windowed implementation
 
@@ -1305,6 +1306,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
         if idx < tailOffset
         then RRBHelpers.getItemFromLeaf shift idx root
         else tail.[idx - tailOffset]
+
 
 // BASIC API
 
@@ -1357,7 +1359,7 @@ module RRBVector =
 
     let concat (vecs : seq<RRBVector<'T>>) =
         // TODO: Implement transient RRBVectors so this will be faster (no need to build and throw away so many intermediate result vectors)
-        let mutable result = RRBSapling<'T>.Empty :> RRBVector<'T>
+        let mutable result = RRBSapling<'T>.EmptyTree :> RRBVector<'T>
         for vec in vecs do
             result <- result.Append vec
         result
@@ -1368,7 +1370,7 @@ module RRBVector =
     let inline contains item (vec : RRBVector<'T>) = vec |> Seq.contains item
     let inline distinct (vec : RRBVector<'T>) = vec |> Seq.distinct |> ofSeq
     let inline distinctBy f (vec : RRBVector<'T>) = vec |> Seq.distinctBy f |> ofSeq
-    let inline empty<'T> = RRBSapling<'T>.Empty :> RRBVector<'T>
+    let inline empty<'T> = RRBSapling<'T>.EmptyTree :> RRBVector<'T>
     let exactlyOne (vec : RRBVector<'T>) =
         if vec.Length <> 1 then invalidArg "vec" <| sprintf "exactlyOne called on a vector of %d items (requires a vector of exactly 1 item)" vec.Length
         match vec with
@@ -1474,7 +1476,8 @@ module RRBVector =
     let inline rev (vec : RRBVector<'T>) =  vec.RevIterItems() |> RRBHelpers.buildTreeOfSeqWithKnownSize vec.Length
     let inline scan f initState (vec : RRBVector<'T>) = vec |> Seq.scan f initState |> RRBHelpers.buildTreeOfSeqWithKnownSize (vec.Length + 1)
     let scanBack initState f (vec : RRBVector<'T>) = let f' = flip f in vec.RevIterItems() |> Seq.scan f' initState |> RRBHelpers.buildTreeOfSeqWithKnownSize (vec.Length + 1)
-    let singleton (item : 'T) = RRBSapling<'T>(1, 0, Array.empty, [|item|], 0) :> RRBVector<'T>
+    // TODO: Why does this cause a type error?
+    // let singleton (item : 'T) = RRBSapling<'T>(1, 0, Array.empty<'T>, Array.singleton item, 0) :> RRBVector<'T>
     let inline skip count (vec : RRBVector<'T>) = vec.Skip count
     let skipWhile pred (vec : RRBVector<'T>) = // TODO: Test this
         let rec loop pred n =
@@ -1548,6 +1551,8 @@ module RRBVector =
             vec3 <- vec3.conj c
         vec1.persistent() |> ofPersistentVector, vec2.persistent() |> ofPersistentVector, vec3.persistent() |> ofPersistentVector
     let inline where pred (vec : RRBVector<'T>) = filter pred vec
+    // TODO: Why does this cause a type error?
+(* Disabled until I can figure out why this causes a "Type parameter would escape its scope" error
     let windowed windowSize (vec : RRBVector<'T>) =
         if windowSize <= Literals.blockSize then
             // Sequence of tail-only vectors
@@ -1590,6 +1595,7 @@ module RRBVector =
                     slidingVec <- slidingVec.Push item
                     yield slidingVec
             }
+*)
     let inline zip (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) =
         let minLength = Operators.min vec1.Length vec2.Length
         (vec1, vec2) ||> Seq.zip |> RRBHelpers.buildTreeOfSeqWithKnownSize minLength
