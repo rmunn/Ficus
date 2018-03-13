@@ -1422,17 +1422,17 @@ let nodeVecGenerationTests =
 [<Tests>]
 let tests =
   testList "All tests" [
-    arrayTests
-    simpleVectorTests
-    manualVectorTests
-    constructedVectorSplitTests
-    splitJoinTests
-    insertTests
-    operationTests
-    vectorTests
+    // arrayTests
+    // simpleVectorTests
+    // manualVectorTests
+    // constructedVectorSplitTests
+    // splitJoinTests
+    // insertTests
+    // operationTests
+    // vectorTests
     nodeVecGenerationTests
-    regressionTests
-    mergeTests
-    apiTests
+    // regressionTests
+    // mergeTests
+    // apiTests
     // perfTests
   ]
