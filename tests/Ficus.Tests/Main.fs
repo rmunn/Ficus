@@ -1,6 +1,7 @@
 module ExpectoTemplate.Main
 open Expecto
 open System.Reflection
+open Ficus.RRBVector
 
 
 module AssemblyInfo =
@@ -21,6 +22,17 @@ module AssemblyInfo =
         |> getMetaDataAttribute assembly
         |> metaDataValue
 
+let debug () =
+    let arr = [|1..65|]
+    let expected = arr
+    let s = arr |> Seq.ofArray
+    let actual = s |> RRBHelpers.buildTreeOfSeqWithKnownSize arr.Length
+    printfn "Vector constructed was %A" actual
+    let repr = RRBVecGen.vecToTreeReprStr actual
+    printfn "Repr was %A" repr
+    printfn "Breakpoint here"
+
+
 [<EntryPoint>]
 let main argv =
     if argv |> Seq.contains ("--version") then
@@ -30,7 +42,10 @@ let main argv =
         let releaseDate = AssemblyInfo.getReleaseDate assembly
         let githash  = AssemblyInfo.getGitHash assembly
         printfn "%s - %A - %s - %s" name.Name version releaseDate githash
-    if argv |> Array.contains "--stress" then
+    if argv |> Array.contains "--debug-vscode" then
+        debug()
+        0
+    elif argv |> Array.contains "--stress" then
         printfn "Stress testing requested"
         let noop = TestList([], Pending)
         let rec containsTests = function
