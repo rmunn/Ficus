@@ -118,11 +118,11 @@ let specExtraLargeFromData data =
         member __.InitialModel = RRBVector.toArray data
         member __.Next model = Gen.elements cmdsExtraLarge }
 
-let specExtraSmallFromEmpty = specExtraSmallFromData (RRBVector<int>.Empty())
-let specSmallFromEmpty = specSmallFromData (RRBVector<int>.Empty())
-let specMediumFromEmpty = specMediumFromData (RRBVector<int>.Empty())
-let specLargeFromEmpty = specLargeFromData (RRBVector<int>.Empty())
-let specExtraLargeFromEmpty = specExtraLargeFromData (RRBVector<int>.Empty())
+let specExtraSmallFromEmpty = specExtraSmallFromData (RRBVector.empty<int>)
+let specSmallFromEmpty = specSmallFromData (RRBVector.empty<int>)
+let specMediumFromEmpty = specMediumFromData (RRBVector.empty<int>)
+let specLargeFromEmpty = specLargeFromData (RRBVector.empty<int>)
+let specExtraLargeFromEmpty = specExtraLargeFromData (RRBVector.empty<int>)
 
 
 let fixedSpec =

@@ -11,11 +11,11 @@ open Expecto.Logging.Message
 
 let logger = Log.create "Expecto"
 
-let mkNode level items =
+let mkNode<'T> level items =
     if level = 0
-        then RRBHelpers.mkNode items // Leaves never need to be RRBNodes
-        else RRBHelpers.mkRRBNode (level * Literals.blockSizeShift) items
-let mkLeaf items = mkNode 0 items
+        then failwith "Don't call RRBVecGen.mkNode at level 0" // RRBHelpers.mkNode items // Leaves never need to be RRBNodes
+        else RRBHelpers.mkRRBNode<'T> (level * Literals.blockSizeShift) items
+let mkLeaf items = mkNode 0 items  // Nope. Do something else now. TODO: Determine what.
 let minSlots childCount = (childCount - Literals.eMaxPlusOne) * Literals.blockSize + 1 |> max childCount
 let maxSlots childCount = childCount * Literals.blockSize
 
@@ -45,18 +45,20 @@ let treeReprHeight treeRepr =
     | List [Int _] -> 0  // Special case: a tree consisting of just one leaf will fit that leaf in the root
     | _ -> loop 0 treeRepr.Root
 
-// TODO: Determine which of these two functions (gen or mk) we'll want to use in the future
-// TODO: If it's mk, then we can probably separate this part out into its own module (TreeRepr, perhaps)
-let rec genSpecificRRBNode g level (childSizes:ListItem) = gen {
+let arrayToObjArray (arr : 'T[]) = arr |> Array.map box // Works everywhere
+
+// Generate trees of arbitrary data types for unit testing (currently a little underused)
+let rec genSpecificRRBNode (g : Gen<'T>) level (childSizes:ListItem) = gen {
     let childrenGenerators =
         match childSizes with
         | Int n -> g |> Gen.arrayOfLength n |> Gen.map (arrayToObjArray >> mkLeaf) |> List.singleton
         | List items -> items |> List.map (genSpecificRRBNode g (level-1))
     let! children = Gen.sequence childrenGenerators  // TODO: Determine why Gen.sequenceToArr was marked "Not intended for use from F#" -- because it would be an optimization here
-    let node = children |> Array.ofList |> arrayToObjArray |> mkNode level
+    let node = children |> Array.ofList |> arrayToObjArray |> mkNode<'T> level
     return node
 }
 
+// Generate int-based trees for unit testing
 let mkCounter() =
     let mutable count = 0
     let incBy n =
@@ -71,34 +73,51 @@ let mkArray n counter =
 
 let next counter = counter 1  // Get next value and update the counter
 let peek counter = counter 0  // Returns what the next value would be, but doesn't change the counter
-let rec mkSpecificRRBNode itemSrc level (childSizes:ListItem) =
+let mkSpecificRRBTwig itemSrc (childSizes:ListItem) =
     match childSizes with
-    | Int n ->
-        itemSrc
-        |> mkArray n
-        |> arrayToObjArray
-        |> mkLeaf
-    | List [Int n] when level = 0 -> // Singleton root node at level 0 gets treated as a leaf
-        itemSrc
-        |> mkArray n
-        |> arrayToObjArray
-        |> mkLeaf
-    | List items ->
+    | List items when items |> List.forall (function Int _ -> true | _ -> false) -> // Singleton root node at level 0 gets treated as a leaf
         items
         |> Array.ofList
-        |> Array.map (mkSpecificRRBNode itemSrc (level-1))
-        |> arrayToObjArray
-        |> mkNode level
+        |> Array.map (fun (Int n) ->
+            itemSrc |> mkArray n |> box)
+        |> mkNode<int> 1
+    | _ -> failwith "Incorrect twig spec"
+let rec mkSpecificRRBNode itemSrc level (childSizes:ListItem) =
+    if level = 1 then
+        match childSizes with
+        | Int n -> failwith "Individual ints should have been handled as part of their component lists"
+        | List items when items |> List.forall (function Int _ -> true | _ -> false) -> // Singleton root node at level 0 gets treated as a leaf
+            mkSpecificRRBTwig itemSrc childSizes
+        | List _ ->
+            failwith "Shouldn't be at level 0 here"
+    else
+        match childSizes with
+        | Int _ -> failwith "Ints in tree reprs should only be found at level 0"
+        | List items ->
+            items
+            |> Array.ofList
+            |> Array.map (mkSpecificRRBNode itemSrc (level-1) >> box)
+            |> mkNode<int> level
 
 let mkSpecificTree treeRepr =
     let height = treeReprHeight treeRepr
     let items = mkCounter()
-    let rootNode = mkSpecificRRBNode items height treeRepr.Root
     let tailSize = defaultArg treeRepr.Tail 1  // Tail required to be present, so default to 1 if not specified
-    let tailItems = items |> mkArray tailSize
-    let vecLen = peek items
-    let tail = tailItems |> arrayToObjArray
-    RRBVector(vecLen, height * Literals.blockSizeShift, rootNode, tail)
+    if height = 0 then
+        let rootSize = match treeRepr.Root with
+                       | Int n -> n
+                       | List [Int n] -> n
+                       | _ -> 0
+        let root = items |> mkArray rootSize
+        let tail = items |> mkArray tailSize
+        RRBSapling(rootSize + tailSize, 0, root, tail, rootSize) :> RRBVector<int>
+    else
+        printfn "Making tree for tree repr %A" treeRepr
+        let rootNode = mkSpecificRRBNode items height treeRepr.Root
+        let tailItems = items |> mkArray tailSize
+        let vecLen = peek items
+        let tail = tailItems
+        RRBTree(vecLen, height * Literals.blockSizeShift, rootNode, tail, vecLen - tailSize) :> RRBVector<int>
 
 let treeReprStrToVec s =
     let treeRepr =
@@ -111,11 +130,11 @@ let treeReprStrToVec s =
 let strJoin (between:string) (parts:#seq<string>) =
     System.String.Join(between,parts)
 
-let rec nodeToTreeReprStr level (node : Node) =
+let rec nodeToTreeReprStr level (node : obj []) =
     if level > 0 then
-        node.Array |> Seq.cast |> Seq.map (nodeToTreeReprStr (level - 1)) |> strJoin " " |> sprintf "[%s]"
+        node |> Seq.cast |> Seq.map (nodeToTreeReprStr (level - 1)) |> strJoin " " |> sprintf "[%s]"
     else
-        match node.Array.Length with
+        match node.Length with
         | x when x >= Literals.blockSize -> "M"
         | x when x  = Literals.blockSize - 1 -> "M-1"
         // | x when x  = Literals.blockSize - 2 -> "M-2"
@@ -124,11 +143,17 @@ let rec nodeToTreeReprStr level (node : Node) =
 
 let vecToTreeReprStr (vec : RRBVector<'T>) =
     if vec.Length <= 0 then "<emptyVec>" else
-    let rootRepr =
-        vec.Root
-        |> nodeToTreeReprStr (vec.Shift / Literals.blockSizeShift)
-        |> (if vec.Shift <= 0 then id else fun s -> s.[1..s.Length-2]) // Strip brackets from outermost list... if there *is* an outermost list
-    (sprintf "%s T%d" rootRepr vec.Tail.Length).Trim()
+    let rootRepr, tail =
+        match vec with
+        | :? RRBSapling<'T> as sapling -> sapling.Root |> Array.map box |> nodeToTreeReprStr 0, sapling.Tail
+        | :? RRBTree<'T> as tree ->
+            let rootRepr =
+                tree.Root.Array
+                |> nodeToTreeReprStr (tree.Shift / Literals.blockSizeShift)
+                |> fun s -> s.[1..s.Length-2] // Strip brackets from outermost list
+            rootRepr, tree.Tail
+    (sprintf "%s T%d" rootRepr tail.Length).Trim()
+
 let genSpecificTree g treeRepr =
     failwith "Not implemented yet"  // TODO: Write if desired
 
@@ -188,15 +213,16 @@ let genTinyVec<'a> size =
 // Invariant that the append algorithm needs: rightmost leaf is full if its parent is leftwise dense
 // NOTE: We're fulfilling a strictly greater invariant here.
 // TODO: See if we can relax this invariant just a *little* bit (check if the parent is leftwise dense), in order to test more scenarios
-let fleshOutRightmostLeafIfNecessary g level root = gen {
-    let leaf = if level <= 0 then root else root |> getRightmostTwig (level * Literals.blockSizeShift) |> getLastChildNode
-    let missingItemCount = Literals.blockSize - leaf.Array.Length
+let fleshOutRightmostLeafIfNecessary<'a> g level root = gen {
+    let twig = root |> getRightmostTwig (level * Literals.blockSizeShift)
+    let leaf = (Array.last twig.Array) :?> 'a []
+    let missingItemCount = Literals.blockSize - leaf.Length
     if missingItemCount <= 0 then
         return root
     else
         let! newLeaf = gen {
             let! newItems = Gen.arrayOfLength missingItemCount g
-            return mkLeaf (Array.append leaf.Array (arrayToObjArray newItems))
+            return (Array.append leaf newItems)
         }
         return root |> replaceLastLeaf (level * Literals.blockSizeShift) newLeaf
 }
@@ -227,7 +253,7 @@ let genVec<'a> level childCount =
         let shift = level * Literals.blockSizeShift
         let rootSize = treeSize shift root'
         let totalSize = rootSize + Array.length tail
-        let vec = RRBVector<'a>(totalSize, shift, root', tail |> arrayToObjArray, rootSize)
+        let vec = RRBTree<'a>(totalSize, shift, root', tail, rootSize) :> RRBVector<'a>
         logger.verbose (
             eventX "And then vec:\n{vec}"
             >> setField "vec" (sprintf "%A" vec)

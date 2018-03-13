@@ -157,7 +157,7 @@ module Expect =
 let vectorTests =
   testList "Basic vector operations" [
     testCase "empty vector has 0 items" (fun _ ->
-        let v = RRBVector<int>.Empty()
+        let v = RRBVector.empty<int>
         RRBVectorProps.checkProperties v |> ignore
         Expect.equal (RRBVector.length v) 0 "empty vector should have 0 items"
     )
@@ -231,7 +231,7 @@ let vectorTests =
             Expect.vecEqualArr v' a' "Sliced vector should equal equivalent slice from array"
     )
     testCase "push M+1 items onto an empty vector" <| fun _ ->
-        let mutable vec = RRBVector<int>.Empty()
+        let mutable vec = RRBVector.empty<int>
         for i = 1 to Literals.blockSize + 1 do
             vec <- vec |> RRBVector.push i
             RRBVectorProps.checkProperties vec (sprintf "Vector after %d push%s" i (if i = 1 then "" else "es"))
@@ -356,8 +356,13 @@ let regressionTests =
         let vec = RRBVecGen.treeReprStrToVec "M-1 M T1"
         let vec' = vec.Take (Literals.blockSize * 2 - 1)
         RRBVectorProps.checkProperties vec' "Sliced vector"
-        Expect.equal vec'.TailOffset (Literals.blockSize) "Wrong tail offset"
-        Expect.equal vec'.Tail.Length (Literals.blockSize - 1) "Wrong tail length"
+        match vec' with
+        | :? RRBSapling<int> as sapling ->
+            Expect.equal sapling.TailOffset (Literals.blockSize) "Wrong tail offset"
+            Expect.equal sapling.Tail.Length (Literals.blockSize - 1) "Wrong tail length"
+        | :? RRBTree<int> as tree -> // Or perhaps just: failwithf "Vector after slice should be sapling, instead is %A" tree
+            Expect.equal tree.TailOffset (Literals.blockSize) "Wrong tail offset"
+            Expect.equal tree.Tail.Length (Literals.blockSize - 1) "Wrong tail length"
 
     testCase "Merging specific scenarios" <| fun _ ->
         // A ends with [M*20] TM.
@@ -430,10 +435,16 @@ let regressionTests =
         RRBVectorProps.checkProperties joined "Joined"
         Expect.equal a.Length 1 "Wrong length for A"
         Expect.equal b.Length Literals.blockSize "Wrong length for B"
-        Expect.equal a.Root.Array.Length 0 "Root node of A should be empty"
-        Expect.equal b.Root.Array.Length 0 "Root node of B should be empty"
-        Expect.equal a.TailOffset 0 "Tail offset of A should be zero"
-        Expect.equal b.TailOffset 0 "Tail offset of B should be zero"
+        match a with
+        | :? RRBTree<int> as tree -> failwithf "Left tree after split should be sapling, instead is %A" tree
+        | :? RRBSapling<int> as sapling ->
+            Expect.equal sapling.Root.Length 0 "Root node of A should be empty"
+            Expect.equal sapling.TailOffset 0 "Tail offset of A should be zero"
+        match b with
+        | :? RRBTree<int> as treeR -> failwithf "Right tree after split should be sapling, instead is %A" treeR
+        | :? RRBSapling<int> as sapling ->
+            Expect.equal sapling.Root.Length 0 "Root node of B should be empty"
+            Expect.equal sapling.TailOffset 0 "Tail offset of B should be zero"
 
     testCase "Splitting root+tail vector to one tail-only vector and one root+tail vector has empty root on only one vector" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "M M TM/2"
@@ -444,33 +455,56 @@ let regressionTests =
         RRBVectorProps.checkProperties joined "Joined"
         Expect.equal a.Length 1 "Wrong length for A"
         Expect.equal b.Length (Literals.blockSize * 2 + (Literals.blockSize / 2) - 1) "Wrong length for B"
-        Expect.equal a.Root.Array.Length 0 "Root node of A should be empty"
-        Expect.equal b.Root.Array.Length 2 "Root node of B should be size 2"
-        Expect.equal a.TailOffset 0 "Tail offset of A should be zero"
-        Expect.isGreaterThan b.TailOffset 0 "Tail offset of B should be non-zero"
+        match a with
+        | :? RRBTree<int> as tree -> failwithf "Left tree after split should be sapling, instead is %A" tree
+        | :? RRBSapling<int> as sapling ->
+            Expect.equal sapling.Root.Length 0 "Root node of A should be empty"
+            Expect.equal sapling.TailOffset 0 "Tail offset of A should be zero"
+        match b with
+        | :? RRBSapling<int> as sapling -> failwithf "Right tree after split should be tree, instead is %A" sapling
+        | :? RRBTree<int> as tree ->
+            Expect.equal tree.Root.Array.Length 2 "Root node of B should be size 2"
+            Expect.isGreaterThan tree.TailOffset 0 "Tail offset of B should be non-zero"
 
     testCase "Joining two vectors that push up a new root should produce the right root length, shift, and tail offset" <| fun _ ->
         let a = RRBVecGen.treeReprStrToVec "M M T1"
         let b = RRBVecGen.treeReprStrToVec "M*M T1"
+        let bShift =
+            match b with
+            | :? RRBSapling<int> -> 0
+            | :? RRBTree<int> as tree -> tree.Shift
         let joined = RRBVector.append a b
         RRBVectorProps.checkProperties joined "Joined"
-        Expect.equal joined.Length (a.Length + b.Length) "Wrong length for joined vector"
-        Expect.equal joined.Shift (b.Shift + Literals.blockSizeShift) "Joined vector should have pushed up a new root"
-        Expect.equal joined.Root.Array.Length 2 "Joined vector should have pushed up a new root of size 2"
-        Expect.equal joined.TailOffset (joined.Length - 1) "Joined vector should have just one item in its tail"
+        match joined with
+        | :? RRBSapling<int> as sapling -> failwithf "Joined tree should be full tree, instead is %A" sapling
+        | :? RRBTree<int> as tree ->
+            Expect.equal tree.Length (a.Length + b.Length) "Wrong length for joined vector"
+            Expect.equal tree.Shift (bShift + Literals.blockSizeShift) "Joined vector should have pushed up a new root"
+            Expect.equal tree.Root.Array.Length 2 "Joined vector should have pushed up a new root of size 2"
+            Expect.equal tree.TailOffset (joined.Length - 1) "Joined vector should have just one item in its tail"
 
     testCase "Removing an item from the last leaf maintains the invariant" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "M M T2"
         let vec' = vec.Remove (Literals.blockSize + 1)
         RRBVectorProps.checkProperties vec' "Vector after removal from last leaf"
-        Expect.equal vec'.Tail.Length 1 "Vector adjustment should have removed one item from the tail to maintain the invariant"
+        match vec' with
+        | :? RRBSapling<int> as sapling -> failwithf "Tree after removing item from last leaf should be tree, instead is %A" sapling
+        | :? RRBTree<int> as tree ->
+            Expect.equal tree.Tail.Length 1 "Vector adjustment should have removed one item from the tail to maintain the invariant"
 
     testCase "Removing an item from the last leaf can promote new leaf to maintain the invariant" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "M M T1"
+        let oldShift =
+            match vec with
+            | :? RRBSapling<int> -> 0
+            | :? RRBTree<int> as tree -> tree.Shift
         let vec' = vec.Remove (Literals.blockSize + 1)
         RRBVectorProps.checkProperties vec' "Vector after removal from last leaf"
-        Expect.equal vec'.Tail.Length Literals.blockSize "Vector adjustment should have promoted new leaf"
-        Expect.equal vec'.Shift (vec.Shift - Literals.blockSizeShift) "Vector adjustment should have shortened tree"
+        match vec' with
+        | :? RRBSapling<int> as sapling ->
+            Expect.equal sapling.Tail.Length Literals.blockSize "Vector adjustment should have promoted new leaf"
+            Expect.equal sapling.Shift (oldShift - Literals.blockSizeShift) "Vector adjustment should have shortened tree"
+        | :? RRBTree<int> as tree -> failwithf "Tree after removing item from last leaf should be sapling, instead is %A" tree
 
     testCase "Inserting into last leaf can still maintain invariant when height is not affected" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "M/2-1 M T2"
@@ -531,10 +565,11 @@ let mergeTests =
     testCase "adjustTree is needed in merge algorithm when tree height does not increase" <| fun _ ->
         let vL = RRBVecGen.treeReprStrToVec <| sprintf "M*M/2 TM"
         // let vR = RRBVecGen.treeReprStrToVec <| sprintf "M M M-1 T2" // This makes an invalid tree
-        let fullNode = Ficus.Node(ref null, [|1..Literals.blockSize|] |> RRBHelpers.arrayToObjArray)
-        let fullNodeMinusOne = Ficus.Node(ref null, [|1..Literals.blockSize-1|] |> RRBHelpers.arrayToObjArray)
+        // TODO: Adjust namespaces here
+        let fullNode = Ficus.Node(ref null, [|1..Literals.blockSize|] |> RRBVecGen.arrayToObjArray)
+        let fullNodeMinusOne = Ficus.Node(ref null, [|1..Literals.blockSize-1|] |> RRBVecGen.arrayToObjArray)
         let vR_root = RRBVector.RRBNode(ref null, [|box fullNode; box fullNode; box fullNodeMinusOne|], [|Literals.blockSize; Literals.blockSize*2; Literals.blockSize*3-1|])
-        let vR = RRBVector<int>(Literals.blockSize * 3 + 1, Literals.blockSizeShift, vR_root, [|1;2|] |> RRBHelpers.arrayToObjArray)
+        let vR = RRBTree<int>(Literals.blockSize * 3 + 1, Literals.blockSizeShift, vR_root, [|1;2|]) :> RRBVector<int>
         RRBVectorProps.checkProperties vL "Left half of merge"
         // vR still does not pass property checks, because we have a property that verifies that no could-have-been-full RRBNodes are created.
         // So we disable the property checks for vR for this test only, because we *do* want its root to be an RRBNode.
@@ -578,11 +613,19 @@ let mergeTests =
         // Without a rebalance, the joined vector's root would end up with six nodes, but with the rebalance, the left vector can be squeezed into the right vector's leftmost twig.
         let vL = RRBVecGen.treeReprStrToVec "M*15 T24"
         let vR = RRBVecGen.treeReprStrToVec "[M 29 M M M M M 29 M M 29 M M M 29 27 M] [M M-1 M-1 M M M 30 M-1 29 29] [23 M M M 23 21 M 24 27 M-1 30 29 21 23 28] [M M M M-1 30 28 28 M M M-1 M M 28 M] [24 24 23 27 24 17 16 20 M] T25"
+        let vR_root =
+            match vR with
+            | :? RRBSapling<int> as sapling -> failwith "Shouldn't be a sapling"
+            | :? RRBTree<int> as tree -> tree.Root
+
         RRBVectorProps.checkProperties vL "Left half of merge"
         RRBVectorProps.checkProperties vR "Right half of merge"
         let joined = RRBVector.append vL vR
         RRBVectorProps.checkProperties joined <| sprintf "Joined vector\nvL was %s and vR was %s" (RRBVecGen.vecToTreeReprStr vL) (RRBVecGen.vecToTreeReprStr vR)
-        Expect.equal joined.Root.Array.Length vR.Root.Array.Length "Rebalance should have left the joined vector's root the same size as the original right vector's root"
+        match joined with
+        | :? RRBSapling<int> as sapling -> failwithf "Joined tree should be full tree, instead is %A" sapling
+        | :? RRBTree<int> as tree ->
+            Expect.equal tree.Root.Array.Length vR_root.Array.Length "Rebalance should have left the joined vector's root the same size as the original right vector's root"
   ]
 
 let simpleVectorTests =
@@ -616,16 +659,16 @@ let simpleVectorTests =
 let manualVectorTests =
   testList "Manual vector tests" [
     testCase "empty vector has 0 items" (fun _ ->
-        RRBVectorProps.checkProperties (RRBVector<int>.Empty()) "Empty vector"
-        Expect.equal (RRBVector.length (RRBVector<int>.Empty())) 0 "Empty vector should have length 0"
+        RRBVectorProps.checkProperties (RRBVector.empty<int>) "Empty vector"
+        Expect.equal (RRBVector.length (RRBVector.empty<int>)) 0 "Empty vector should have length 0"
     )
     testCase "Appending 1 item to empty vector should produce vector of length 1" (fun _ ->
-        let vec = RRBVector<int>.Empty() |> RRBVector.push 42
+        let vec = RRBVector.empty<int> |> RRBVector.push 42
         RRBVectorProps.checkProperties vec "1-item vector"
         Expect.equal (RRBVector.length vec) 1 "1-item vector should have length 1"
     )
     testCase "Appending 2 items to empty vector should produce vector of length 2" (fun _ ->
-        let vec = RRBVector<int>.Empty() |> RRBVector.push 4 |> RRBVector.push 2
+        let vec = RRBVector.empty<int> |> RRBVector.push 4 |> RRBVector.push 2
         RRBVectorProps.checkProperties vec "2-item vector"
         Expect.equal (RRBVector.length vec) 2 "2-item vector should have length 2"
     )
@@ -731,8 +774,14 @@ let splitJoinTests =
         let vL, vR = doSplitTest vec 27
         RRBVectorProps.checkProperties vL "Left half of split"
         RRBVectorProps.checkProperties vR "Right half of split"
-        Expect.notEqual (vL.Shift) 0 "Left half should not end up with shift 0"  // Because a vector of "12 10 T5" should not trigger a rebalance
-        Expect.equal (vR.Shift) 0 "Right half should have ended up with shift 0"
+        let vLShift = match vL with
+                      | :? RRBSapling<int> as sapling -> sapling.Shift
+                      | :? RRBTree<int> as tree -> tree.Shift
+        let vRShift = match vR with
+                      | :? RRBSapling<int> as sapling -> sapling.Shift
+                      | :? RRBTree<int> as tree -> tree.Shift
+        Expect.notEqual (vLShift) 0 "Left half should not end up with shift 0"  // Because a vector of "12 10 T5" should not trigger a rebalance
+        Expect.equal (vRShift) 0 "Right half should have ended up with shift 0"
         let vec' = RRBVector.append vL vR
         let reprL = RRBVecGen.vecToTreeReprStr vL
         let reprR = RRBVecGen.vecToTreeReprStr vR
@@ -817,12 +866,21 @@ let splitJoinTests =
         // NOTE: This test will only work when blockSize = 32. It will have to be rewritten with completely different input if blockSize is ever changed.
         let vL = RRBVecGen.treeReprStrToVec "[28 31 26 31 32 21 32 26 32 32 28 32 31 29 26 29 28 23 32 32 32 32 26 32 29 29 32 23 31 32 32 32] [32 32 32 32 32] T30"
         let vR = RRBVecGen.treeReprStrToVec "[25 31 19 25 31 32 32 32 32 32 32 29 24 28 30 32 32 32 32 27 30 27 32 27 29 25 27] [32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 28 32 32 32 31 32] [32 32 32 32 32 32 32 28 32 32 32 32 32 32 32 28 31 32 32 32 32 32 32 31 32] [22 22 26 30 32 29 32 32 27 27 32 32 32 32 32 32 32 26 29 32 28 27 24 27 26 22 29] [32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32] [27 28 24 32 32 29 28 31 30 30 23 29 25 24 25 32 32 25 31 32 26 28] [26 23 32 27 31 29 23 32 27 26 26 29 32 32 32 32 30 24 31 27 28 29 27 27] [32 32 21 32 32 30 19 32 32 27 32 32 26 32 27 24 32 32 29 30 25 32 23] [30 31 32 26 32 26 31 31 31 28 32 24 30 30 27 27 29 27 27 32 25 31 28 31 28 30] [27 32 22 28 32 27 32 28 32 29 32 32 31 27 29 27 31 26 32 23 32 32] [31 26 32 32 25 32 26 24 32 29 31 30 29 32 32 28 26 28 26 27 32 28] [29 26 32 28 32 30 32 30 32 32 23 32 32 32 30 32 29 32 28 27 32 21 32 32 32 32] T27"
+        let vLShift, vLRoot = match vL with
+                      | :? RRBSapling<int> as sapling -> failwith "vL should not be a sapling"
+                      | :? RRBTree<int> as tree -> tree.Shift, tree.Root
+        let vRShift, vRRoot = match vR with
+                      | :? RRBSapling<int> as sapling -> failwith "vR should not be a sapling"
+                      | :? RRBTree<int> as tree -> tree.Shift, tree.Root
         RRBVectorProps.checkProperties vL "Left half of merge"
         RRBVectorProps.checkProperties vR "Right half of merge"
         let joined = RRBVector.append vL vR
         RRBVectorProps.checkProperties joined <| sprintf "Joined vector"
-        Expect.equal (joined.Shift) (Operators.max vL.Shift vR.Shift) "Joined vector should not have increased in height"
-        Expect.equal (joined.Root.Array.Length) (vL.Root.Array.Length + vR.Root.Array.Length - 1) "Joined vector should have merged two nodes in the process of rebalancing"
+        match joined with
+        | :? RRBSapling<int> as sapling -> failwithf "Joined tree should be full tree, instead is %A" sapling
+        | :? RRBTree<int> as tree ->
+            Expect.equal (tree.Shift) (Operators.max vLShift vRShift) "Joined vector should not have increased in height"
+            Expect.equal (tree.Root.Array.Length) (vLRoot.Array.Length + vRRoot.Array.Length - 1) "Joined vector should have merged two nodes in the process of rebalancing"
 
     // TODO: Duplicate the above test for 5-6 different custom-built vectors
     testProp "split + pop right + join = pop entire" (fun (vec : RRBVector<int>) (i: int) ->
@@ -866,46 +924,76 @@ let splitJoinTests =
     testCase "remove can shorten trees even when it doesn't rebalance" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "[M/2 M/2+1] T1"
         // RRBVectorProps.checkProperties vec "Original vector"  // Note that original vector is *not* compliant since its root has length 1, so we skip this check
-        Expect.equal vec.Shift (Literals.blockSizeShift * 2) "Original vector should have height of 2"
+        let vecShift = match vec with
+                       | :? RRBSapling<int> as sapling -> failwith "Vector at start of test should not be a sapling"
+                       | :? RRBTree<int> as tree -> tree.Shift
+        Expect.equal vecShift (Literals.blockSizeShift * 2) "Original vector should have height of 2"
         let vec' = vec |> RRBVector.remove 0
         RRBVectorProps.checkProperties vec' "Vector after one item removed at idx 0"
-        Expect.equal vec'.Shift Literals.blockSizeShift "After removal, vector should have height of 1"
-        Expect.equal vec'.Root.Array.Length 2 "Removal should not rebalance this tree"
+        let vec'Shift, vec'Root = match vec' with
+                                  | :? RRBSapling<int> as sapling -> failwith "Vector after removal should still not be a sapling"
+                                  | :? RRBTree<int> as tree -> tree.Shift, tree.Root
+        Expect.equal vec'Shift Literals.blockSizeShift "After removal, vector should have height of 1"
+        Expect.equal vec'Root.Array.Length 2 "Removal should not rebalance this tree"
 
     testCase "pop will slide nodes into tail if it needs to" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "[M*M-1 M-1] [M] T1"
+        let vecShift = match vec with
+                       | :? RRBSapling<int> as sapling -> failwith "Vector at start of test should not be a sapling"
+                       | :? RRBTree<int> as tree -> tree.Shift
         RRBVectorProps.checkProperties vec "Original vector"
-        Expect.equal vec.Shift (Literals.blockSizeShift * 2) "Original vector should have height of 2"
+        Expect.equal vecShift (Literals.blockSizeShift * 2) "Original vector should have height of 2"
         let vec' = vec |> RRBVector.pop
         RRBVectorProps.checkProperties vec' "Vector after one item popped"
-        Expect.equal vec'.Tail.Length (Literals.blockSize - 1) "After pop, 1 item should have been slid back into the vector"
-        Expect.equal vec'.Shift (Literals.blockSizeShift) "After pop, vector should have height of 1"
+        let vec'Shift, vec'Tail = match vec' with
+                                  | :? RRBSapling<int> as sapling -> failwith "Vector after removal should still not be a sapling"
+                                  | :? RRBTree<int> as tree -> tree.Shift, tree.Tail
+        Expect.equal vec'Tail.Length (Literals.blockSize - 1) "After pop, 1 item should have been slid back into the vector"
+        Expect.equal vec'Shift (Literals.blockSizeShift) "After pop, vector should have height of 1"
 
     testCase "remove can rebalance trees when they become too unbalanced" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "M/4 M/4+1 M/4+1 M/4 T1"
+        let vecShift = match vec with
+                       | :? RRBSapling<int> as sapling -> failwith "Vector at start of test should not be a sapling"
+                       | :? RRBTree<int> as tree -> tree.Shift
         RRBVectorProps.checkProperties vec "Original vector"
-        Expect.equal vec.Shift (Literals.blockSizeShift) "Original vector should have height of 1"
+        Expect.equal vecShift (Literals.blockSizeShift) "Original vector should have height of 1"
         let vec' = vec |> RRBVector.remove 0
+        let vec'Shift, vec'Root = match vec' with
+                                  | :? RRBSapling<int> as sapling -> failwith "Vector after removal should still not be a sapling"
+                                  | :? RRBTree<int> as tree -> tree.Shift, tree.Root
         RRBVectorProps.checkProperties vec' "Vector after one item removed at idx 0"
-        Expect.equal vec'.Shift Literals.blockSizeShift "After first removal, vector should have height of 1"
-        Expect.equal vec'.Root.Array.Length 4 "First removal should not rebalance this tree"
+        Expect.equal vec'Shift Literals.blockSizeShift "After first removal, vector should have height of 1"
+        Expect.equal vec'Root.Array.Length 4 "First removal should not rebalance this tree"
         let vec'' = vec' |> RRBVector.remove 0
+        let vec''Shift, vec''Root = match vec'' with
+                                    | :? RRBSapling<int> as sapling -> failwith "Vector after removal should still not be a sapling"
+                                    | :? RRBTree<int> as tree -> tree.Shift, tree.Root
         RRBVectorProps.checkProperties vec'' "Vector after second item removed at idx 0"
-        Expect.equal vec''.Shift Literals.blockSizeShift "After second removal, vector should have height of 1"
-        Expect.equal vec''.Root.Array.Length 3 "Second removal should rebalance this tree"
+        Expect.equal vec''Shift Literals.blockSizeShift "After second removal, vector should have height of 1"
+        Expect.equal vec''Root.Array.Length 3 "Second removal should rebalance this tree"
 
     testCase "removeWithoutRebalance can remove without rebalancing trees that the normal remove would have rebalanced" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "M/4 M/4+1 M/4+1 M/4 T1"
         RRBVectorProps.checkProperties vec "Original vector"
-        Expect.equal vec.Shift (Literals.blockSizeShift) "Original vector should have height of 1"
-        let vec' = vec.RemoveWithoutRebalance 0
+        let vecAsTree = match vec with
+                       | :? RRBSapling<int> as sapling -> failwith "Vector at start of test should not be a sapling"
+                       | :? RRBTree<int> as tree -> tree
+        Expect.equal vecAsTree.Shift (Literals.blockSizeShift) "Original vector should have height of 1"
+        let vec' = (vecAsTree :> IRRBInternal<int>).RemoveWithoutRebalance 0
+        let vec'AsTree = match vec' with
+                        | :? RRBSapling<int> as sapling -> failwith "Vector after removal should still not be a sapling"
+                        | :? RRBTree<int> as tree -> tree
         RRBVectorProps.checkProperties vec' "Vector after one item removed at idx 0"
-        Expect.equal vec'.Shift Literals.blockSizeShift "After first removal, vector should have height of 1"
-        Expect.equal vec'.Root.Array.Length 4 "First removal should not rebalance this tree"
-        let vec'' = vec'.RemoveWithoutRebalance 0
+        Expect.equal vec'AsTree.Shift Literals.blockSizeShift "After first removal, vector should have height of 1"
+        Expect.equal vec'AsTree.Root.Array.Length 4 "First removal should not rebalance this tree"
+        let vec'' = (vec'AsTree :> IRRBInternal<int>).RemoveWithoutRebalance 0
+        let vec''Shift, vec''Root = match vec'' with
+                                    | :? RRBSapling<int> as sapling -> failwith "Vector after removal should still not be a sapling"
+                                    | :? RRBTree<int> as tree -> tree.Shift, tree.Root
         RRBVectorProps.checkProperties vec'' "Vector after second item removed at idx 0"
-        Expect.equal vec''.Shift Literals.blockSizeShift "After second removal, vector should have height of 1"
-        Expect.equal vec''.Root.Array.Length 4 "Second removal should not rebalance this tree"
+        Expect.equal vec''Shift Literals.blockSizeShift "After second removal, vector should have height of 1"
+        Expect.equal vec''Root.Array.Length 4 "Second removal should not rebalance this tree"
 
     testCase "manual test for split + remove idx 0 of left + join" <| fun _ ->
         let orig = RRBVecGen.treeReprStrToVec "[M-3 M-3] [2 1 3] [M] TM-1"
@@ -1050,7 +1138,7 @@ let insertTests =
 let fixedSpecTest (spec : RRBVectorFsCheckCommands.Cmd list) () =
     // A test I wrote to focus on one specific test scenario that was causing a property failure.
     // If you want to uncomment the printfn statements here, first focus this test so it runs alone.
-    let mutable vec = RRBVector<int>.Empty()
+    let mutable vec = RRBVector.empty<int>
     for cmd in spec do
         logger.debug (
             eventX "Before {cmd}, vec was {vec}"
@@ -1207,11 +1295,12 @@ let arrayTests =
 
 let apiTests =
   testList "API tests" [
-    testProp "windowed" <| fun (VecPlusArrAndIdx (v,a,i)) ->
-        if i < 1 then () else
-        let expected = a |> Array.windowed i
-        let actual = v |> RRBVector.windowed i |> Seq.map RRBVector.toArray |> Seq.toArray
-        Expect.equal actual expected "RRBVector.windowed did not produce the right results"
+    // Disabled test until we restore the windowed function
+    // testProp "windowed" <| fun (VecPlusArrAndIdx (v,a,i)) ->
+    //     if i < 1 then () else
+    //     let expected = a |> Array.windowed i
+    //     let actual = v |> RRBVector.windowed i |> Seq.map RRBVector.toArray |> Seq.toArray
+    //     Expect.equal actual expected "RRBVector.windowed did not produce the right results"
 
     testProp "slice notation" <| fun (VecPlusArrAndIdx (v,a,idx)) (PositiveInt endIdx) ->
         let endIdx = if v.Length = 0 then 0 else endIdx % v.Length
