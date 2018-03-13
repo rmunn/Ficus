@@ -1337,18 +1337,8 @@ module RRBVector =
     let inline ofList (l : 'T list) = l |> Seq.ofList |> ofSeq
     let inline ofPersistentVector (vec : PersistentVector<'T>) = vec |> ofSeq  // TODO: Get rid of this and replace its uses with transients
     // TODO: Try improving average and averageBy by using iterLeafArrays(), summing up each array, and then dividing by count at the end. MIGHT be faster than Seq.average.
-    let inline average (vec : RRBVector< ^T>) =
-        use e = (vec :> System.Collections.Generic.IEnumerable<'T>).GetEnumerator()
-        let mutable acc = LanguagePrimitives.GenericZero< ^T>
-        let mutable count = 0
-        while e.MoveNext() do
-            acc <- Checked.(+) acc e.Current
-            count <- count + 1
-        if count = 0 then
-            LanguagePrimitives.GenericZero< ^T>
-        else
-            LanguagePrimitives.DivideByInt< ^T> acc count
-    let inline averageBy f (vec : RRBVector< ^T>) = vec |> toSeq |> Seq.averageBy f
+    let inline average (vec : RRBVector<'T>) = vec |> toSeq |> Seq.average
+    let inline averageBy f (vec : RRBVector<'T>) = vec |> toSeq |> Seq.averageBy f
     let choose (chooser : 'T -> 'U option) (vec : RRBVector<'T>) : RRBVector<'U> =
         let mutable transient = TransientVector<'U>()
         for item in vec do
@@ -1516,18 +1506,8 @@ module RRBVector =
         arr |> ofArray
     let inline splitAt idx (vec : RRBVector<'T>) = vec.Split idx
     let inline splitInto splitCount (vec : RRBVector<'T>) = chunkBySize (vec.Length / splitCount) vec  // TODO: Test that splits have the expected size
-    let inline sum (vec : RRBVector< ^T>) =
-        use e = (vec :> System.Collections.Generic.IEnumerable<'T>).GetEnumerator()
-        let mutable acc = LanguagePrimitives.GenericZero< ^T>
-        while e.MoveNext() do
-            acc <- Checked.(+) acc e.Current
-        acc
-    let inline sumBy f (vec : RRBVector< ^T>) =
-        use e = (vec :> System.Collections.Generic.IEnumerable<'T>).GetEnumerator()
-        let mutable acc = LanguagePrimitives.GenericZero< ^T>
-        while e.MoveNext() do
-            acc <- Checked.(+) acc (f e.Current)
-        acc
+    let inline sum (vec : RRBVector<'T>) = vec |> Seq.sum
+    let inline sumBy f (vec : RRBVector<'T>) = vec |> Seq.sumBy f
     let inline tail (vec : RRBVector<'T>) = vec.Remove 0
     let inline take n (vec : RRBVector<'T>) =
         if n > vec.Length then invalidArg "n" <| sprintf "Cannot take more items than a vector's length. Tried to take %d items from a vector of length %d" n vec.Length
