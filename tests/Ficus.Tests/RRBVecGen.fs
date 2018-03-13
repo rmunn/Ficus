@@ -112,7 +112,6 @@ let mkSpecificTree treeRepr =
         let tail = items |> mkArray tailSize
         RRBSapling(rootSize + tailSize, 0, root, tail, rootSize) :> RRBVector<int>
     else
-        printfn "Making tree for tree repr %A" treeRepr
         let rootNode = mkSpecificRRBNode items height treeRepr.Root
         let tailItems = items |> mkArray tailSize
         let vecLen = peek items
@@ -130,26 +129,31 @@ let treeReprStrToVec s =
 let strJoin (between:string) (parts:#seq<string>) =
     System.String.Join(between,parts)
 
-let rec nodeToTreeReprStr level (node : obj []) =
-    if level > 0 then
+let leafToTreeReprStr (leaf : 'T []) =
+    match leaf.Length with
+    | x when x >= Literals.blockSize -> "M"
+    | x when x  = Literals.blockSize - 1 -> "M-1"
+    // | x when x  = Literals.blockSize - 2 -> "M-2"
+    // | x when x  = Literals.blockSize - 3 -> "M-3"
+    | x -> x.ToString()
+
+let rec nodeToTreeReprStr<'T> level (node : obj []) =
+    if level > 1 then
         node |> Seq.cast |> Seq.map (nodeToTreeReprStr (level - 1)) |> strJoin " " |> sprintf "[%s]"
+    elif level = 1 then
+        node |> Seq.cast<'T []> |> Seq.map leafToTreeReprStr |> strJoin " " |> sprintf "[%s]"
     else
-        match node.Length with
-        | x when x >= Literals.blockSize -> "M"
-        | x when x  = Literals.blockSize - 1 -> "M-1"
-        // | x when x  = Literals.blockSize - 2 -> "M-2"
-        // | x when x  = Literals.blockSize - 3 -> "M-3"
-        | x -> x.ToString()
+        leafToTreeReprStr node
 
 let vecToTreeReprStr (vec : RRBVector<'T>) =
     if vec.Length <= 0 then "<emptyVec>" else
     let rootRepr, tail =
         match vec with
-        | :? RRBSapling<'T> as sapling -> sapling.Root |> Array.map box |> nodeToTreeReprStr 0, sapling.Tail
+        | :? RRBSapling<'T> as sapling -> sapling.Root |> Array.map box |> nodeToTreeReprStr<'T> 0, sapling.Tail
         | :? RRBTree<'T> as tree ->
             let rootRepr =
                 tree.Root.Array
-                |> nodeToTreeReprStr (tree.Shift / Literals.blockSizeShift)
+                |> nodeToTreeReprStr<'T> (tree.Shift / Literals.blockSizeShift)
                 |> fun s -> s.[1..s.Length-2] // Strip brackets from outermost list
             rootRepr, tree.Tail
     (sprintf "%s T%d" rootRepr tail.Length).Trim()

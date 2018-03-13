@@ -317,7 +317,7 @@ module RRBHelpers =
                     yield! iterLeaves (down shift) (child :?> Node).Array
         }
 
-    let rec revIterLeaves shift (arr:obj[]) =
+    let rec revIterLeaves<'T> shift (arr:obj[]) : seq<'T []> =
         seq {
             if shift <= Literals.blockSizeShift then
                 for i = arr.Length - 1 downto 0 do
@@ -659,14 +659,20 @@ module RRBHelpers =
 
     let buildTreeOfSeqWithKnownSize itemsLen (items : seq<'T>) =
         if itemsLen <= Literals.blockSize then
-            RRBTree<'T>(itemsLen, 0, emptyNode, items |> Seq.cast |> seqToArrayKnownSize itemsLen, 0)
+            RRBSapling<'T>(itemsLen, 0, Array.empty, items |> seqToArrayKnownSize itemsLen, 0) :> RRBVector<'T>
+        elif itemsLen <= Literals.blockSize * 2 then
+            let rootSeq, tailSeq = items |> seqSplitAt Literals.blockSize
+            let root = rootSeq |> seqToArrayKnownSize Literals.blockSize
+            let tail = tailSeq |> seqToArrayKnownSize (itemsLen - Literals.blockSize)
+            RRBSapling<'T>(itemsLen, 0, root, tail, 0) :> RRBVector<'T>
         else
             let leafCount = (itemsLen - 1) >>> Literals.blockSizeShift
             let tailOffset = leafCount <<< Literals.blockSizeShift
             let tailCount = itemsLen - tailOffset
             let treeItems, tailItems = items |> seqSplitAt tailOffset
-            let shift, root = buildRootOfSeqWithKnownSize 0 (treeItems |> Seq.cast) tailOffset
-            RRBTree<'T>(itemsLen, shift, root, tailItems |> Seq.cast |> seqToArrayKnownSize tailCount, tailOffset)
+            let leaves = treeItems |> Seq.chunkBySize Literals.blockSize |> Seq.map box
+            let shift, root = buildRootOfSeqWithKnownSize Literals.blockSizeShift leaves (tailOffset >>> Literals.blockSizeShift)
+            RRBTree<'T>(itemsLen, shift, root, tailItems |> seqToArrayKnownSize tailCount, tailOffset) :> RRBVector<'T>
 
     // Helper function for RRBVector.Append (optimized construction of vector from two "saplings" - root+tail vectors)
     let buildTreeFromTwoSaplings (aRoot : 'T[]) (aTail : 'T[]) (bRoot : 'T[]) (bTail : 'T[]) =
