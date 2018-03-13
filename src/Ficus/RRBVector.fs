@@ -716,10 +716,11 @@ module RRBHelpers =
 
 
 [<AbstractClass>]
+[<StructuredFormatDisplay("{StringRepr}")>]
 type RRBVector<'T>() =
     abstract member Empty : RRBVector<'T>  // Or maybe it should be unit -> RRBVector<'T>
     abstract member IsEmpty : unit -> bool
-    // abstract member StringRepr : unit -> string
+    abstract member StringRepr : string
     abstract member Length : int
     abstract member IterLeaves : unit -> seq<'T []>
     abstract member RevIterLeaves : unit -> seq<'T []>
@@ -778,6 +779,11 @@ type RRBSapling<'T> internal (count, shift : int, root : 'T [], tail : 'T [], ta
             if this.GetHashCode() <> other.GetHashCode() then false else
             Seq.forall2 (Unchecked.equals) (this.IterItems()) (other.IterItems())
         | _ -> false
+
+    override this.ToString() =
+        sprintf "RRBSapling<length=%d,shift=%d,tailOffset=%d,root=%A,tail=%A>" count shift tailOffset root tail
+
+    override this.StringRepr = this.ToString()
 
     member internal this.Shift = shift
     member internal this.Root = root
@@ -1012,7 +1018,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
     override this.ToString() =
         sprintf "RRBVector<length=%d,shift=%d,tailOffset=%d,root=%A,tail=%A>" count shift tailOffset root tail
 
-    member this.StringRepr = this.ToString()
+    override this.StringRepr = this.ToString()
     member internal this.Shift = shift
     member internal this.Root = root
     member internal this.Tail = tail
