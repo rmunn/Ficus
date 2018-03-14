@@ -352,7 +352,9 @@ let regressionTests =
             // printfn "Vector after %d pushes: %s = %A" n (RRBVecGen.vecToTreeReprStr vec') vec'
             RRBVectorProps.checkProperties vec' <| sprintf "Right half after %d pushes" n
 
-    testCase "Slicing at tail can promote new tail and adjust tree so last leaf is full" <| fun _ ->
+(* Disabling this test since we no longer apply this invariant, and instead we allow saplings to have a mix of non-full root and tail
+    // Note that by allowing saplings to have a mix of non-full root and tail, it allows us to reuse the node arrays and go faster in this particular scenario
+    ftestCase "Slicing at tail can promote new tail and adjust tree so last leaf is full" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "M-1 M T1"
         let vec' = vec.Take (Literals.blockSize * 2 - 1)
         RRBVectorProps.checkProperties vec' "Sliced vector"
@@ -363,8 +365,8 @@ let regressionTests =
         | :? RRBTree<int> as tree -> // Or perhaps just: failwithf "Vector after slice should be sapling, instead is %A" tree
             Expect.equal tree.TailOffset (Literals.blockSize) "Wrong tail offset"
             Expect.equal tree.Tail.Length (Literals.blockSize - 1) "Wrong tail length"
-
-    testCase "Merging specific scenarios" <| fun _ ->
+*)
+    ftestCase "Merging specific scenarios" <| fun _ ->
         // A ends with [M*20] TM.
         // B is [M M M M M 5] TM-3.
         // Try it.
@@ -426,6 +428,7 @@ let regressionTests =
         let vR = RRBVecGen.treeReprStrToVec "M T1"
         doJoinTest vL vR
 
+(* Disabling test since we no longer apply this invariant, and instead we allow saplings to have a mix of non-full root and tail
     testCase "Splitting root+tail vector to two tail-only vectors has empty root on both vectors" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "M T1"
         let a,b = vec |> RRBVector.split 1
@@ -445,7 +448,7 @@ let regressionTests =
         | :? RRBSapling<int> as sapling ->
             Expect.equal sapling.Root.Length 0 "Root node of B should be empty"
             Expect.equal sapling.TailOffset 0 "Tail offset of B should be zero"
-
+*)
     testCase "Splitting root+tail vector to one tail-only vector and one root+tail vector has empty root on only one vector" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "M M TM/2"
         let a,b = vec |> RRBVector.split 1
@@ -562,13 +565,13 @@ let mergeTests =
         let joined = RRBVector.append vL vR
         RRBVectorProps.checkProperties joined <| sprintf "Joined vector"
 
-    testCase "adjustTree is needed in merge algorithm when tree height does not increase" <| fun _ ->
+    ftestCase "adjustTree is needed in merge algorithm when tree height does not increase" <| fun _ ->
         let vL = RRBVecGen.treeReprStrToVec <| sprintf "M*M/2 TM"
         // let vR = RRBVecGen.treeReprStrToVec <| sprintf "M M M-1 T2" // This makes an invalid tree
         // TODO: Adjust namespaces here
-        let fullNode = Ficus.Node(ref null, [|1..Literals.blockSize|] |> RRBVecGen.arrayToObjArray)
-        let fullNodeMinusOne = Ficus.Node(ref null, [|1..Literals.blockSize-1|] |> RRBVecGen.arrayToObjArray)
-        let vR_root = RRBVector.RRBNode(ref null, [|box fullNode; box fullNode; box fullNodeMinusOne|], [|Literals.blockSize; Literals.blockSize*2; Literals.blockSize*3-1|])
+        let fullLeaf = [|1..Literals.blockSize|]
+        let fullLeafMinusOne = [|1..Literals.blockSize-1|]
+        let vR_root = RRBVector.RRBNode(ref null, [|box fullLeaf; box fullLeaf; box fullLeafMinusOne|], [|Literals.blockSize; Literals.blockSize*2; Literals.blockSize*3-1|])
         let vR = RRBTree<int>(Literals.blockSize * 3 + 1, Literals.blockSizeShift, vR_root, [|1;2|]) :> RRBVector<int>
         RRBVectorProps.checkProperties vL "Left half of merge"
         // vR still does not pass property checks, because we have a property that verifies that no could-have-been-full RRBNodes are created.

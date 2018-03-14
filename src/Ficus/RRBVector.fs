@@ -301,7 +301,7 @@ module RRBHelpers =
             let downShift = shift - Literals.blockSizeShift
             let lastIdx = (nodeSize root - 1)
             let newChild = root |> getChildNode lastIdx |> replaceLastLeaf downShift newLeaf
-            root |> replaceChildAt shift lastIdx newChild (treeSize<'T> downShift newChild)
+            root |> replaceChildAt<'T> shift lastIdx newChild (treeSize<'T> downShift newChild)
 
     // =================
     // Iteration helpers

@@ -151,6 +151,20 @@ let debugBigTest3 () =
     if joined = (RRBVector.remove 0 joinedOrig) then printfn "Good" else printfn "remove idx 0 of left + join did not equal join + remove idx 0"
     ()
 
+let debugBigTest4 () =
+        let vec = RRBVecGen.treeReprStrToVec "M-1 M T1"
+        let vec' = vec.Take (Literals.blockSize * 2 - 1)
+        testProperties vec' "Sliced vector"
+        match vec' with
+        | :? RRBSapling<int> as sapling ->
+            Expect.equal sapling.TailOffset (Literals.blockSize) "Wrong tail offset"
+            Expect.equal sapling.Tail.Length (Literals.blockSize - 1) "Wrong tail length"
+        | :? RRBTree<int> as tree -> // Or perhaps just: failwithf "Vector after slice should be sapling, instead is %A" tree
+            Expect.equal tree.TailOffset (Literals.blockSize) "Wrong tail offset"
+            Expect.equal tree.Tail.Length (Literals.blockSize - 1) "Wrong tail length"
+
+// TODO: All those debugBigTest functions need to be turned into specific Expecto tests
+
 [<EntryPoint>]
 let main argv =
     if argv |> Seq.contains ("--version") then
@@ -161,7 +175,7 @@ let main argv =
         let githash  = AssemblyInfo.getGitHash assembly
         printfn "%s - %A - %s - %s" name.Name version releaseDate githash
     if argv |> Array.contains "--debug-vscode" then
-        debugBigTest3()
+        debugBigTest4()
         0
     elif argv |> Array.contains "--stress" then
         printfn "Stress testing requested"

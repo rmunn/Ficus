@@ -83,9 +83,9 @@ let addLogNameParamToArgs tf args =
         match tf with
         | Full t -> t
         | Core t -> t
-    sprintf "%s -- --log-name Expecto.%s --debug" args frameworkName
+    sprintf "%s -- --log-name Expecto.%s" args frameworkName
 
-let runTests modifyArgs =
+let runTests modifyArgs modifyExpectoArgs =
     !! testsGlob
     |> Seq.map(fun proj -> proj, getTargetFrameworksFromProjectFile proj)
     |> Seq.collect(fun (proj, targetFrameworks) ->
@@ -94,15 +94,20 @@ let runTests modifyArgs =
             DotNetCli.RunCommand (fun c ->
             { c with
                 WorkingDir = IO.Path.GetDirectoryName proj
-            }) (tf |> selectRunnerForFramework |> modifyArgs |> addLogNameParamToArgs tf))
+            }) (tf |> selectRunnerForFramework |> modifyArgs |> addLogNameParamToArgs tf |> modifyExpectoArgs))
     )
 
 
 Target "DotnetTest" (fun _ ->
-    runTests (sprintf "%s --no-build")
+    runTests (sprintf "%s --no-build") id
     |> Seq.iter invoke
-
 )
+
+Target "DotnetTestDebug" (fun _ ->
+    runTests (sprintf "%s --no-build") (sprintf "%s --debug")
+    |> Seq.iter invoke
+)
+
 let execProcAndReturnMessages filename args =
     let args' = args |> String.concat " "
     ProcessHelper.ExecProcessAndReturnMessages
@@ -119,7 +124,7 @@ let killParentsAndChildren processId=
 
 
 Target "WatchTests" (fun _ ->
-    runTests (sprintf "watch %s")
+    runTests (sprintf "watch %s") id
     |> Seq.iter (invokeAsync >> Async.Catch >> Async.Ignore >> Async.Start)
 
     printfn "Press Ctrl+C (or Ctrl+Break) to stop..."
