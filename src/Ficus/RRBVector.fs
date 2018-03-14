@@ -1050,7 +1050,9 @@ type RRBSapling<'T> internal (count, shift : int, root : 'T [], tail : 'T [], ta
                 RRBSapling<'T>(count + 1, shift, root', tail', Literals.blockSize) :> RRBVector<'T>
             else
                 // Full root and tail
-                RRBHelpers.buildTreeFromTwoSaplings root tail [|item|] Array.empty
+                let fatTail = tail |> Array.copyAndInsertAt tailIdx item
+                let newRoot = Node(ref null, [|box root; fatTail.[..Literals.blockSize-1] |> box|])
+                RRBTree<'T>(count + 1, Literals.blockSizeShift, newRoot, fatTail.[Literals.blockSize..], Literals.blockSize * 2) :> RRBVector<'T>
 
         member this.RemoveFromTailAtTailIdx idx =
             if count <= 0 then invalidOp "Can't remove from an empty vector" else
