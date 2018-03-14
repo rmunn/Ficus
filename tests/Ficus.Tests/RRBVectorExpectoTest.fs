@@ -1070,6 +1070,11 @@ let splitJoinTests =
         //         eventX "Big vector L represented by {repr}"
         //         >> setField "repr" repr
         //     )
+        //     let reprR = RRBVecGen.vecToTreeReprStr vR
+        //     logger.info(
+        //         eventX "Big vector R represented by {repr}"
+        //         >> setField "repr" reprR
+        //     )
 // Big vector L represented by [M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M] [M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M] [M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M] [M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M] [M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M] [M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M] [M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M] [M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M] [M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M] [M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M] [M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M] [M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M] [M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M] T31 <Expecto>
 // TODO: Make that a separate unit test
 

@@ -603,7 +603,7 @@ module RRBHelpers =
                 SimpleInsertion arr'
 
             | SlidItemsRight (childItems', rightItems') ->
-                let arr' = arr |> Array.copyAndSet localIdx (mkBoxedRRBNodeOrLeaf (down shift) childItems')
+                let arr' = arr |> Array.copyAndSet localIdx (mkBoxedRRBNodeOrLeaf<'T> (down shift) childItems')
                 arr'.[localIdx + 1] <- mkBoxedRRBNodeOrLeaf<'T> (down shift) rightItems'
                 SimpleInsertion arr'
 
@@ -1249,7 +1249,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
                 let aTwig = RRBHelpers.getRightmostTwig shift root
                 let bTwig = RRBHelpers.getLeftmostTwig b.Shift b.Root
                 let aRoot, aShift, aTail =
-                    if RRBHelpers.isThereRoomToMergeTheTail aTwig bTwig tail.Length then
+                    if RRBHelpers.isThereRoomToMergeTheTail<'T> aTwig bTwig tail.Length then
                         root, shift, tail
                     else
                         // Push a's tail down, then merge the resulting tree
