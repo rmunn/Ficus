@@ -1452,20 +1452,71 @@ let nodeVecGenerationTests =
         Expect.sequenceEqual (RRBVector.toSeq actual) expected "Tree did not get built properly from array"
   ]
 
+let isolatedTest =
+  ftestList "Isolated test" [
+    // ftestProp (1387018891, 296424018) "insert item at idx = split at idx + push item onto end of left + join" (fun (vec : RRBVector<int>) (i: int) ->
+    //     if vec.Length = 11263 then
+    //         let repr = RRBVecGen.vecToTreeReprStr vec
+    //         logger.info(
+    //             eventX "Big vector represented by {repr}"
+    //             >> setField "repr" repr
+    //         )
+    //     let i = (abs i) % (RRBVector.length vec + 1)
+    //     let vec' = vec |> RRBVector.insert i 512
+    //     RRBVectorProps.checkProperties vec' (sprintf "Vector after inserting 512 at idx %d" i)
+    //     let vL, vR = doSplitTest vec i
+    //     let vL' = vL |> RRBVector.push 512
+    //     let joined = RRBVector.append vL' vR
+    //     RRBVectorProps.checkProperties joined "Joined vector"
+    //     Expect.vecEqual joined vec' "Split + push left + joined vectors did not equal insertion into original vector"
+    // )
+    // ftestProp (1391302219, 296424018) "starting with 2 vectors, remove idx 0 of left + join = remove idx 0 of entire" <| fun (vL : RRBVector<int>) (vR : RRBVector<int>) ->
+    //     if vL.Length = 13343 then
+    //         let repr = RRBVecGen.vecToTreeReprStr vL
+    //         logger.info(
+    //             eventX "Big vector L represented by {repr}"
+    //             >> setField "repr" repr
+    //         )
+    //     elif vR.Length = 13343 then
+    //         let repr = RRBVecGen.vecToTreeReprStr vR
+    //         logger.info(
+    //             eventX "Big vector R represented by {repr}"
+    //             >> setField "repr" repr
+    //         )
+    //     if vL.Length > 0 then
+    //         let vL' = RRBVector.remove 0 vL
+    //         let joinedOrig = RRBVector.append vL vR
+    //         let joined = RRBVector.append vL' vR
+    //         RRBVectorProps.checkProperties joined "Joined vector"
+    //         Expect.vecEqual joined (RRBVector.remove 0 joinedOrig) "remove idx 0 of left + join did not equal join + remove idx 0"
+    // ftestCase "shorten property 4" <| fixedSpecTest RRBVectorFsCheckCommands.shortenSpec4
+    ftestCase "manual test for shorten property 4 (insert into tail of short-root, full-tail sapling)" <| fun _ ->
+        let vec = RRBVector.ofArray [|1..64|]
+        RRBVectorProps.checkProperties vec "Full sapling"
+        let vec2 = vec.Remove 0
+        RRBVectorProps.checkProperties vec2 "Sapling with short root"
+        let vec3 = vec2.Insert (vec2.Length - 2) 65
+        printfn "Result: %A" (RRBVecGen.vecToTreeReprStr vec3)
+        RRBVectorProps.checkProperties vec3 "Sapling with formerly short root, after a tail insert, which should be a full sapling"
+  ]
+
 [<Tests>]
 let tests =
   testList "All tests" [
-    arrayTests
-    simpleVectorTests
-    manualVectorTests
-    constructedVectorSplitTests
-    splitJoinTests
-    insertTests
-    operationTests
-    vectorTests
-    nodeVecGenerationTests
-    regressionTests
-    mergeTests
-    apiTests
+    // arrayTests
+    // simpleVectorTests
+    // manualVectorTests
+    // constructedVectorSplitTests
+    // splitJoinTests
+    // insertTests
+    // operationTests
+    // vectorTests
+    // nodeVecGenerationTests
+    // regressionTests
+    // mergeTests
+    // apiTests
+
+    isolatedTest
+
     // perfTests
   ]

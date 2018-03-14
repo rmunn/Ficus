@@ -162,7 +162,7 @@ let debugBigTest2 () =
 
     let vec = RRBVector.ofArray [|1..64|]  // Full sapling
     let vec2 = vec.Remove 0
-    let vec3 = vec2.Push 65  // This should trigger the bug
+    let vec3 = vec2.Insert (vec2.Length - 2) 65  // This should trigger the bug
     printfn "Result: %A" (RRBVecGen.vecToTreeReprStr vec3)
     testProperties vec3
     if vec3.Length = 64 then

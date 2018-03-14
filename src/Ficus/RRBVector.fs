@@ -1042,7 +1042,7 @@ type RRBSapling<'T> internal (count, shift : int, root : 'T [], tail : 'T [], ta
             if count - tailOffset < Literals.blockSize then
                 // Tail isn't full yet: easy
                 RRBSapling<'T>(count + 1, shift, root, tail |> Array.copyAndInsertAt tailIdx item, tailOffset) :> RRBVector<'T>
-            elif count + 1 < Literals.blockSize * 2 then
+            elif count < Literals.blockSize * 2 then
                 // Short root, so rebalance to make a full root so we don't have to do that again next time
                 // TODO: Write an array extension function to do this in a single step
                 let fatTail = tail |> Array.copyAndInsertAt tailIdx item
