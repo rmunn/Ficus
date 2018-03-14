@@ -687,6 +687,20 @@ let manualVectorTests =
         RRBVectorProps.checkProperties vec "9-item vector"
         Expect.equal (RRBVector.length vec) 9 "9-item vector should have length 9"
     )
+    testCase "Inserting into tail of short-root, full-tail sapling will shift nodes from tail to make full root" <| fun _ ->
+        let vec = RRBVector.ofArray [|1..(Literals.blockSize * 2)|]
+        RRBVectorProps.checkProperties vec "Full sapling"
+        let vec2 = vec.Remove 0
+        RRBVectorProps.checkProperties vec2 "Sapling with short root"
+        let vec3 = vec2.Insert (vec2.Length - 2) 65
+        printfn "Result: %A" (RRBVecGen.vecToTreeReprStr vec3)
+        RRBVectorProps.checkProperties vec3 "Sapling with formerly short root, after a tail insert, which should be a full sapling"
+        match vec3 with
+        | :? RRBSapling<int> as sapling ->
+            Expect.equal sapling.Root.Length Literals.blockSize "Root length should be BlockSize"
+            Expect.equal sapling.Tail.Length Literals.blockSize "Tail length should be BlockSize"
+        | :? RRBTree<int> as tree ->
+            failwith <| sprintf "Should have a sapling, got a tree %A instead" tree
   ]
 
 let constructedVectorSplitTests =
@@ -1199,11 +1213,17 @@ let experimentalTests =
 
 let operationTests =
   testList "Operational transform tests" [
-    testProp "Extra-small lists" (Command.toProperty RRBVectorFsCheckCommands.specExtraSmallFromEmpty)
-    ftestProp (1408541085, 296424018) "Small lists" (Command.toProperty RRBVectorFsCheckCommands.specSmallFromEmpty)
-    ftestProp (1408541896, 296424018) "Medium lists" (Command.toProperty RRBVectorFsCheckCommands.specMediumFromEmpty)
-    ftestProp (1411399939, 296424018) "Large lists" (Command.toProperty RRBVectorFsCheckCommands.specLargeFromEmpty)
-    ftestProp (1413043680, 296424018) "Extra-large lists" (Command.toProperty RRBVectorFsCheckCommands.specExtraLargeFromEmpty)
+    testProp "Extra-small lists from empty" (Command.toProperty RRBVectorFsCheckCommands.specExtraSmallFromEmpty)
+    ftestProp (1408541085, 296424018) "Small lists from empty" (Command.toProperty RRBVectorFsCheckCommands.specSmallFromEmpty)
+    ftestProp (1408541896, 296424018) "Medium lists from empty" (Command.toProperty RRBVectorFsCheckCommands.specMediumFromEmpty)
+    ftestProp (1411399939, 296424018) "Large lists from empty" (Command.toProperty RRBVectorFsCheckCommands.specLargeFromEmpty)
+    ftestProp (1413043680, 296424018) "Extra-large lists from empty" (Command.toProperty RRBVectorFsCheckCommands.specExtraLargeFromEmpty)
+
+    ftestProp (1408541081, 296424018) "Extra-small lists from almost-full sapling" (Command.toProperty RRBVectorFsCheckCommands.specExtraSmallFromAlmostFullSapling)
+    ftestProp (1408541085, 296424018) "Small lists from almost-full sapling" (Command.toProperty RRBVectorFsCheckCommands.specSmallFromAlmostFullSapling)
+    ftestProp (1408541896, 296424018) "Medium lists from almost-full sapling" (Command.toProperty RRBVectorFsCheckCommands.specMediumFromAlmostFullSapling)
+    ftestProp (1411399939, 296424018) "Large lists from almost-full sapling" (Command.toProperty RRBVectorFsCheckCommands.specLargeFromAlmostFullSapling)
+    ftestProp (1413043680, 296424018) "Extra-large lists from almost-full sapling" (Command.toProperty RRBVectorFsCheckCommands.specExtraLargeFromAlmostFullSapling)
 
     testCase "Inserting into a full tail with empty root will not cause an invariant break" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "TM"
@@ -1243,6 +1263,7 @@ let operationTests =
     testCase "shorten property 1" <| fixedSpecTest RRBVectorFsCheckCommands.shortenSpec1
     testCase "shorten property 2" <| fixedSpecTest RRBVectorFsCheckCommands.shortenSpec2
     testCase "shorten property 3" <| fixedSpecTest RRBVectorFsCheckCommands.shortenSpec3
+    ftestCase "shorten property 4" <| fixedSpecTest RRBVectorFsCheckCommands.shortenSpec4
 
     testCase "inserting into first leaf can still maintain last-leaf-is-full invariant" <| fun _ ->
         let initialVec = RRBVecGen.treeReprStrToVec "M*M T1"
@@ -1503,18 +1524,18 @@ let isolatedTest =
 [<Tests>]
 let tests =
   testList "All tests" [
-    // arrayTests
-    // simpleVectorTests
-    // manualVectorTests
-    // constructedVectorSplitTests
-    // splitJoinTests
-    // insertTests
-    // operationTests
-    // vectorTests
-    // nodeVecGenerationTests
-    // regressionTests
-    // mergeTests
-    // apiTests
+    arrayTests
+    simpleVectorTests
+    manualVectorTests
+    constructedVectorSplitTests
+    splitJoinTests
+    insertTests
+    operationTests
+    vectorTests
+    nodeVecGenerationTests
+    regressionTests
+    mergeTests
+    apiTests
 
     isolatedTest
 

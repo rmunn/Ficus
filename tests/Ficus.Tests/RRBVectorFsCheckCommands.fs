@@ -124,6 +124,13 @@ let specMediumFromEmpty = specMediumFromData (RRBVector.empty<int>)
 let specLargeFromEmpty = specLargeFromData (RRBVector.empty<int>)
 let specExtraLargeFromEmpty = specExtraLargeFromData (RRBVector.empty<int>)
 
+let almostFullSapling = RRBVector.ofArray [|1..63|]
+
+let specExtraSmallFromAlmostFullSapling = specExtraSmallFromData almostFullSapling
+let specSmallFromAlmostFullSapling = specSmallFromData almostFullSapling
+let specMediumFromAlmostFullSapling = specMediumFromData almostFullSapling
+let specLargeFromAlmostFullSapling = specLargeFromData almostFullSapling
+let specExtraLargeFromAlmostFullSapling = specExtraLargeFromData almostFullSapling
 
 let fixedSpec =
   [ push1; insert5AtHead; insert9InTail; insert7InFirstLeaf;
@@ -196,3 +203,9 @@ let shortenSpec3 =
     push9; insert9InTail; push1; push4;
     push9; insert9InTail; removeFromTail; removeFromFirstLeaf;
     removeFromFirstLeaf; insert9InTail ]
+
+let shortenSpec4 =
+  [ push33; push9; removeFromHead; push9;
+    removeFromHead; insert7InFirstLeaf; push9; insert9InTail;
+    pop; push4; insert9InTail
+  ]
