@@ -135,7 +135,7 @@ module RRBHelpers =
                 if shift <= Literals.blockSizeShift then
                     ((n.Array.Length - 1) <<< shift) + ((Array.last n.Array) :?> 'T[]).Length
                 else
-                    ((n.Array.Length - 1) <<< shift) + treeSize (down shift) (Array.last n.Array)
+                    ((n.Array.Length - 1) <<< shift) + treeSize<'T> (down shift) (Array.last n.Array)
 
     // Handy shorthand
     let inline nodeSize (node:obj) = (node :?> Node).Array.Length
@@ -241,7 +241,7 @@ module RRBHelpers =
             | None -> // Rightmost subtree was full
                 if nodeSize rootNode >= Literals.blockSize then None else
                 let newNode = newPath<'T> (down shift) (mkNode [|box newLeaf|])
-                rootNode |> appendChild shift newNode leafLen |> Some
+                rootNode |> appendChild<'T> shift newNode leafLen |> Some
 
     let appendLeafWithGrowth shift (leaf:'T[]) (root:Node) =
         let leafLen = leaf.Length
@@ -303,7 +303,7 @@ module RRBHelpers =
             let downShift = shift - Literals.blockSizeShift
             let lastIdx = (nodeSize root - 1)
             let newChild = root |> getChildNode lastIdx |> replaceLastLeaf downShift newLeaf
-            root |> replaceChildAt shift lastIdx newChild (treeSize downShift newChild)
+            root |> replaceChildAt shift lastIdx newChild (treeSize<'T> downShift newChild)
 
     // =================
     // Iteration helpers
@@ -370,7 +370,7 @@ module RRBHelpers =
         | :? RRBNode as tree ->
             let sizeTable = tree.SizeTable.[..lastIdx]
             if nextIdx > 0 then
-                let diff = treeSize (down shift) (child :?> Node) - newChildSize
+                let diff = treeSize<'T> (down shift) child - newChildSize
                 sizeTable.[lastIdx] <- sizeTable.[lastIdx] - diff
             mkRRBNodeWithSizeTable shift items sizeTable
         | _ -> mkRRBNode<'T> shift items
@@ -548,7 +548,8 @@ module RRBHelpers =
     let  (|LeftSibling|_|) (parentOpt, idx) = if idx <= 0 then None else parentOpt |> Option.map (fun p -> p |> getChildNode (idx-1))
     let (|RightSibling|_|) (parentOpt, idx) = parentOpt |> Option.bind (fun p -> if idx >= (nodeSize p)-1 then None else p |> getChildNode (idx+1) |> Some)
 
-    let trySlideAndInsert<'T> localIdx itemToInsert (parentOpt : Node option) idxOfNodeInParent (node : Node) =
+    // TODO: This is usually called at the twig level, so we should revamp the parameters to NOT be Nodes. But it *can* be called at higher levels than twig, too.
+    let trySlideAndInsert localIdx (itemToInsert : 'T) (parentOpt : Node option) idxOfNodeInParent (node : Node) =
         if node.Array.Length < Literals.blockSize then
             SimpleInsertion (node.Array |> Array.copyAndInsertAt localIdx itemToInsert)
         else
@@ -566,7 +567,7 @@ module RRBHelpers =
 
         let insertResult = if shift > Literals.blockSizeShift
                            then insertIntoTree (down shift) nextLvlIdx item (Some node) localIdx (child :?> Node)
-                           else trySlideAndInsert<'T>           nextLvlIdx item (Some node) localIdx (child :?> Node)
+                           else trySlideAndInsert           nextLvlIdx item (Some node) localIdx (child :?> Node)
         match insertResult with
 
         | SimpleInsertion childItems' ->
@@ -603,7 +604,7 @@ module RRBHelpers =
         let result =
             if shift <= Literals.blockSizeShift
             then Array.copyAndRemoveAt nextLvlIdx (childNode :?> Node).Array |> mkNode
-            else removeFromTree (down shift) shouldCheckForRebalancing nextLvlIdx (childNode :?> Node) |> mkRRBNode (down shift)
+            else removeFromTree<'T> (down shift) shouldCheckForRebalancing nextLvlIdx (childNode :?> Node) |> mkRRBNode (down shift)
             // TODO: Can probably leverage mkRRBNodeWithSizeTable here for greater efficiency: subtract 1 from size table and we have it
         let resultLen = Array.length result.Array
         if resultLen <= 0 then
@@ -1106,9 +1107,9 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
         elif skipCount <= 0 then this :> RRBVector<'T>   // TODO: Decide whether a negative count in Skip() should be an exception or not
         elif skipCount > tailOffset then
             let tailStart = skipCount - tailOffset
-            RRBTree<'T>(count - skipCount, 0, RRBHelpers.emptyNode, tail.[tailStart..], 0) :> RRBVector<'T>
+            RRBSapling<'T>(count - skipCount, 0, Array.empty, tail.[tailStart..], 0) :> RRBVector<'T>
         elif skipCount = tailOffset then
-            RRBTree<'T>(count - skipCount, 0, RRBHelpers.emptyNode, tail, 0) :> RRBVector<'T>
+            RRBSapling<'T>(count - skipCount, 0, Array.empty, tail, 0) :> RRBVector<'T>
         else
             let newRoot = RRBHelpers.rightSlice<'T> shift skipCount root
             RRBTree<'T>(count - skipCount, shift, newRoot, tail, tailOffset - skipCount).AdjustTree() // :> RRBVector<'T>

@@ -161,7 +161,7 @@ let vecToTreeReprStr (vec : RRBVector<'T>) =
 let genSpecificTree g treeRepr =
     failwith "Not implemented yet"  // TODO: Write if desired
 
-let rec genRRBNode g level childCount = gen {
+let rec genRRBNode (g : Gen<'a>) level childCount = gen {
     let! slotCount = genSlotCount childCount
     let! childSizes = distribute slotCount childCount
     logger.verbose(
@@ -184,7 +184,7 @@ let rec genRRBNode g level childCount = gen {
         >> setField "slotCount" slotCount
         >> setField "children" (sprintf "%A" children)
     )
-    let node = children |> Array.ofList |> mkNode level
+    let node = children |> Array.ofList |> mkNode<'a> level
     logger.verbose (
         eventX "genRRBNode at level {level} with childCount {childCount} generated node:\n{node}"
         >> setField "level" level
@@ -194,19 +194,38 @@ let rec genRRBNode g level childCount = gen {
     return node
 }
 
-let rec genFullNode g level childCount = gen {
+let rec genFullNode (g : Gen<'a>) level childCount = gen {
     let childSizes = Array.create childCount Literals.blockSize
+    logger.verbose(
+        eventX "genFullNode called for level {level} with childCount {childCount}. Calculated childSizes {childSizes}"
+        >> setField "level" level
+        >> setField "childCount" childCount
+        >> setField "childSizes" (sprintf "%A" childSizes)
+    )
     let children =
         if level <= 1 then
             childSizes |> Array.map (fun n -> g |> Gen.arrayOfLength n |> Gen.map box)
         else
             childSizes |> Array.map (genFullNode g (level - 1) >> Gen.map box)
-    return! children |> Gen.sequence |> Gen.map (Array.ofList >> mkNode level)
+    logger.verbose(
+        eventX "genFullNode called for level {level} with childCount {childCount}. Calculated children:\n{children}"
+        >> setField "level" level
+        >> setField "childCount" childCount
+        >> setField "children" (sprintf "%A" children)
+    )
+    let! node = children |> Gen.sequence |> Gen.map (Array.ofList >> mkNode<'a> level)
+    logger.verbose (
+        eventX "genFullNode at level {level} with childCount {childCount} generated node:\n{node}"
+        >> setField "level" level
+        >> setField "childCount" childCount
+        >> setField "node" (sprintf "%A" node)
+    )
+    return node
 }
 
-let genNode g level childCount =
-    Gen.frequency [3, genRRBNode g level childCount
-                   1, genFullNode g level childCount]
+let genNode (g : Gen<'a>) level childCount =
+    Gen.frequency [3, genRRBNode<'a> g level childCount
+                   1, genFullNode<'a> g level childCount]
     // Ratio is 3:1 because when you generate a full node, it's full all the way down to the leaves.
 
 let genTinyVec<'a> size =
@@ -255,7 +274,7 @@ let genVec<'a> level childCount =
             >> setField "tail" (sprintf "%A" tail)
         )
         let shift = level * Literals.blockSizeShift
-        let rootSize = treeSize shift root'
+        let rootSize = treeSize<'a> shift root'
         let totalSize = rootSize + Array.length tail
         let vec = RRBTree<'a>(totalSize, shift, root', tail, rootSize) :> RRBVector<'a>
         logger.verbose (

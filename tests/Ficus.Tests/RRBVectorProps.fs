@@ -244,10 +244,10 @@ let properties = [
         | :? RRBSapling<'T> as sapling -> true
         | :? RRBTree<'T> as tree -> tree.Root.Array.Length > 1
 
-    "Iff vector length <= (Literals.blockSize * 2), the tree should be a sapling", fun (vec : RRBVector<'T>) ->
+    "If vector length <= (Literals.blockSize * 2), the root node should contain more than one node", fun (vec : RRBVector<'T>) ->
         match vec with
         | :? RRBSapling<'T> as sapling -> sapling.Length <= Literals.blockSize * 2
-        | :? RRBTree<'T> as tree -> tree.Length > Literals.blockSize * 2
+        | :? RRBTree<'T> as tree -> tree.Length <= Literals.blockSize * 2 || tree.Root.Array.Length > 1
 
     "No RRBNode should contain a \"full\" size table. If the size table was full, it should have been turned into a FullNode.", fun (vec : RRBVector<'T>) ->
         let rec check shift (node : Node) =

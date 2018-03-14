@@ -23,12 +23,21 @@ module AssemblyInfo =
         |> metaDataValue
 
 let debug () =
-    let arr = [|1..65|]
+    let arr = [|1..103|]
     let expected = arr
     let s = arr |> Seq.ofArray
     let actual = s |> RRBHelpers.buildTreeOfSeqWithKnownSize arr.Length
     printfn "Vector constructed was %A" actual
-    let repr = RRBVecGen.vecToTreeReprStr actual
+
+    let mutable updated = actual
+    for i = 1 to 10 do
+        updated <- updated.Insert 0 i
+        let propertyFailures = RRBVectorProps.getPropertyResults updated
+        if propertyFailures.Length > 0 then
+            printfn "Vector %A had some property failures" updated
+            printfn "Failed properties: %A" propertyFailures
+
+    let repr = RRBVecGen.vecToTreeReprStr updated
     printfn "Repr was %A" repr
     printfn "Breakpoint here"
 
