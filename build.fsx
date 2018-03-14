@@ -228,6 +228,7 @@ Target "Release" (fun _ ->
   ==> "AssemblyInfo"
   ==> "DotnetBuild"
   ==> "DotnetTest"
+  <=> "DotnetTestDebug"
   ==> "DotnetPack"
   ==> "Publish"
   ==> "Release"
