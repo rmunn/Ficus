@@ -143,11 +143,11 @@ module RRBHelpers =
     // slotCount and twigSlotCount are used in the rebalance function (and therefore in insertion, concatenation, etc.)
     let inline slotCount nodes = nodes |> Array.sumBy nodeSize
     // twigSlotCount is just a time-saving special case for nodes at the "twig" level (one level up from the leaves)
-    let twigSlotCount (node : Node) =
+    let twigSlotCount<'T> (node : Node) =
         match node with
         | _ when node |> isEmpty -> 0
         | :? RRBNode as n -> (n.SizeTable |> Array.last)
-        | n -> ((n.Array.Length - 1) <<< Literals.blockSizeShift) + nodeSize (Array.last n.Array)
+        | n -> ((n.Array.Length - 1) <<< Literals.blockSizeShift) + ((Array.last n.Array) :?> 'T[]).Length
 
     let createSizeTable<'T> shift (array:obj[]) =
         let sizeTbl = Array.zeroCreate array.Length
@@ -175,9 +175,7 @@ module RRBHelpers =
 
     let mkRRBNode<'T> shift entries = createSizeTable<'T> shift entries |> mkRRBNodeWithSizeTable shift entries
 
-    let mkRRBNodeOrLeaf<'T> shift entries = if shift > 0 then mkRRBNode<'T> shift entries else mkNode entries
-    let mkBoxedRRBNodeOrLeaf<'T> shift entries = box (mkRRBNodeOrLeaf<'T> shift entries)
-    let mkNodeThenBox = mkNode >> box
+    let mkBoxedRRBNodeOrLeaf<'T> shift entries = if shift > 0 then mkRRBNode<'T> shift entries |> box else entries |> box
 
     let newPath<'T> endShift node =
         let rec loop s node =
@@ -427,9 +425,26 @@ module RRBHelpers =
 
     // Rebalance a set of nodes of level `shift` (whose children therefore live at `shift - Literals.blockSizeShift`)
 
-    let findStartIdxForRebalance (combined:obj[]) =
-        let idx = combined |> Array.tryFindIndex (fun node -> nodeSize node < Literals.blockSizeMin)
+    let findStartIdxForRebalance<'T> shift (combined:obj[]) =
+        // printfn "Finding start index at shift %d of combined array %A and typeof<'T> is %A" shift combined typeof<'T>
+        let nodeOrTwigSize = if shift <= Literals.blockSizeShift then (fun (x : obj) -> (x :?> 'T[]).Length) else nodeSize
+        let idx = combined |> Array.tryFindIndex (fun node -> nodeOrTwigSize node < Literals.blockSizeMin)
         defaultArg idx -1
+
+    let executeTwigRebalance<'T> shift mergeStart (combined:obj[]) =
+        // This function assumes you have a real mergeStart
+        let destLen = Array.length combined - 1
+        let dest = Array.zeroCreate destLen
+        Array.blit combined 0 dest 0 mergeStart
+        let mutable workIdx = mergeStart
+        let mutable i = 0
+        while i >= 0 && workIdx < destLen do
+            let arr,newI = slideItemsDown (combined.[workIdx] :?> 'T[]) i (combined.[workIdx + 1] :?> 'T[])
+            dest.[workIdx] <- box arr
+            i <- newI
+            workIdx <- workIdx + 1
+        Array.blit combined (workIdx+1) dest workIdx (destLen - workIdx)
+        dest
 
     let executeRebalance<'T> shift mergeStart (combined:obj[]) =
         // This function assumes you have a real mergeStart
@@ -448,8 +463,9 @@ module RRBHelpers =
 
     let rebalance<'T> shift (combined:obj[]) =
         if shift < Literals.blockSizeShift then invalidArg "shift" <| sprintf "rebalance should only be called at twig level (%d) or higher. It was instead called with shift=%d" Literals.blockSizeShift shift
-        let mergeStart = findStartIdxForRebalance combined
-        if mergeStart < 0 then combined else executeRebalance<'T> shift mergeStart combined
+        let mergeStart = findStartIdxForRebalance<'T> shift combined
+        if mergeStart < 0 then combined else
+            if shift <= Literals.blockSizeShift then executeTwigRebalance<'T> shift mergeStart combined else executeRebalance<'T> shift mergeStart combined
 
     // Minor optimization
     let splitAtBlockSize combined =
@@ -461,11 +477,6 @@ module RRBHelpers =
     let inline rebalanceNeeded slotCount nodeCount =
         slotCount <= ((nodeCount - Literals.eMaxPlusOne) <<< Literals.blockSizeShift)
 
-    let rebalanceNeeded1 nodes =
-        let slots = slotCount nodes
-        let nodeCount = Array.length nodes
-        rebalanceNeeded slots nodeCount
-
     let rebalanceNeeded2 a b =
         let slots = slotCount a + slotCount b
         let nodeCount = Array.length a + Array.length b
@@ -476,7 +487,7 @@ module RRBHelpers =
         if nodeCount > 2 * Literals.blockSize
         then true // A+tail+B scenario, and we already know there'll be enough room for the tail's items in the merged+rebalanced node
         else
-            let slots = twigSlotCount a + Array.length tail + twigSlotCount b
+            let slots = twigSlotCount<'T> a + Array.length tail + twigSlotCount<'T> b
             rebalanceNeeded slots nodeCount
 
     let mergeArrays<'T> shift a b =
@@ -495,45 +506,45 @@ module RRBHelpers =
         else
             Array.append3' a.Array (box tail) b.Array |> splitAtBlockSize
 
-    let inline isThereRoomToMergeTheTail (aTwig:Node) (bTwig:Node) tailLength =
+    let inline isThereRoomToMergeTheTail<'T> (aTwig:Node) (bTwig:Node) tailLength =
         // aTwig should be the rightmost twig of vector A
         // bTwig should be the  leftmost twig of vector B
         aTwig.Array.Length < Literals.blockSize
      || bTwig.Array.Length < Literals.blockSize
-     || (twigSlotCount aTwig) + tailLength <= Literals.blockSize * (Literals.blockSize - 1)
-     || (twigSlotCount bTwig) + tailLength <= Literals.blockSize * (Literals.blockSize - 1)
+     || (twigSlotCount<'T> aTwig) + tailLength <= Literals.blockSize * (Literals.blockSize - 1)
+     || (twigSlotCount<'T> bTwig) + tailLength <= Literals.blockSize * (Literals.blockSize - 1)
 
-    let setOrRemoveFirstChild shift newChild parentArray =
+    let setOrRemoveFirstChild<'T> shift newChild parentArray =
         if newChild |> Array.isEmpty
         then parentArray |> Array.copyAndRemoveFirst
-        else parentArray |> Array.copyAndSet 0 (mkRRBNode (down shift) newChild |> box)
+        else parentArray |> Array.copyAndSet 0 (mkRRBNode<'T> (down shift) newChild |> box)
 
-    let setOrRemoveLastChild shift newChild parentArray =
+    let setOrRemoveLastChild<'T> shift newChild parentArray =
         if newChild |> Array.isEmpty
         then parentArray |> Array.copyAndPop
-        else parentArray |> Array.copyAndSetLast (mkRRBNode (down shift) newChild |> box)
+        else parentArray |> Array.copyAndSetLast (mkRRBNode<'T> (down shift) newChild |> box)
 
-    let rec mergeTree aShift (a:Node) bShift (b:Node) tail =
+    let rec mergeTree aShift (a:Node) bShift (b:Node) (tail : 'T[]) =
         if aShift <= Literals.blockSizeShift && bShift <= Literals.blockSizeShift then
             // At twig level on both nodes
             mergeWithTail aShift a tail b
         else
             if aShift < bShift then
                 let aR, bL = mergeTree aShift a (down bShift) (b |> getChildNode 0) tail
-                let a' = if aR |> Array.isEmpty then [||] else [|mkRRBNode (down bShift) aR |> box|]
-                let b' = b.Array |> setOrRemoveFirstChild bShift bL
-                mergeArrays bShift a' b'
+                let a' = if aR |> Array.isEmpty then [||] else [|mkRRBNode<'T> (down bShift) aR |> box|]
+                let b' = b.Array |> setOrRemoveFirstChild<'T> bShift bL
+                mergeArrays<'T> bShift a' b'
             elif aShift > bShift then
                 let aR, bL = mergeTree (down aShift) (Array.last a.Array :?> Node) bShift b tail
-                let a' = a.Array |> setOrRemoveLastChild  aShift aR
-                let b' = if bL |> Array.isEmpty then [||] else [|mkRRBNode (down aShift) bL |> box|]
-                mergeArrays aShift a' b'
+                let a' = a.Array |> setOrRemoveLastChild<'T>  aShift aR
+                let b' = if bL |> Array.isEmpty then [||] else [|mkRRBNode<'T> (down aShift) bL |> box|]
+                mergeArrays<'T> aShift a' b'
             else
                 let aR,  bL  = Array.last a.Array :?> Node, b |> getChildNode 0
                 let aR', bL' = mergeTree (down aShift) aR (down bShift) bL tail
-                let a' = a.Array |> setOrRemoveLastChild  aShift aR'
-                let b' = b.Array |> setOrRemoveFirstChild bShift bL'
-                mergeArrays aShift a' b'
+                let a' = a.Array |> setOrRemoveLastChild<'T>  aShift aR'
+                let b' = b.Array |> setOrRemoveFirstChild<'T> bShift bL'
+                mergeArrays<'T> aShift a' b'
 
     // =========
     // INSERTION
@@ -545,18 +556,31 @@ module RRBHelpers =
         | SlidItemsRight of newCurrent : 'a * newRight : 'a
         | SplitNode of newCurrent : 'a * newRight : 'a
 
-    let  (|LeftSibling|_|) (parentOpt, idx) = if idx <= 0 then None else parentOpt |> Option.map (fun p -> p |> getChildNode (idx-1))
-    let (|RightSibling|_|) (parentOpt, idx) = parentOpt |> Option.bind (fun p -> if idx >= (nodeSize p)-1 then None else p |> getChildNode (idx+1) |> Some)
+    let  (|LeftSiblingNode |_|) (parentOpt : Node option, idx) = if idx <= 0 then None else parentOpt |> Option.map (fun p -> p |> getChildNode (idx-1))
+    let  (|LeftSiblingArray|_|) (parentOpt : Node option, idx) = if idx <= 0 then None else parentOpt |> Option.map (fun p -> p.Array.[idx-1])
+    let (|RightSiblingNode |_|) (parentOpt : Node option, idx) = parentOpt |> Option.bind (fun p -> if idx >= (nodeSize p)-1 then None else p |> getChildNode (idx+1) |> Some)
+    let (|RightSiblingArray|_|) (parentOpt : Node option, idx) = parentOpt |> Option.bind (fun p -> if idx >= (nodeSize p)-1 then None else p.Array.[idx+1] |> Some)
 
-    // TODO: This is usually called at the twig level, so we should revamp the parameters to NOT be Nodes. But it *can* be called at higher levels than twig, too.
-    let trySlideAndInsert localIdx (itemToInsert : 'T) (parentOpt : Node option) idxOfNodeInParent (node : Node) =
+    let trySlideAndInsertTwig localIdx (itemToInsert : 'T) (parentOpt : Node option) idxOfNodeInParent (array : 'T[]) =
+        if array.Length < Literals.blockSize then
+            SimpleInsertion (array |> Array.copyAndInsertAt localIdx itemToInsert)
+        else
+            match (parentOpt, idxOfNodeInParent) with
+            | LeftSiblingArray sib when (sib :?> 'T[]).Length < Literals.blockSize ->
+                SlidItemsLeft (Array.appendAndInsertAndSplitEvenly (localIdx + (sib :?> 'T[]).Length) itemToInsert (sib :?> 'T[]) array)
+            | RightSiblingArray sib when (sib :?> 'T[]).Length < Literals.blockSize ->
+                SlidItemsRight (Array.appendAndInsertAndSplitEvenly localIdx itemToInsert array (sib :?> 'T[]))
+            | _ ->
+                SplitNode (array |> Array.insertAndSplitEvenly localIdx itemToInsert)
+
+    let trySlideAndInsertNode localIdx (itemToInsert : obj) (parentOpt : Node option) idxOfNodeInParent (node : Node) =
         if node.Array.Length < Literals.blockSize then
             SimpleInsertion (node.Array |> Array.copyAndInsertAt localIdx itemToInsert)
         else
             match (parentOpt, idxOfNodeInParent) with
-            | LeftSibling sib when sib.Array.Length < Literals.blockSize ->
+            | LeftSiblingNode sib when sib.Array.Length < Literals.blockSize ->
                 SlidItemsLeft (Array.appendAndInsertAndSplitEvenly (localIdx + sib.Array.Length) itemToInsert sib.Array node.Array)
-            | RightSibling sib when sib.Array.Length < Literals.blockSize ->
+            | RightSiblingNode sib when sib.Array.Length < Literals.blockSize ->
                 SlidItemsRight (Array.appendAndInsertAndSplitEvenly localIdx itemToInsert node.Array sib.Array)
             | _ ->
                 SplitNode (node.Array |> Array.insertAndSplitEvenly localIdx itemToInsert)
@@ -565,61 +589,111 @@ module RRBHelpers =
         let localIdx, child, nextLvlIdx = radixIndexOrSearch shift thisLvlIdx node
         let arr = node.Array
 
-        let insertResult = if shift > Literals.blockSizeShift
-                           then insertIntoTree (down shift) nextLvlIdx item (Some node) localIdx (child :?> Node)
-                           else trySlideAndInsert           nextLvlIdx item (Some node) localIdx (child :?> Node)
-        match insertResult with
+        if shift > Literals.blockSizeShift then
+            // Above twig level: children are nodes, and we return SlideResult<Node>
+            let insertResult = insertIntoTree (down shift) nextLvlIdx item (Some node) localIdx (child :?> Node)
+            match insertResult with
 
-        | SimpleInsertion childItems' ->
-            SimpleInsertion (arr |> Array.copyAndSet localIdx (mkBoxedRRBNodeOrLeaf<'T> (down shift) childItems'))
+            | SimpleInsertion childItems' ->
+                SimpleInsertion (arr |> Array.copyAndSet localIdx (mkBoxedRRBNodeOrLeaf<'T> (down shift) childItems'))
 
-        | SlidItemsLeft (leftItems', childItems') ->
-            let arr' = arr |> Array.copyAndSet localIdx (mkBoxedRRBNodeOrLeaf<'T> (down shift) childItems')
-            arr'.[localIdx - 1] <- mkBoxedRRBNodeOrLeaf<'T> (down shift) leftItems'
-            SimpleInsertion arr'
-
-        | SlidItemsRight (childItems', rightItems') ->
-            let arr' = arr |> Array.copyAndSet localIdx (mkBoxedRRBNodeOrLeaf (down shift) childItems')
-            arr'.[localIdx + 1] <- mkBoxedRRBNodeOrLeaf<'T> (down shift) rightItems'
-            SimpleInsertion arr'
-
-        | SplitNode (childItems', newSiblingItems) ->
-            let child' = mkBoxedRRBNodeOrLeaf<'T> (down shift) childItems'
-            let newSibling = mkBoxedRRBNodeOrLeaf<'T> (down shift) newSiblingItems
-            let overstuffedEntries = arr |> Array.copyAndInsertAt (localIdx + 1) newSibling
-            overstuffedEntries.[localIdx] <- child'
-            // TODO: Might be able to be clever with twigSlotCount if we know we're at the twig level
-            if rebalanceNeeded1 overstuffedEntries then
-                SimpleInsertion (rebalance<'T> shift overstuffedEntries)
-            else
+            | SlidItemsLeft (leftItems', childItems') ->
                 let arr' = arr |> Array.copyAndSet localIdx (mkBoxedRRBNodeOrLeaf<'T> (down shift) childItems')
-                trySlideAndInsert (localIdx + 1) newSibling parentOpt idxOfNodeInParent (mkNode arr')
+                arr'.[localIdx - 1] <- mkBoxedRRBNodeOrLeaf<'T> (down shift) leftItems'
+                SimpleInsertion arr'
+
+            | SlidItemsRight (childItems', rightItems') ->
+                let arr' = arr |> Array.copyAndSet localIdx (mkBoxedRRBNodeOrLeaf (down shift) childItems')
+                arr'.[localIdx + 1] <- mkBoxedRRBNodeOrLeaf<'T> (down shift) rightItems'
+                SimpleInsertion arr'
+
+            | SplitNode (childItems', newSiblingItems) ->
+                let child' = mkBoxedRRBNodeOrLeaf<'T> (down shift) childItems'
+                let newSibling = mkBoxedRRBNodeOrLeaf<'T> (down shift) newSiblingItems
+                let overstuffedEntries = arr |> Array.copyAndInsertAt (localIdx + 1) newSibling
+                overstuffedEntries.[localIdx] <- child'
+
+                let slotCnt = overstuffedEntries |> Array.sumBy (fun n -> (n :?> Node).Array.Length)
+                let nodeCnt = overstuffedEntries.Length
+                if rebalanceNeeded slotCnt nodeCnt then
+                    SimpleInsertion (rebalance<'T> shift overstuffedEntries)
+                else
+                    let arr' = arr |> Array.copyAndSet localIdx (mkBoxedRRBNodeOrLeaf<'T> (down shift) childItems')
+                    trySlideAndInsertNode (localIdx + 1) newSibling parentOpt idxOfNodeInParent (mkNode arr')
+
+        else
+            // At twig level: children are leaves, and we return SlideResult<Node>
+            let insertResult = trySlideAndInsertTwig nextLvlIdx item (Some node) localIdx (child :?> 'T[])
+            match insertResult with
+
+            | SimpleInsertion childItems' ->
+                SimpleInsertion (arr |> Array.copyAndSet localIdx (box childItems'))
+
+            | SlidItemsLeft (leftItems', childItems') ->
+                let arr' = arr |> Array.copyAndSet localIdx (box childItems')
+                arr'.[localIdx - 1] <- box leftItems'
+                SimpleInsertion arr'
+
+            | SlidItemsRight (childItems', rightItems') ->
+                let arr' = arr |> Array.copyAndSet localIdx (box childItems')
+                arr'.[localIdx + 1] <- box rightItems'
+                SimpleInsertion arr'
+
+            | SplitNode (childItems', newSiblingItems) ->
+                let child' = box childItems'
+                let newSibling = box newSiblingItems
+                let overstuffedEntries = arr |> Array.copyAndInsertAt (localIdx + 1) newSibling
+                overstuffedEntries.[localIdx] <- child'
+
+                let slotCnt = overstuffedEntries |> Array.sumBy (fun arr -> (arr :?> 'T[]).Length)
+                let nodeCnt = overstuffedEntries.Length
+                if rebalanceNeeded slotCnt nodeCnt then
+                    SimpleInsertion (rebalance<'T> shift overstuffedEntries)
+                else
+                    let arr' = arr |> Array.copyAndSet localIdx child'
+                    trySlideAndInsertNode (localIdx + 1) newSibling parentOpt idxOfNodeInParent (mkNode arr')
 
     // ========
     // DELETION
     // ========
 
     let rec removeFromTree<'T> shift shouldCheckForRebalancing thisLvlIdx thisNode =
-        let childIdx, childNode, nextLvlIdx = radixIndexOrSearch shift thisLvlIdx thisNode
-        let result =
-            if shift <= Literals.blockSizeShift
-            then Array.copyAndRemoveAt nextLvlIdx (childNode :?> Node).Array |> mkNode
-            else removeFromTree<'T> (down shift) shouldCheckForRebalancing nextLvlIdx (childNode :?> Node) |> mkRRBNode (down shift)
-            // TODO: Can probably leverage mkRRBNodeWithSizeTable here for greater efficiency: subtract 1 from size table and we have it
-        let resultLen = Array.length result.Array
-        if resultLen <= 0 then
-            // Child vanished
-            Array.copyAndRemoveAt childIdx thisNode.Array
-        elif resultLen < nodeSize childNode then
-            // Child shrank: check if rebalance needed
-            let slotCount' = slotCount thisNode.Array - 1
-            if shouldCheckForRebalancing && rebalanceNeeded slotCount' (nodeSize thisNode) then
-                Array.copyAndSet childIdx (box result) thisNode.Array |> rebalance<'T> shift
+        let childIdx, child, nextLvlIdx = radixIndexOrSearch shift thisLvlIdx thisNode
+        if shift <= Literals.blockSizeShift
+        then
+            let childArray = child :?> 'T []
+            let result = Array.copyAndRemoveAt nextLvlIdx childArray
+            let resultLen = Array.length result
+            if resultLen <= 0 then
+                // Child vanished
+                Array.copyAndRemoveAt childIdx thisNode.Array
+            elif resultLen < childArray.Length && shouldCheckForRebalancing then
+                // Child shrank: rebalance might be needed
+                let slotCount' = twigSlotCount<'T> thisNode - 1
+                if rebalanceNeeded slotCount' (nodeSize thisNode) then
+                    Array.copyAndSet childIdx (box result) thisNode.Array |> rebalance<'T> shift
+                else
+                    Array.copyAndSet childIdx (box result) thisNode.Array
             else
+                // Child did not shrink
                 Array.copyAndSet childIdx (box result) thisNode.Array
         else
-            // Child did not shrink
-            Array.copyAndSet childIdx (box result) thisNode.Array
+            let result = removeFromTree<'T> (down shift) shouldCheckForRebalancing nextLvlIdx (child :?> Node) |> mkRRBNode<'T> (down shift)
+            // TODO: Can probably leverage mkRRBNodeWithSizeTable here for greater efficiency: subtract 1 from size table and we have it
+            let resultLen = Array.length result.Array
+            if resultLen <= 0 then
+                // Child vanished
+                Array.copyAndRemoveAt childIdx thisNode.Array
+            elif resultLen < nodeSize child && shouldCheckForRebalancing then
+                // Child shrank: check if rebalance needed
+                let slotCount' = slotCount thisNode.Array - 1
+                if rebalanceNeeded slotCount' (nodeSize thisNode) then
+                    Array.copyAndSet childIdx (box result) thisNode.Array |> rebalance<'T> shift
+                else
+                    Array.copyAndSet childIdx (box result) thisNode.Array
+            else
+                // Child did not shrink
+                Array.copyAndSet childIdx (box result) thisNode.Array
 
     // ==============
     // BUILDING TREES from various sources (arrays, sequences of known size, etc) in an efficient way
@@ -665,7 +739,7 @@ module RRBHelpers =
             let nodeCount = inputLen >>> Literals.blockSizeShift
             let leftovers = inputLen - (nodeCount <<< Literals.blockSizeShift)
             let resultLen = if leftovers <= 0 then nodeCount else nodeCount + 1
-            let result = children |> Seq.chunkBySize Literals.blockSize |> Seq.map mkNodeThenBox
+            let result = children |> Seq.chunkBySize Literals.blockSize |> Seq.map (mkNode >> box)
             buildRootOfSeqWithKnownSize (up shift) result resultLen
 
     let buildTreeOfSeqWithKnownSize itemsLen (items : seq<'T>) =
@@ -905,16 +979,16 @@ type RRBSapling<'T> internal (count, shift : int, root : 'T [], tail : 'T [], ta
                     RRBHelpers.buildTreeFromTwoSaplings root tail b.Root b.Tail
             | :? RRBTree<'T> as b ->
                 // Left side sapling, right side full tree. Convert left side to a "full" tree before appending
-                let treeRoot = RRBHelpers.mkRRBNode Literals.blockSizeShift [|box root|]
+                let treeRoot = RRBHelpers.mkRRBNode<'T> Literals.blockSizeShift [|box root|]
                 // Occasionally, we can end up with a vector that needs adjusting (e.g., because the tail that was pushed down was short, so the invariant is no longer true).
                 match RRBHelpers.mergeTree Literals.blockSizeShift treeRoot b.Shift b.Root tail with
                 | [||], rootItems
-                | rootItems, [||] -> RRBTree<'T>(count + b.Length, b.Shift, RRBHelpers.mkRRBNode b.Shift rootItems, b.Tail, count + b.TailOffset).AdjustTree() // :> RRBVector<'T>
+                | rootItems, [||] -> RRBTree<'T>(count + b.Length, b.Shift, RRBHelpers.mkRRBNode<'T> b.Shift rootItems, b.Tail, count + b.TailOffset).AdjustTree() // :> RRBVector<'T>
                 | rootItemsL, rootItemsR ->
-                    let rootL = RRBHelpers.mkRRBNode b.Shift rootItemsL
-                    let rootR = RRBHelpers.mkRRBNode b.Shift rootItemsR
+                    let rootL = RRBHelpers.mkRRBNode<'T> b.Shift rootItemsL
+                    let rootR = RRBHelpers.mkRRBNode<'T> b.Shift rootItemsR
                     let newShift = RRBHelpers.up b.Shift
-                    let newRoot = RRBHelpers.mkRRBNode newShift [|box rootL; box rootR|]
+                    let newRoot = RRBHelpers.mkRRBNode<'T> newShift [|box rootL; box rootR|]
                     RRBTree<'T>(count + b.Length, newShift, newRoot, b.Tail, count + b.TailOffset).AdjustTree() // :> RRBVector<'T>
 
     override this.Insert idx item =
@@ -1183,12 +1257,12 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
                 // Occasionally, we can end up with a vector that needs adjusting (e.g., because the tail that was pushed down was short, so the invariant is no longer true).
                 match RRBHelpers.mergeTree aShift aRoot b.Shift b.Root aTail with
                 | [||], rootItems
-                | rootItems, [||] -> RRBTree<'T>(count + b.Length, higherShift, RRBHelpers.mkRRBNode higherShift rootItems, b.Tail, count + b.TailOffset).AdjustTree() // :> RRBVector<'T>
+                | rootItems, [||] -> RRBTree<'T>(count + b.Length, higherShift, RRBHelpers.mkRRBNode<'T> higherShift rootItems, b.Tail, count + b.TailOffset).AdjustTree() // :> RRBVector<'T>
                 | rootItemsL, rootItemsR ->
-                    let rootL = RRBHelpers.mkRRBNode higherShift rootItemsL
-                    let rootR = RRBHelpers.mkRRBNode higherShift rootItemsR
+                    let rootL = RRBHelpers.mkRRBNode<'T> higherShift rootItemsL
+                    let rootR = RRBHelpers.mkRRBNode<'T> higherShift rootItemsR
                     let newShift = RRBHelpers.up higherShift
-                    let newRoot = RRBHelpers.mkRRBNode newShift [|box rootL; box rootR|]
+                    let newRoot = RRBHelpers.mkRRBNode<'T> newShift [|box rootL; box rootR|]
                     RRBTree<'T>(count + b.Length, newShift, newRoot, b.Tail, count + b.TailOffset).AdjustTree() // :> RRBVector<'T>
 
     override this.Insert idx (item : 'T) =
@@ -1208,7 +1282,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
             | RRBHelpers.SlideResult.SplitNode (l,r) ->
                 let a = RRBHelpers.mkRRBNode<'T> shift l
                 let b = RRBHelpers.mkRRBNode<'T> shift r
-                RRBTree<'T>(count + 1, (RRBHelpers.up shift), RRBHelpers.mkRRBNode (RRBHelpers.up shift) [|a;b|], tail, tailOffset + 1).AdjustTree() // :> RRBVector<'T>
+                RRBTree<'T>(count + 1, (RRBHelpers.up shift), RRBHelpers.mkRRBNode<'T> (RRBHelpers.up shift) [|a;b|], tail, tailOffset + 1).AdjustTree() // :> RRBVector<'T>
 
     member internal this.AdjustTree() =
         let shorter : RRBVector<'T> = this.ShortenTree()
@@ -1302,7 +1376,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
                 let newRoot = root.Array |> Array.copyAndRemoveAt idx |> RRBHelpers.mkNode
                 RRBTree<'T>(count - 1, 0, newRoot, tail, tailOffset - 1).ShortenTree() // :> RRBVector<'T>  // No need for adjustTree at 0 shift
             else
-                let newRoot = RRBHelpers.removeFromTree shift shouldCheckForRebalancing idx root |> RRBHelpers.mkRRBNode<'T> shift
+                let newRoot = RRBHelpers.removeFromTree<'T> shift shouldCheckForRebalancing idx root |> RRBHelpers.mkRRBNode<'T> shift
                 RRBTree<'T>(count - 1, shift, newRoot, tail, tailOffset - 1).AdjustTree() // :> RRBVector<'T>
 
         member this.RemoveWithoutRebalance idx = (this :> IRRBInternal<'T>).RemoveImpl false idx // Will be used in RRBVector.windowed implementation
