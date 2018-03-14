@@ -972,7 +972,7 @@ type RRBSapling<'T> internal (count, shift : int, root : 'T [], tail : 'T [], ta
                 // TODO: Write an array extension function to do this in a single step
                 let fatTail = tail |> Array.copyAndInsertAt tailIdx item
                 let root', tail' = Array.appendAndSplitAt Literals.blockSize root fatTail
-                RRBSapling<'T>(count + 1, shift, root', tail', tailOffset) :> RRBVector<'T>
+                RRBSapling<'T>(count + 1, shift, root', tail', Literals.blockSize) :> RRBVector<'T>
             else
                 // Full root and tail
                 RRBHelpers.buildTreeFromTwoSaplings root tail [|item|] Array.empty
@@ -1220,7 +1220,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
         if shift <= 0 then this :> RRBVector<'T>
         else
             if root.Array.Length > 1 then this :> RRBVector<'T>
-            elif root.Array.Length = 0 then RRBTree<'T>(count, 0, root, tail, tailOffset) :> RRBVector<'T>
+            elif root.Array.Length = 0 then RRBSapling<'T>(count, 0, Array.empty, tail, tailOffset) :> RRBVector<'T>
             elif shift <= Literals.blockSizeShift then
                 RRBSapling<'T>(count, 0, (root.Array.[0] :?> 'T[]), tail, tailOffset) :> RRBVector<'T>
             else
