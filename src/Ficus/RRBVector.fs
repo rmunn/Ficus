@@ -749,7 +749,7 @@ module RRBHelpers =
             let rootSeq, tailSeq = items |> seqSplitAt Literals.blockSize
             let root = rootSeq |> seqToArrayKnownSize Literals.blockSize
             let tail = tailSeq |> seqToArrayKnownSize (itemsLen - Literals.blockSize)
-            RRBSapling<'T>(itemsLen, 0, root, tail, 0) :> RRBVector<'T>
+            RRBSapling<'T>(itemsLen, 0, root, tail, Literals.blockSize) :> RRBVector<'T>
         else
             let leafCount = (itemsLen - 1) >>> Literals.blockSizeShift
             let tailOffset = leafCount <<< Literals.blockSizeShift

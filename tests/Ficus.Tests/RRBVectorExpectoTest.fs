@@ -798,6 +798,16 @@ let splitJoinTests =
         RRBVectorProps.checkProperties vec' "Joined vector"
         Expect.vecEqual vec' (RRBVector.rev vec) "Vector halves after split+reverse, when put back together, did not equal reversed vector"
     )
+    ftestCase "split+reverse+join on a sapling" <| fun _ ->
+        let vec = RRBVector.ofSeq {1..40}
+        let vL, vR = doSplitTest vec 0
+        let revL = RRBVector.rev vL
+        let revR = RRBVector.rev vR
+        RRBVectorProps.checkProperties revL "Reversed left vector"
+        RRBVectorProps.checkProperties revR "Reversed right vector"
+        let vec' = RRBVector.append revR revL
+        RRBVectorProps.checkProperties vec' "Joined vector"
+        Expect.vecEqual vec' (RRBVector.rev vec) "Vector halves after split+reverse, when put back together, did not equal reversed vector"
     ftestProp (1384985895, 296424018) "joining two unrelated vectors is equivalent to array-appending their array equivalents" (fun (v1 : RRBVector<int>) (v2 : RRBVector<int>) ->
         let a1 = RRBVector.toArray v1
         let a2 = RRBVector.toArray v2

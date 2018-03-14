@@ -174,8 +174,11 @@ let debug () =
     let vL, vR = RRBVectorExpectoTest.doSplitTest vec i
     let revL = RRBVector.rev vL
     let revR = RRBVector.rev vR
+    RRBVectorProps.checkProperties revL "Reversed left vector"
+    RRBVectorProps.checkProperties revR "Reversed right vector"
     let vec' = RRBVector.append revR revL
     RRBVectorProps.checkProperties vec' "Joined vector"
+    if vec' = (RRBVector.rev vec) then printfn "Good" else printfn "Vector halves after split+reverse, when put back together, did not equal reversed vector"
 
 
 [<EntryPoint>]
@@ -188,7 +191,7 @@ let main argv =
         let githash  = AssemblyInfo.getGitHash assembly
         printfn "%s - %A - %s - %s" name.Name version releaseDate githash
     if argv |> Array.contains "--debug-vscode" then
-        debugBigTest()
+        debug()
         0
     elif argv |> Array.contains "--stress" then
         printfn "Stress testing requested"
