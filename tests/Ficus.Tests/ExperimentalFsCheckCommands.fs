@@ -33,11 +33,11 @@ module VecCommands =
             member this.Check (vecState,arr) =
                 let oldVec = vecState.Vec
                 vecState.Vec <- vecState.Vec |> RRBVector.push n
-                logger.debug (
-                    eventX "Push: old {old} -> new {new}"
-                    >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                    >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
-                )
+                // logger.debug (
+                //     eventX "Push: old {old} -> new {new}"
+                //     >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
+                //     >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                // )
                 vecEqual vecState.Vec arr (sprintf "push %d" n)
             override __.ToString() = sprintf "push %d" n
         }
@@ -50,11 +50,11 @@ module VecCommands =
             member __.Check (vecState,arr) =
                 let oldVec = vecState.Vec
                 vecState.Vec <- vecState.Vec |> RRBVector.pop
-                logger.debug (
-                    eventX "Pop: old {old} -> new {new}"
-                    >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                    >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
-                )
+                // logger.debug (
+                //     eventX "Pop: old {old} -> new {new}"
+                //     >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
+                //     >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                // )
                 vecEqual vecState.Vec arr "pop"
             override __.ToString() = "pop"
         }
@@ -79,15 +79,15 @@ module VecCommands =
                 let from,len = toStartPlusLen (vecState.Vec.Length) (start,stop)
                 let oldVec = vecState.Vec
                 vecState.Vec <- vecState.Vec.Slice (from,(from+len-1))
-                logger.debug (
-                    eventX "Slice from {from} len {len} (was {start}..{stop}): old {old} -> new {new}"
-                    >> setField "from" from
-                    >> setField "len" len
-                    >> setField "start" start
-                    >> setField "stop" stop
-                    >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                    >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
-                )
+                // logger.debug (
+                //     eventX "Slice from {from} len {len} (was {start}..{stop}): old {old} -> new {new}"
+                //     >> setField "from" from
+                //     >> setField "len" len
+                //     >> setField "start" start
+                //     >> setField "stop" stop
+                //     >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
+                //     >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                // )
                 vecEqual vecState.Vec arr (sprintf "slice %d len %d (was %d..%d)" from len start stop)
             override __.ToString() = sprintf "slice %d..%d" start stop
         }
@@ -100,12 +100,12 @@ module VecCommands =
             member this.Check (vecState,arr) =
                 let oldVec = vecState.Vec
                 vecState.Vec <- vecState.Vec.Append otherVec
-                logger.debug (
-                    eventX "Merged with {other}: old {old} -> new {new}"
-                    >> setField "other" (RRBVecGen.vecToTreeReprStr otherVec)
-                    >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                    >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
-                )
+                // logger.debug (
+                //     eventX "Merged with {other}: old {old} -> new {new}"
+                //     >> setField "other" (RRBVecGen.vecToTreeReprStr otherVec)
+                //     >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
+                //     >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                // )
                 vecEqual vecState.Vec arr (sprintf "append %A" (RRBVecGen.vecToTreeReprStr otherVec))
             override __.ToString() = sprintf "append %A" (RRBVecGen.vecToTreeReprStr otherVec)
         }
@@ -120,14 +120,14 @@ module VecCommands =
                 let idx' = calcSliceIdx (vecState.Vec.Length) idx |> min (vecState.Vec.Length - 1)
                 let oldVec = vecState.Vec
                 vecState.Vec <- vecState.Vec.Insert idx' n
-                logger.debug (
-                    eventX "Insert {item} at idx {idx} (was {oldIdx}): old {old} -> new {new}"
-                    >> setField "item" n
-                    >> setField "idx" idx'
-                    >> setField "oldIdx" idx
-                    >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                    >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
-                )
+                // logger.debug (
+                //     eventX "Insert {item} at idx {idx} (was {oldIdx}): old {old} -> new {new}"
+                //     >> setField "item" n
+                //     >> setField "idx" idx'
+                //     >> setField "oldIdx" idx
+                //     >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
+                //     >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                // )
                 vecEqual vecState.Vec arr (sprintf "insert %d at %d (was %d)" n idx' idx)
             override __.ToString() = sprintf "insert %d at %d" n idx
         }
@@ -143,13 +143,13 @@ module VecCommands =
                 let idx' = calcSliceIdx (vecState.Vec.Length) idx |> min (vecState.Vec.Length - 1)
                 let oldVec = vecState.Vec
                 vecState.Vec <- vecState.Vec.Remove idx'
-                logger.debug (
-                    eventX "Remove at idx {idx} (was {oldIdx}): old {old} -> new {new}"
-                    >> setField "idx" idx'
-                    >> setField "oldIdx" idx
-                    >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                    >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
-                )
+                // logger.debug (
+                //     eventX "Remove at idx {idx} (was {oldIdx}): old {old} -> new {new}"
+                //     >> setField "idx" idx'
+                //     >> setField "oldIdx" idx
+                //     >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
+                //     >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                // )
                 vecEqual vecState.Vec arr (sprintf "remove at %d (was %d)" idx' idx)
             override __.ToString() = sprintf "remove at %d" idx
         }
@@ -184,11 +184,11 @@ module VecCommands =
             member this.Check (vecState,arr) =
                 let oldVec = vecState.Vec
                 vecState.Vec <- vecState.Vec |> RRBVector.choose f
-                logger.debug (
-                    eventX "Choose f: old {old} -> new {new}"
-                    >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                    >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
-                )
+                // logger.debug (
+                //     eventX "Choose f: old {old} -> new {new}"
+                //     >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
+                //     >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                // )
                 vecEqual vecState.Vec arr "choose f"
             override __.ToString() = "choose f"
         }
@@ -201,11 +201,11 @@ module VecCommands =
             member this.Check (vecState,arr) =
                 let oldVec = vecState.Vec
                 vecState.Vec <- vecState.Vec |> RRBVector.distinct
-                logger.debug (
-                    eventX "Distinct: old {old} -> new {new}"
-                    >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                    >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
-                )
+                // logger.debug (
+                //     eventX "Distinct: old {old} -> new {new}"
+                //     >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
+                //     >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                // )
                 vecEqual vecState.Vec arr "distinct"
             override __.ToString() = "distinct"
         }
@@ -218,11 +218,11 @@ module VecCommands =
             member this.Check (vecState,arr) =
                 let oldVec = vecState.Vec
                 vecState.Vec <- vecState.Vec |> RRBVector.distinctBy f
-                logger.debug (
-                    eventX "DistinctBy f: old {old} -> new {new}"
-                    >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                    >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
-                )
+                // logger.debug (
+                //     eventX "DistinctBy f: old {old} -> new {new}"
+                //     >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
+                //     >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                // )
                 vecEqual vecState.Vec arr "distinctBy f"
             override __.ToString() = "distinctBy f"
         }
@@ -235,11 +235,11 @@ module VecCommands =
             member this.Check (vecState,arr) =
                 let oldVec = vecState.Vec
                 vecState.Vec <- vecState.Vec |> RRBVector.filter f
-                logger.debug (
-                    eventX "Filter f: old {old} -> new {new}"
-                    >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                    >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
-                )
+                // logger.debug (
+                //     eventX "Filter f: old {old} -> new {new}"
+                //     >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
+                //     >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                // )
                 vecEqual vecState.Vec arr "filter f"
             override __.ToString() = "filter f"
         }
@@ -252,11 +252,11 @@ module VecCommands =
             member this.Check (vecState,arr) =
                 let oldVec = vecState.Vec
                 vecState.Vec <- vecState.Vec |> RRBVector.map f
-                logger.debug (
-                    eventX "Map f: old {old} -> new {new}"
-                    >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                    >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
-                )
+                // logger.debug (
+                //     eventX "Map f: old {old} -> new {new}"
+                //     >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
+                //     >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                // )
                 vecEqual vecState.Vec arr "map f"
             override __.ToString() = "map f"
         }

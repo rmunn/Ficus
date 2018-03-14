@@ -83,7 +83,7 @@ let addLogNameParamToArgs tf args =
         match tf with
         | Full t -> t
         | Core t -> t
-    sprintf "%s -- --log-name Expecto.%s" args frameworkName
+    sprintf "%s -- --log-name Expecto.%s --debug" args frameworkName
 
 let runTests modifyArgs =
     !! testsGlob

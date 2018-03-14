@@ -477,8 +477,13 @@ module RRBHelpers =
     let inline rebalanceNeeded slotCount nodeCount =
         slotCount <= ((nodeCount - Literals.eMaxPlusOne) <<< Literals.blockSizeShift)
 
-    let rebalanceNeeded2 a b =
+    let rebalanceNeeded2Nodes (a : obj[]) (b : obj[]) =
         let slots = slotCount a + slotCount b
+        let nodeCount = Array.length a + Array.length b
+        rebalanceNeeded slots nodeCount
+
+    let rebalanceNeeded2Twigs<'T> (a : obj[]) (b : obj[]) =
+        let slots = (a |> Array.sumBy (fun x -> (x :?> 'T[]).Length)) + (b |> Array.sumBy (fun x -> (x :?> 'T[]).Length))
         let nodeCount = Array.length a + Array.length b
         rebalanceNeeded slots nodeCount
 
@@ -491,7 +496,11 @@ module RRBHelpers =
             rebalanceNeeded slots nodeCount
 
     let mergeArrays<'T> shift a b =
-        if rebalanceNeeded2 a b then
+        let needRebalance =
+            if shift <= Literals.blockSizeShift
+            then rebalanceNeeded2Twigs<'T>
+            else rebalanceNeeded2Nodes
+        if needRebalance a b then
             Array.append a b |> rebalance<'T> shift |> splitAtBlockSize
         else
             Array.append a b |> splitAtBlockSize

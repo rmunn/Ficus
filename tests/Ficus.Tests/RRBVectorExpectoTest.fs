@@ -162,7 +162,7 @@ let vectorTests =
         Expect.equal (RRBVector.length v) 0 "empty vector should have 0 items"
     )
 (*
-    ftestCase "debug node distributor" (fun _ ->
+    testCase "debug node distributor" (fun _ ->
         let nodes = RRBVecGen.genNode 2 4 |> Gen.sample 0 1
         for node in nodes do
             Expect.equal (nodeSize node) 4<nodeIdx> "Node should have 4 children"
@@ -185,8 +185,8 @@ let vectorTests =
         let arrTotal = vec |> RRBVector.toArray
         Expect.equal (Array.append arrL arrR) arrTotal "Items in vectors after split did not add up to original vector's items"
 
-    ftestProp (1416004129, 296424018) "vecLen" (fun (VecPlusArrAndIdx (v,a,_)) -> RRBVectorProps.checkPropertiesSimple v ; RRBVector.length v = Array.length a)
-    ftestProp (1416004132, 296424018) "vecItems" (fun (VecPlusArrAndIdx (v,a,_)) ->
+    testProp "vecLen" (fun (VecPlusArrAndIdx (v,a,_)) -> RRBVectorProps.checkPropertiesSimple v ; RRBVector.length v = Array.length a)
+    testProp "vecItems" (fun (VecPlusArrAndIdx (v,a,_)) ->
         // Original name: "Indexing into vectors works"
         // NOTE: This found errors with vectors of length 25, 37, 57, and 69 when M=4. NONE of those are tests I would have thought to write myself.
         // But once I looked at them, it was immediately clear that my code had built the wrong data structure for those cases.
@@ -195,7 +195,7 @@ let vectorTests =
         seq {0..a.Length-1}
         |> Seq.forall (fun i -> a.[i] = RRBVector.nth i v)
     )
-    ftestProp (1416111685, 296424018) "vecPop" (fun (VecPlusArrAndIdx (v,a,_)) ->
+    testProp "vecPop" (fun (VecPlusArrAndIdx (v,a,_)) ->
         // Original name: "Popping from vectors works"
         RRBVectorProps.checkProperties v "Original vector"
         let folder expected (valid,acc) =
@@ -205,14 +205,14 @@ let vectorTests =
             (valid && (expected = actual), acc')
         Array.foldBack folder a (true,v) |> fst
     )
-    ftestProp (1416805745, 296424018) "vecPush" (fun (VecPlusArrAndIdx (v,a,_)) ->
+    testProp "vecPush" (fun (VecPlusArrAndIdx (v,a,_)) ->
         let mutable vec = v
         RRBVectorProps.checkProperties vec "Original vector"
         for i = 1 to Literals.blockSize + 1 do
             vec <- vec |> RRBVector.push i
             RRBVectorProps.checkProperties vec (sprintf "Vector after %d push%s" i (if i = 1 then "" else "es"))
     )
-    ftestProp (1417066976, 296424018) "vecUpdate" <| fun (VecPlusArrAndIdx (v,a,i)) ->
+    testProp "vecUpdate" <| fun (VecPlusArrAndIdx (v,a,i)) ->
         if i >= v.Length then () else  // Can't run this test if we've picked an index equal to length, since that's not a legal update index (it *is* a legal take or skip index)
         RRBVectorProps.checkProperties v "Original vector"
         let vec' = v.Update i 512
@@ -220,7 +220,7 @@ let vectorTests =
         RRBVectorProps.checkProperties vec' (sprintf "Vector after updating at %d" i)
         Expect.vecEqualArr vec' arr' "Vector update produced wrong results"
 
-    ftestProp (1417310418, 296424018) "vecSlice" (fun (VecPlusArrAndIdx (v,a,idx)) (PositiveInt endIdx) ->
+    testProp "vecSlice" (fun (VecPlusArrAndIdx (v,a,idx)) (PositiveInt endIdx) ->
         let endIdx = if v.Length = 0 then 0 else endIdx % v.Length
         let idx, endIdx = if idx <= endIdx then idx,endIdx else endIdx,idx
         RRBVectorProps.checkProperties v "Original vector"
@@ -251,7 +251,7 @@ let vectorTests =
         let vec = vec |> RRBVector.insert 21 512
         RRBVectorProps.checkProperties vec "Vector after insert at idx 21"
         Expect.equal vec.Length (Literals.blockSize * 2 + 2) "Vector length is wrong"
-    ftestProp (1417735833, 296424018) "split" (fun (VecPlusArrAndIdx (v,a,i)) ->
+    testProp "split" (fun (VecPlusArrAndIdx (v,a,i)) ->
         let aL, aR = Array.truncate i a, Array.skip i a
         let vL, vR = v |> RRBVector.split i
         RRBVectorProps.checkProperties vL "Left half of split"
@@ -260,7 +260,7 @@ let vectorTests =
         compareVecToArray vR aR
         Expect.equal (Array.append (RRBVector.toArray vL) (RRBVector.toArray vR)) a "Vector halves after split, when put back together, did not equal original array"
     )
-    ftestProp (1417996103, 296424018) "splitWithPushes" (fun (VecPlusArrAndIdx (v,a,i)) (PositiveInt pushCnt) ->
+    testProp "splitWithPushes" (fun (VecPlusArrAndIdx (v,a,i)) (PositiveInt pushCnt) ->
         let aL, aR = Array.truncate i a, Array.skip i a
         let vL, vR = v |> RRBVector.split i
         RRBVectorProps.checkProperties vL "Left half of split"
@@ -276,11 +276,11 @@ let vectorTests =
             cnt <- cnt - 1
         Expect.equal cnt 0 "Did not successfully complete all pushes after the split"
     )
-    ftestProp (1418840350, 296424018) "splitVec" (fun (vec:RRBVector<int>,i:int) ->
+    testProp "splitVec" (fun (vec:RRBVector<int>,i:int) ->
         let i = (abs i) % (RRBVector.length vec + 1)
         splitTest vec i
     )
-    ftestProp (1418811706, 296424018) "splitVecWithPushes" (fun (vec:RRBVector<int>,i:int) (PositiveInt pushCnt) ->
+    testProp "splitVecWithPushes" (fun (vec:RRBVector<int>,i:int) (PositiveInt pushCnt) ->
         let i = (abs i) % (RRBVector.length vec + 1) // Make sure it's a valid split point, between 0 and vecLen
         splitTest vec i
         let vL, vR = vec |> RRBVector.split i
@@ -300,7 +300,7 @@ let vectorTests =
             RRBVectorProps.checkProperties vec (sprintf "Vector after %d pop%s" i (if i = 1 then "" else "s"))
         Expect.equal vec.Length 0 "Vector should be empty at end of test"
 
-    ftestProp (1419171757, 296424018) "any random vector can be popped down to empty" <| fun (vec:RRBVector<int>) ->
+    testProp "any random vector can be popped down to empty" <| fun (vec:RRBVector<int>) ->
         let mutable v = vec
         RRBVectorProps.checkProperties v "Original vector"
         for i = 1 to vec.Length do
@@ -725,7 +725,7 @@ let constructedVectorSplitTests =
 
 let splitJoinTests =
   testList "split + join tests" [
-    ftestProp (1383202928, 296424018) "split+join recreates same vector" (fun (vec : RRBVector<int>) (i : int) ->
+    testProp "split+join recreates same vector" (fun (vec : RRBVector<int>) (i : int) ->
         let i = (abs i) % (RRBVector.length vec + 1)
         let vL, vR = doSplitTest vec i
         let vec' = RRBVector.append vL vR
@@ -803,7 +803,7 @@ let splitJoinTests =
         Expect.vecEqual vec' vec "Vector halves after split, when put back together, did not equal original vector"
 
     // TODO: Make custom test that joins "T0" (emptyVec) with "M T2"
-    ftestProp (1384838033, 296424018) "split+reverse+join recreates reverse vector" (fun (vec : RRBVector<int>) (i : int) ->
+    testProp "split+reverse+join recreates reverse vector" (fun (vec : RRBVector<int>) (i : int) ->
         let i = (abs i) % (RRBVector.length vec + 1)
         let vL, vR = doSplitTest vec i
         let revL = RRBVector.rev vL
@@ -812,7 +812,7 @@ let splitJoinTests =
         RRBVectorProps.checkProperties vec' "Joined vector"
         Expect.vecEqual vec' (RRBVector.rev vec) "Vector halves after split+reverse, when put back together, did not equal reversed vector"
     )
-    ftestCase "split+reverse+join on a sapling" <| fun _ ->
+    testCase "split+reverse+join on a sapling" <| fun _ ->
         let vec = RRBVector.ofSeq {1..40}
         let vL, vR = doSplitTest vec 0
         let revL = RRBVector.rev vL
@@ -822,7 +822,7 @@ let splitJoinTests =
         let vec' = RRBVector.append revR revL
         RRBVectorProps.checkProperties vec' "Joined vector"
         Expect.vecEqual vec' (RRBVector.rev vec) "Vector halves after split+reverse, when put back together, did not equal reversed vector"
-    ftestProp (1384985895, 296424018) "joining two unrelated vectors is equivalent to array-appending their array equivalents" (fun (v1 : RRBVector<int>) (v2 : RRBVector<int>) ->
+    testProp "joining two unrelated vectors is equivalent to array-appending their array equivalents" (fun (v1 : RRBVector<int>) (v2 : RRBVector<int>) ->
         let a1 = RRBVector.toArray v1
         let a2 = RRBVector.toArray v2
         let joined = RRBVector.append v1 v2
@@ -835,7 +835,7 @@ let splitJoinTests =
         Expect.vecEqualArr joined' (Array.append a2 a1) "Opposite-joined vectors did not sequenceEqual equivalent appended arrays"
     )
     // TODO: Decide whether we need all three of these
-    ftestProp (1385023065, 296424018) "joining two unrelated vectors is equivalent to list-appending their list equivalents" (fun (v1 : RRBVector<int>) (v2 : RRBVector<int>) ->
+    testProp "joining two unrelated vectors is equivalent to list-appending their list equivalents" (fun (v1 : RRBVector<int>) (v2 : RRBVector<int>) ->
         let l1 = RRBVector.toList v1
         let l2 = RRBVector.toList v2
         let joined = RRBVector.append v1 v2
@@ -847,7 +847,7 @@ let splitJoinTests =
         Expect.sequenceEqual (joined) (List.append l1 l2) "Joined vectors did not sequenceEqual equivalent appended lists"
         Expect.sequenceEqual (joined') (List.append l2 l1) "Opposite-joined vectors did not sequenceEqual equivalent appended lists"
     )
-    ftestProp (1385465691, 296424018) "joining two unrelated vectors is equivalent to seq-appending their seq equivalents" (fun (v1 : RRBVector<int>) (v2 : RRBVector<int>) ->
+    testProp "joining two unrelated vectors is equivalent to seq-appending their seq equivalents" (fun (v1 : RRBVector<int>) (v2 : RRBVector<int>) ->
         let s1 = RRBVector.toSeq v1
         let s2 = RRBVector.toSeq v2
         let joined = RRBVector.append v1 v2
@@ -907,7 +907,7 @@ let splitJoinTests =
             Expect.equal (tree.Root.Array.Length) (vLRoot.Array.Length + vRRoot.Array.Length - 1) "Joined vector should have merged two nodes in the process of rebalancing"
 
     // TODO: Duplicate the above test for 5-6 different custom-built vectors
-    ftestProp (1386844011, 296424018) "split + pop right + join = pop entire" (fun (vec : RRBVector<int>) (i: int) ->
+    testProp "split + pop right + join = pop entire" (fun (vec : RRBVector<int>) (i: int) ->
         if vec.Length > 0 then
             let i = (abs i) % (RRBVector.length vec + 1)
             let vL, vR = doSplitTest vec i
@@ -921,7 +921,7 @@ let splitJoinTests =
             RRBVectorProps.checkProperties joined "Joined vector"
             Expect.vecEqual joined (RRBVector.pop vec) "Split + pop right + joined vectors did not equal popped original vector"
     )
-    ftestProp (1387018891, 296424018) "insert item at idx = split at idx + push item onto end of left + join" (fun (vec : RRBVector<int>) (i: int) ->
+    testProp "insert item at idx = split at idx + push item onto end of left + join" (fun (vec : RRBVector<int>) (i: int) ->
         // if vec.Length = 11263 then
         //     let repr = RRBVecGen.vecToTreeReprStr vec
         //     logger.info(
@@ -939,7 +939,7 @@ let splitJoinTests =
         RRBVectorProps.checkProperties joined "Joined vector"
         Expect.vecEqual joined vec' "Split + push left + joined vectors did not equal insertion into original vector"
     )
-    ftestProp (1387587408, 296424018) "split + remove idx 0 of left + join = remove idx 0 of entire" (fun (vec : RRBVector<int>) (i: int) ->   // Keep this one focused
+    testProp "split + remove idx 0 of left + join = remove idx 0 of entire" (fun (vec : RRBVector<int>) (i: int) ->   // Keep this one focused
         if vec.Length > 0 then
             let i = (abs i) % (RRBVector.length vec)
             let vL, vR = doSplitTest vec i
@@ -1038,7 +1038,7 @@ let splitJoinTests =
         let joined = RRBVector.append left right
         RRBVectorProps.checkProperties joined "Joined vector"
 
-    ftestProp (1390598696, 296424018) "starting with 2 vectors, pop right + join = pop entire" <| fun (vL : RRBVector<int>) (vR : RRBVector<int>) ->
+    testProp "starting with 2 vectors, pop right + join = pop entire" <| fun (vL : RRBVector<int>) (vR : RRBVector<int>) ->
         if vR.Length > 0 then
             let vR' = RRBVector.pop vR
             let joinedOrig = RRBVector.append vL vR
@@ -1063,7 +1063,7 @@ let splitJoinTests =
         RRBVectorProps.checkProperties joined "Joined vector"
         Expect.vecEqual joined (RRBVector.pop joinedOrig) "pop right + join did not equal join + pop"
 
-    ftestProp (1391302219, 296424018) "starting with 2 vectors, remove idx 0 of left + join = remove idx 0 of entire" <| fun (vL : RRBVector<int>) (vR : RRBVector<int>) ->
+    testProp "starting with 2 vectors, remove idx 0 of left + join = remove idx 0 of entire" <| fun (vL : RRBVector<int>) (vR : RRBVector<int>) ->
         // if vL.Length = 13343 then
         //     let repr = RRBVecGen.vecToTreeReprStr vL
         //     logger.info(
@@ -1115,12 +1115,12 @@ let splitJoinTests =
         let vR = RRBVecGen.treeReprStrToVec "M M TM" // height=1
         doJoinTest vL vR
 
-    ftestProp (1401108052, 296424018) "vecTake" <| fun (VecPlusArrAndIdx (v,a,i)) ->
+    testProp "vecTake" <| fun (VecPlusArrAndIdx (v,a,i)) ->
         let sliced = v.Take i
         RRBVectorProps.checkProperties sliced "Sliced vector"
         Expect.sequenceEqual (RRBVector.toArray sliced) (Array.truncate i a) "Sliced things didn't match"
 
-    ftestProp (1401877588, 296424018) "vecSkip" <| fun (VecPlusArrAndIdx (v,a,i)) ->
+    testProp "vecSkip" <| fun (VecPlusArrAndIdx (v,a,i)) ->
         let sliced = v.Skip i
         RRBVectorProps.checkProperties sliced "Sliced vector"
         Expect.sequenceEqual (RRBVector.toArray sliced) (Array.skip i a) "Sliced things didn't match"
@@ -1138,13 +1138,13 @@ let manualInsertTest idx item treeRepr =
 
 let insertTests =
   testList "Insert tests" [
-    ftestProp (1403860907, 296424018) "insert into full vectors" (fun (VecPlusArrAndIdx (v,a,i)) ->
+    testProp "insert into full vectors" (fun (VecPlusArrAndIdx (v,a,i)) ->
         let expected = a |> Array.copyAndInsertAt i 512
         let v' = v |> RRBVector.insert i 512
         RRBVectorProps.checkProperties v' (sprintf "Vector with insertion at %d" i)
         Expect.sequenceEqual (v' |> RRBVector.toSeq) (expected |> Array.toSeq) "insert did not insert the right value"
     )
-    ftestProp (1405780399, 296424018) "insert into random vectors" (fun (vec : RRBVector<int>) (idx : int) ->
+    testProp "insert into random vectors" (fun (vec : RRBVector<int>) (idx : int) ->
         let i = (abs idx) % (RRBVector.length vec + 1)
         let expected = vec |> RRBVector.toArray |> Array.copyAndInsertAt i 512
         let vec' = vec |> RRBVector.insert i 512
@@ -1192,43 +1192,43 @@ let fixedSpecTest (spec : RRBVectorFsCheckCommands.Cmd list) () =
     // If you want to uncomment the printfn statements here, first focus this test so it runs alone.
     let mutable vec = RRBVector.empty<int>
     for cmd in spec do
-        logger.debug (
-            eventX "Before {cmd}, vec was {vec}"
-            >> setField "cmd" (sprintf "%A" cmd)
-            >> setField "vec" (RRBVecGen.vecToTreeReprStr vec)
-        )
+        // logger.debug (
+        //     eventX "Before {cmd}, vec was {vec}"
+        //     >> setField "cmd" (sprintf "%A" cmd)
+        //     >> setField "vec" (RRBVecGen.vecToTreeReprStr vec)
+        // )
         vec <- cmd.RunActual vec
-        logger.debug (
-            eventX "After  {cmd}, vec was {vec}"
-            >> setField "cmd" (sprintf "%A" cmd)
-            >> setField "vec" (RRBVecGen.vecToTreeReprStr vec)
-        )
+        // logger.debug (
+        //     eventX "After  {cmd}, vec was {vec}"
+        //     >> setField "cmd" (sprintf "%A" cmd)
+        //     >> setField "vec" (RRBVecGen.vecToTreeReprStr vec)
+        // )
         RRBVectorProps.checkPropertiesSimple vec
 
 let experimentalTests =
   testList "Experimental tests" [
     testProp "append and pop" <| fun (vec : RRBVector<int>) ->
-        logger.debug (
-            eventX "Testing vector {vec} = \"{repr}\""
-            >> setField "vec" (sprintf "%A" vec)
-            >> setField "repr" (RRBVecGen.vecToTreeReprStr vec)
-        )
+        // logger.debug (
+        //     eventX "Testing vector {vec} = \"{repr}\""
+        //     >> setField "vec" (sprintf "%A" vec)
+        //     >> setField "repr" (RRBVecGen.vecToTreeReprStr vec)
+        // )
         FsCheck.Experimental.StateMachine.toProperty (ExpectoTemplate.ExperimentalFsCheckCommands.VecCommands.machine vec)
   ]
 
 let operationTests =
   testList "Operational transform tests" [
     testProp "Extra-small lists from empty" (Command.toProperty RRBVectorFsCheckCommands.specExtraSmallFromEmpty)
-    ftestProp (1408541085, 296424018) "Small lists from empty" (Command.toProperty RRBVectorFsCheckCommands.specSmallFromEmpty)
-    ftestProp (1408541896, 296424018) "Medium lists from empty" (Command.toProperty RRBVectorFsCheckCommands.specMediumFromEmpty)
-    ftestProp (1411399939, 296424018) "Large lists from empty" (Command.toProperty RRBVectorFsCheckCommands.specLargeFromEmpty)
-    ftestProp (1413043680, 296424018) "Extra-large lists from empty" (Command.toProperty RRBVectorFsCheckCommands.specExtraLargeFromEmpty)
+    testProp "Small lists from empty" (Command.toProperty RRBVectorFsCheckCommands.specSmallFromEmpty)
+    testProp "Medium lists from empty" (Command.toProperty RRBVectorFsCheckCommands.specMediumFromEmpty)
+    testProp "Large lists from empty" (Command.toProperty RRBVectorFsCheckCommands.specLargeFromEmpty)
+    testProp "Extra-large lists from empty" (Command.toProperty RRBVectorFsCheckCommands.specExtraLargeFromEmpty)
 
-    ftestProp (1408541081, 296424018) "Extra-small lists from almost-full sapling" (Command.toProperty RRBVectorFsCheckCommands.specExtraSmallFromAlmostFullSapling)
-    ftestProp (1408541085, 296424018) "Small lists from almost-full sapling" (Command.toProperty RRBVectorFsCheckCommands.specSmallFromAlmostFullSapling)
-    ftestProp (1408541896, 296424018) "Medium lists from almost-full sapling" (Command.toProperty RRBVectorFsCheckCommands.specMediumFromAlmostFullSapling)
-    ftestProp (1411399939, 296424018) "Large lists from almost-full sapling" (Command.toProperty RRBVectorFsCheckCommands.specLargeFromAlmostFullSapling)
-    ftestProp (1413043680, 296424018) "Extra-large lists from almost-full sapling" (Command.toProperty RRBVectorFsCheckCommands.specExtraLargeFromAlmostFullSapling)
+    testProp "Extra-small lists from almost-full sapling" (Command.toProperty RRBVectorFsCheckCommands.specExtraSmallFromAlmostFullSapling)
+    testProp "Small lists from almost-full sapling" (Command.toProperty RRBVectorFsCheckCommands.specSmallFromAlmostFullSapling)
+    testProp "Medium lists from almost-full sapling" (Command.toProperty RRBVectorFsCheckCommands.specMediumFromAlmostFullSapling)
+    testProp "Large lists from almost-full sapling" (Command.toProperty RRBVectorFsCheckCommands.specLargeFromAlmostFullSapling)
+    testProp "Extra-large lists from almost-full sapling" (Command.toProperty RRBVectorFsCheckCommands.specExtraLargeFromAlmostFullSapling)
 
     testCase "Inserting into a full tail with empty root will not cause an invariant break" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "TM"
@@ -1268,7 +1268,7 @@ let operationTests =
     testCase "shorten property 1" <| fixedSpecTest RRBVectorFsCheckCommands.shortenSpec1
     testCase "shorten property 2" <| fixedSpecTest RRBVectorFsCheckCommands.shortenSpec2
     testCase "shorten property 3" <| fixedSpecTest RRBVectorFsCheckCommands.shortenSpec3
-    ftestCase "shorten property 4" <| fixedSpecTest RRBVectorFsCheckCommands.shortenSpec4
+    testCase "shorten property 4" <| fixedSpecTest RRBVectorFsCheckCommands.shortenSpec4
 
     testCase "inserting into first leaf can still maintain last-leaf-is-full invariant" <| fun _ ->
         let initialVec = RRBVecGen.treeReprStrToVec "M*M T1"
@@ -1361,7 +1361,7 @@ let apiTests =
     //     let actual = v |> RRBVector.windowed i |> Seq.map RRBVector.toArray |> Seq.toArray
     //     Expect.equal actual expected "RRBVector.windowed did not produce the right results"
 
-    ftestProp (1434539132, 296424018) "slice notation" <| fun (VecPlusArrAndIdx (v,a,idx)) (PositiveInt endIdx) ->
+    testProp "slice notation" <| fun (VecPlusArrAndIdx (v,a,idx)) (PositiveInt endIdx) ->
         let endIdx = if v.Length = 0 then 0 else endIdx % v.Length
         let idx, endIdx = if idx <= endIdx then idx,endIdx else endIdx,idx
         RRBVectorProps.checkProperties v "Original vector"
@@ -1471,11 +1471,29 @@ let nodeVecGenerationTests =
         let actual = RRBHelpers.buildTree arr
         Expect.sequenceEqual (RRBVector.toSeq actual) expected "Tree did not get built properly from array"
 
-    ftestProp (1419904956, 296424018) "Tree from seq" <| fun (arr:int[]) ->
+    testProp "Tree from seq" <| fun (arr:int[]) ->
         let expected = arr
         let s = arr |> Seq.ofArray
         let actual = s |> RRBHelpers.buildTreeOfSeqWithKnownSize arr.Length
         Expect.sequenceEqual (RRBVector.toSeq actual) expected "Tree did not get built properly from array"
+  ]
+
+let longRunningTests =
+  testList "Long-running tests, skipped by default" [
+    // joining two unrelated vectors is equivalent to list-appending their list equivalents passed in 00:02:44.0550000
+    // joining two unrelated vectors is equivalent to array-appending their array equivalents passed in 00:03:42.0410000
+    // joining two unrelated vectors is equivalent to seq-appending their seq equivalents passed in 00:04:09.4570000
+    // split+join recreates same vector passed in 00:05:44.0870000
+    // split+reverse+join recreates reverse vector passed in 00:07:54.1070000
+    // big join, test 1 passed in 00:03:27.6860000
+    // big join, test 2 passed in 00:00:40.3750000
+    // big join, test 3 passed in 00:00:35.1910000
+    // split + remove idx 0 of left + join = remove idx 0 of entire passed in 00:02:39.1100000
+    // split + pop right + join = pop entire passed in 00:03:57.7930000
+    // yet another join that could break the "last leaf is full if parent is full" invariant passed in 00:00:36.6560000
+    // starting with 2 vectors, pop right + join = pop entire passed in 00:04:16.8760000
+    // a few joins that could break the "leaf nodes must only be at 0 shift" invariant passed in 00:00:58.0750000
+    // starting with 2 vectors, remove idx 0 of left + join = remove idx 0 of entire passed in 00:03:26.0550000
   ]
 
 let isolatedTest =

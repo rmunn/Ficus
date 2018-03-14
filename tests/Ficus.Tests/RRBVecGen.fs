@@ -164,62 +164,24 @@ let genSpecificTree g treeRepr =
 let rec genRRBNode (g : Gen<'a>) level childCount = gen {
     let! slotCount = genSlotCount childCount
     let! childSizes = distribute slotCount childCount
-    logger.verbose(
-        eventX "genRRBNode called for level {level} with childCount {childCount}. Calculated slotCount {slotCount} and childSizes {childSizes}"
-        >> setField "level" level
-        >> setField "childCount" childCount
-        >> setField "slotCount" slotCount
-        >> setField "childSizes" (sprintf "%A" childSizes)
-    )
     let childrenGenerators =
         if level <= 1 then
             childSizes |> Array.map (fun n -> g |> Gen.arrayOfLength n |> Gen.map box)
         else
             childSizes |> Array.map (genRRBNode g (level - 1) >> Gen.map box)
     let! children = Gen.sequence childrenGenerators
-    logger.verbose(
-        eventX "genRRBNode called for level {level} with childCount {childCount}. Calculated slotCount {slotCount} and children:\n{children}"
-        >> setField "level" level
-        >> setField "childCount" childCount
-        >> setField "slotCount" slotCount
-        >> setField "children" (sprintf "%A" children)
-    )
     let node = children |> Array.ofList |> mkNode<'a> level
-    logger.verbose (
-        eventX "genRRBNode at level {level} with childCount {childCount} generated node:\n{node}"
-        >> setField "level" level
-        >> setField "childCount" childCount
-        >> setField "node" (sprintf "%A" node)
-    )
     return node
 }
 
 let rec genFullNode (g : Gen<'a>) level childCount = gen {
     let childSizes = Array.create childCount Literals.blockSize
-    logger.verbose(
-        eventX "genFullNode called for level {level} with childCount {childCount}. Calculated childSizes {childSizes}"
-        >> setField "level" level
-        >> setField "childCount" childCount
-        >> setField "childSizes" (sprintf "%A" childSizes)
-    )
     let children =
         if level <= 1 then
             childSizes |> Array.map (fun n -> g |> Gen.arrayOfLength n |> Gen.map box)
         else
             childSizes |> Array.map (genFullNode g (level - 1) >> Gen.map box)
-    logger.verbose(
-        eventX "genFullNode called for level {level} with childCount {childCount}. Calculated children:\n{children}"
-        >> setField "level" level
-        >> setField "childCount" childCount
-        >> setField "children" (sprintf "%A" children)
-    )
     let! node = children |> Gen.sequence |> Gen.map (Array.ofList >> mkNode<'a> level)
-    logger.verbose (
-        eventX "genFullNode at level {level} with childCount {childCount} generated node:\n{node}"
-        >> setField "level" level
-        >> setField "childCount" childCount
-        >> setField "node" (sprintf "%A" node)
-    )
     return node
 }
 
@@ -256,31 +218,13 @@ let genVec<'a> level childCount =
     gen {
         let g = Arb.generate<'a>
         let! root = genNode g level childCount
-        logger.verbose (
-            eventX "genVec called at level {level} with childCount {childCount} generated root:\n{root}"
-            >> setField "level" level
-            >> setField "childCount" childCount
-            >> setField "root" (sprintf "%A" root)
-        )
         let! root' = root |> fleshOutRightmostLeafIfNecessary g level
-        logger.verbose (
-            eventX "And then root':\n{root}"
-            >> setField "root" (sprintf "%A" root')
-        )
         let! tailSize = Gen.choose(1,Literals.blockSize)
         let! tail = Gen.arrayOfLength tailSize g
-        logger.verbose (
-            eventX "And then tail:\n{tail}"
-            >> setField "tail" (sprintf "%A" tail)
-        )
         let shift = level * Literals.blockSizeShift
         let rootSize = treeSize<'a> shift root'
         let totalSize = rootSize + Array.length tail
         let vec = RRBTree<'a>(totalSize, shift, root', tail, rootSize) :> RRBVector<'a>
-        logger.verbose (
-            eventX "And then vec:\n{vec}"
-            >> setField "vec" (sprintf "%A" vec)
-        )
         return vec
     }
 
