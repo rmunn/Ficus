@@ -15,6 +15,17 @@
             "cwd": "${workspaceRoot}"
         },
         {
+            "name": "Build and Launch",
+            "preLaunchTask": "build.sh DotnetBuild",
+            "type": "mono",
+            "request": "launch",
+            "program": "${workspaceRoot}/tests/Ficus.Tests/bin/Release/net461/Ficus.Tests.exe",
+            "args": [
+                "--debug-vscode"
+            ],
+            "cwd": "${workspaceRoot}"
+        },
+        {
             "name": "Attach",
             "type": "mono",
             "request": "attach",
