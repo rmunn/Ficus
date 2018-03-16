@@ -163,6 +163,22 @@ let debugBigTest4 () =
             Expect.equal tree.TailOffset (Literals.blockSize) "Wrong tail offset"
             Expect.equal tree.Tail.Length (Literals.blockSize - 1) "Wrong tail length"
 
+let debugSmallTest1 () =
+    let vecRepr = "[30 M M M 26 28 M 30 29 M M M M M M 25 M 27 M 30 M M-1 25 M 30 M 26 30 M 30 M 7] [M-1] T1"
+    let vec = vecRepr |> RRBVecGen.treeReprStrToVec
+    let i = 32
+    let vL, vR = RRBVectorExpectoTest.doSplitTest vec i
+    let vL', vR' =
+        if vL.Length > 0 then
+            RRBVector.remove 0 vL, vR
+        else
+            // Can't remove from an empty vector -- but in this case, we know the right vector is non-empty
+            vL, RRBVector.remove 0 vR
+    let joined = RRBVector.append vL' vR'
+    RRBVectorProps.checkProperties joined "Joined vector"
+    if joined = (RRBVector.remove 0 vec) then printfn "Good" else printfn "Split + remove idx 0 of left + joined vectors did not equal original vector with its idx 0 removed"
+
+
 // TODO: All those debugBigTest functions need to be turned into specific Expecto tests
 
 [<EntryPoint>]
@@ -175,7 +191,7 @@ let main argv =
         let githash  = AssemblyInfo.getGitHash assembly
         printfn "%s - %A - %s - %s" name.Name version releaseDate githash
     if argv |> Array.contains "--debug-vscode" then
-        debugBigTest4()
+        debugSmallTest1()
         0
     elif argv |> Array.contains "--stress" then
         printfn "Stress testing requested"

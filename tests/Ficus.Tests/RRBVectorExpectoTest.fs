@@ -1396,7 +1396,7 @@ let longRunningTests =
         doJoinTest v1 v2
 
     // split + remove idx 0 of left + join = remove idx 0 of entire passed in 00:02:39.1100000
-    testProp "split + remove idx 0 of left + join = remove idx 0 of entire" <| fun (vec : RRBVector<int>) (i: int) ->   // Keep this one focused
+    ftestProp (362587533, 296425095) "split + remove idx 0 of left + join = remove idx 0 of entire" <| fun (vec : RRBVector<int>) (i: int) ->   // Keep this one focused
         if vec.Length > 0 then
             let i = (abs i) % (RRBVector.length vec)
             let vL, vR = doSplitTest vec i
@@ -1497,7 +1497,7 @@ let tests =
     mergeTests
     apiTests
 
-    // longRunningTests
+    longRunningTests
 
     isolatedTest
 
