@@ -1232,7 +1232,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
                 else
                     let lastTwig = RRBHelpers.getRightmostTwig shift root
                     let tLen = tail.Length
-                    if (lastTwig :? RRBNode && lastTwig.Array.Length < Literals.blockSize) || tLen = Literals.blockSize then
+                    if b.Root.Length = Literals.blockSize && ((lastTwig :? RRBNode && lastTwig.Array.Length < Literals.blockSize) || tLen = Literals.blockSize) then
                         // Can safely push tail without messing up the invariant
                         let tempRoot, tempShift = root |> RRBHelpers.pushTailDown shift tail
                         let newRoot, newShift = tempRoot |> RRBHelpers.appendLeafWithGrowth tempShift b.Root

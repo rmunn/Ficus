@@ -797,6 +797,21 @@ let splitJoinTests =
         RRBVectorProps.checkProperties vec' (sprintf "Joined vector from reprL %A and reprR %A" reprL reprR)
         Expect.vecEqual vec' vec "Vector halves after split, when put back together, did not equal original vector"
 
+    ftestCase "Manual test for one scenario that failed the \"split + remove idx 0 of left + join = remove idx 0 of entire\" property" <| fun _ ->
+        let vecRepr = "5 M*M-1 T7"
+        let vec = RRBVecGen.treeReprStrToVec vecRepr
+        let i = 32
+        let vL, vR = doSplitTest vec i
+        let vL', vR' =
+            if vL.Length > 0 then
+                RRBVector.remove 0 vL, vR
+            else
+                // Can't remove from an empty vector -- but in this case, we know the right vector is non-empty
+                vL, RRBVector.remove 0 vR
+        let joined = RRBVector.append vL' vR'
+        RRBVectorProps.checkProperties joined "Joined vector"
+        Expect.vecEqual joined (RRBVector.remove 0 vec) "Split + remove idx 0 of left + joined vectors did not equal original vector with its idx 0 removed"
+
     // TODO: Make custom test that joins "T0" (emptyVec) with "M T2"
     testCase "split+reverse+join on a sapling" <| fun _ ->
         let vec = RRBVector.ofSeq {1..40}
@@ -1396,7 +1411,7 @@ let longRunningTests =
         doJoinTest v1 v2
 
     // split + remove idx 0 of left + join = remove idx 0 of entire passed in 00:02:39.1100000
-    ftestProp (362587533, 296425095) "split + remove idx 0 of left + join = remove idx 0 of entire" <| fun (vec : RRBVector<int>) (i: int) ->   // Keep this one focused
+    testProp "split + remove idx 0 of left + join = remove idx 0 of entire" <| fun (vec : RRBVector<int>) (i: int) ->
         if vec.Length > 0 then
             let i = (abs i) % (RRBVector.length vec)
             let vL, vR = doSplitTest vec i

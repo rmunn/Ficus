@@ -163,11 +163,36 @@ let debugBigTest4 () =
             Expect.equal tree.TailOffset (Literals.blockSize) "Wrong tail offset"
             Expect.equal tree.Tail.Length (Literals.blockSize - 1) "Wrong tail length"
 
+let doJoinTest v1 v2 =
+    testProperties v1 "v1 in join test"
+    testProperties v2 "v2 in join test"
+    let s1 = RRBVector.toSeq v1
+    let s2 = RRBVector.toSeq v2
+    let joined = RRBVector.append v1 v2
+    let joined' = RRBVector.append v2 v1
+    testProperties joined "Joined vector"
+    testProperties joined' "Opposite-joined vector"
+    Expect.sequenceEqual (RRBVector.toSeq joined) (Seq.append s1 s2) "Joined vectors did not sequenceEqual equivalent appended seqs"
+    Expect.sequenceEqual (RRBVector.toSeq joined') (Seq.append s2 s1) "Opposite-joined vectors did not sequenceEqual equivalent appended seqs"
+
+let doSplitTest vec i =
+    let repr = RRBVecGen.vecToTreeReprStr vec
+    testProperties vec "Original vector"
+    let vL, vR = vec |> RRBVector.split i
+    testProperties vL (sprintf "Original vector was %A, split at %d\nRepr: %s\nLeft half of split" vec i repr)
+    testProperties vR (sprintf "Original vector was %A, split at %d\nRepr: %s\nRight half of split" vec i repr)
+    doJoinTest vL vR
+    vL, vR
+
 let debugSmallTest1 () =
-    let vecRepr = "[30 M M M 26 28 M 30 29 M M M M M M 25 M 27 M 30 M M-1 25 M 30 M 26 30 M 30 M 7] [M-1] T1"
+    // let vecRepr = "[30 M M M 26 28 M 30 29 M M M M M M 25 M 27 M 30 M M-1 25 M 30 M 26 30 M 30 M 7] [M-1] T1"
+    // Try this instead:
+    // let vecRepr = "M-1 M-1 M M M 26 28 M 30 29 M M M M M M 25 M 27 M 30 M M-1 25 M 30 M 26 30 M 30 M T7"
+    let vecRepr = "5 M*M-1 T7"
+    // The other one was the result *after* the bad split/append
     let vec = vecRepr |> RRBVecGen.treeReprStrToVec
     let i = 32
-    let vL, vR = RRBVectorExpectoTest.doSplitTest vec i
+    let vL, vR = doSplitTest vec i
     let vL', vR' =
         if vL.Length > 0 then
             RRBVector.remove 0 vL, vR
@@ -175,7 +200,7 @@ let debugSmallTest1 () =
             // Can't remove from an empty vector -- but in this case, we know the right vector is non-empty
             vL, RRBVector.remove 0 vR
     let joined = RRBVector.append vL' vR'
-    RRBVectorProps.checkProperties joined "Joined vector"
+    testProperties joined "Joined vector"
     if joined = (RRBVector.remove 0 vec) then printfn "Good" else printfn "Split + remove idx 0 of left + joined vectors did not equal original vector with its idx 0 removed"
 
 
