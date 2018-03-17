@@ -255,9 +255,9 @@ let properties = [
             match node with
             | :? RRBNode as n ->
                 if shift <= Literals.blockSizeShift then
-                    not (RRBHelpers.isSizeTableFullAtShift shift n.SizeTable)  // No need to descend further as there are no RRBNodes at the leaf level
+                    not (RRBMath.isSizeTableFullAtShift shift n.SizeTable)  // No need to descend further as there are no RRBNodes at the leaf level
                 else
-                    not (RRBHelpers.isSizeTableFullAtShift shift n.SizeTable) && n.Array |> Array.forall (fun n -> n :?> Node |> check (down shift))
+                    not (RRBMath.isSizeTableFullAtShift shift n.SizeTable) && n.Array |> Array.forall (fun n -> n :?> Node |> check (down shift))
             | _ ->
                 if shift <= Literals.blockSizeShift then
                     true  // No need to descend further as there are no RRBNodes at the leaf level

@@ -797,7 +797,7 @@ let splitJoinTests =
         RRBVectorProps.checkProperties vec' (sprintf "Joined vector from reprL %A and reprR %A" reprL reprR)
         Expect.vecEqual vec' vec "Vector halves after split, when put back together, did not equal original vector"
 
-    ftestCase "Manual test for one scenario that failed the \"split + remove idx 0 of left + join = remove idx 0 of entire\" property" <| fun _ ->
+    testCase "Manual test for one scenario that failed the \"split + remove idx 0 of left + join = remove idx 0 of entire\" property" <| fun _ ->
         let vecRepr = "5 M*M-1 T7"
         let vec = RRBVecGen.treeReprStrToVec vecRepr
         let i = 32

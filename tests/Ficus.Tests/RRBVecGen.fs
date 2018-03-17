@@ -14,7 +14,7 @@ let logger = Log.create "Expecto"
 let mkNode<'T> level items =
     if level = 0
         then failwith "Don't call RRBVecGen.mkNode at level 0" // RRBHelpers.mkNode items // Leaves never need to be RRBNodes
-        else RRBHelpers.mkRRBNode<'T> (level * Literals.blockSizeShift) items
+        else NodeCreation.mkRRBNode<'T> (ref null) (level * Literals.blockSizeShift) items
 let mkLeaf items = mkNode 0 items  // Nope. Do something else now. TODO: Determine what.
 let minSlots childCount = (childCount - Literals.eMaxPlusOne) * Literals.blockSize + 1 |> max childCount
 let maxSlots childCount = childCount * Literals.blockSize
@@ -222,7 +222,7 @@ let genVec<'a> level childCount =
         let! tailSize = Gen.choose(1,Literals.blockSize)
         let! tail = Gen.arrayOfLength tailSize g
         let shift = level * Literals.blockSizeShift
-        let rootSize = treeSize<'a> shift root'
+        let rootSize = NodeCreation.treeSize<'a> shift root'
         let totalSize = rootSize + Array.length tail
         let vec = RRBTree<'a>(totalSize, shift, root', tail, rootSize) :> RRBVector<'a>
         return vec

@@ -20,25 +20,6 @@ module Literals =
     let [<Literal>] internal blockIndexMask = 31  // 2 ** blockSizeShift - 1. Use with &&& to get the current level's index
     let [<Literal>] internal blockSizeMin = 31  // blockSize - (radixSearchErrorMax / 2).
 
-[<StructuredFormatDisplay("{StringRepr}")>]
-type Node(thread, array : obj[]) =
-    let thread = thread
-    new() = Node(ref null,Array.create Literals.blockSize null)
-    with
-        static member InCurrentThread() = Node(ref Thread.CurrentThread, Array.zeroCreate Literals.blockSize)
-        member this.Array = array
-        member this.Thread = thread
-        member this.SetThread t = thread := t
-        member this.StringRepr = if array.Length = 0 then sprintf "EmptyNode" else sprintf "FullNode(%A)" array
-
-[<StructuredFormatDisplay("RRBNode({StringRepr})")>]
-type RRBNode(thread, array, sizeTable : int[]) =
-    inherit Node(thread, array)
-    with
-        static member InCurrentThread() = RRBNode(ref Thread.CurrentThread, Array.create Literals.blockSize null, Array.zeroCreate Literals.blockSize)
-        member this.SizeTable = sizeTable
-        member this.StringRepr = sprintf "sizeTable=%A,children=%A" sizeTable array
-
 // Concepts:
 //
 // "Shift" - The height of any given node, multiplied by Literals.blockSizeShift.
@@ -57,10 +38,164 @@ type RRBNode(thread, array, sizeTable : int[]) =
 // (Successively higher levels of the tree could called, in order after twig: branch, limb, trunk...
 // But we don't actually use those terms in the code, just "twig" and "leaf".)
 
-module RRBHelpers =
-    let mkNode array = Node(ref null, array)
+module RRBMath =
+    let inline radixIndex shift treeIdx =
+        (treeIdx >>> shift) &&& Literals.blockIndexMask
 
-    let isSameObj = LanguagePrimitives.PhysicalEquality
+    // Syntactic sugar for operations we'll use *all the time*: moving up and down the tree levels
+    let inline down shift = shift - Literals.blockSizeShift
+    let inline up shift = shift + Literals.blockSizeShift
+
+    let isSizeTableFullAtShift shift (sizeTbl : int[]) =
+        let len = Array.length sizeTbl
+        if len <= 1 then true else
+        let checkIdx = len - 2
+        sizeTbl.[checkIdx] = ((checkIdx + 1) <<< shift)
+
+    /// Used in replacing leaf nodes
+    let copyAndAddNToSizeTable incIdx n oldST =
+        let newST = Array.copy oldST
+        for i = incIdx to oldST.Length - 1 do
+            newST.[i] <- newST.[i] + n
+        newST
+
+    let inline copyAndSubtractNFromSizeTable decIdx n oldST =
+        copyAndAddNToSizeTable decIdx (-n) oldST
+
+module NodeCreation =
+    open RRBMath
+
+    // Unfortunately, we can't move these functions into the Node and RRBNode classes due to https://stackoverflow.com/q/41746333
+    let mkNode (thread : Thread ref) entries = Node(thread, entries)
+
+    let mkRRBNodeWithSizeTable thread shift entries sizeTable =
+        if isSizeTableFullAtShift shift sizeTable
+        then Node(thread, entries)
+        else RRBNode(thread, entries, sizeTable) :> Node
+
+    let treeSize<'T> shift (node : obj) : int =
+        if shift <= 0 then
+            (node :?> 'T[]).Length
+        else
+            (node :?> Node).TreeSize<'T> shift
+
+    let createSizeTable<'T> shift (array:obj[]) =
+        let sizeTable = Array.zeroCreate array.Length
+        let mutable total = 0
+        for i = 0 to array.Length - 1 do
+            total <- total + treeSize<'T> (down shift) (array.[i])
+            sizeTable.[i] <- total
+        sizeTable
+
+    let mkRRBNode<'T> thread shift entries = createSizeTable<'T> shift entries |> mkRRBNodeWithSizeTable thread shift entries
+
+module ConcurrentCounter =
+    let internal counter = ref 0
+
+    let getNextID() =
+        let result = Interlocked.Increment counter
+        // If it ever wraps around to 0 again, we want to skip 0
+        if result <> 0 then result else Interlocked.Increment counter
+
+[<StructuredFormatDisplay("{StringRepr}")>]
+type Node(thread, array : obj[]) =
+    let thread = thread
+    new() = Node(ref null,Array.create Literals.blockSize null)
+    static member InCurrentThread() = Node(ref Thread.CurrentThread, Array.zeroCreate Literals.blockSize)
+    member this.Array = array
+    member this.Thread = thread
+    member this.SetThread t = thread := t
+    member this.StringRepr = if array.Length = 0 then sprintf "EmptyNode" else sprintf "FullNode(%A)" array
+
+    abstract member IndexesAndChild : int -> int -> int * obj * int
+    default this.IndexesAndChild shift treeIdx =
+        let localIdx = RRBMath.radixIndex shift treeIdx
+        let child = array.[localIdx]
+        let antimask = ~~~(Literals.blockIndexMask <<< shift)
+        let nextTreeIdx = treeIdx &&& antimask
+        localIdx, child, nextTreeIdx
+
+    abstract member UpdatedSameSize : int -> obj -> Node
+    default this.UpdatedSameSize localIdx newChild = Node(thread, array |> Array.copyAndSet localIdx newChild)
+
+    member this.UpdatedTree shift treeIdx (newItem : 'T) =
+        // TODO: Perhaps this belongs on the tree class instead of the node class?
+        if shift <= Literals.blockSizeShift then
+            let localIdx, child, nextIdx = this.IndexesAndChild shift treeIdx
+            let newLeaf = (child :?> 'T[]) |> Array.copyAndSet nextIdx newItem |> box
+            this.UpdatedSameSize localIdx newLeaf
+        else
+            let localIdx, child, nextIdx = this.IndexesAndChild shift treeIdx
+            let newNode = (child :?> Node).UpdatedTree (RRBMath.down shift) nextIdx newItem
+            this.UpdatedSameSize localIdx newNode
+
+    abstract member UpdatedNewSize<'T> : int -> int -> obj -> int -> Node
+    default this.UpdatedNewSize<'T> shift localIdx newChild childSize =
+        // Note: childSize should be *tree* size, not *node* size. In other words, something appropriate for the size table at this level.
+        if childSize = (1 <<< shift) then
+            // This is still a full node
+            Node(thread, array |> Array.copyAndSet localIdx newChild)
+        else
+            // This has become an RRB node, so recalculate the size table via mkRRBNode
+            array |> Array.copyAndSet localIdx newChild |> NodeCreation.mkRRBNode<'T> thread shift
+
+    member this.NodeSize = array.Length
+    abstract member TreeSize<'T> : int -> int
+    default this.TreeSize<'T> shift =
+        // A full node is allowed to have an incomplete rightmost entry, but all but its rightmost entry must be complete.
+        // Therefore, we can shortcut this calculation for most of the nodes, but we do need to calculate the rightmost node.
+        if shift <= Literals.blockSizeShift then
+            ((array.Length - 1) <<< shift) + ((Array.last array) :?> 'T[]).Length
+        else
+            ((array.Length - 1) <<< shift) + ((Array.last array) :?> Node).TreeSize<'T> (RRBMath.down shift)
+
+    abstract member TwigSlotCount<'T> : unit -> int
+    default this.TwigSlotCount<'T>() =
+        if array.Length = 0 then
+            failwith "Deliberate failure: TwigSlotCount should never be called on an empty Node instance"
+        else
+            ((array.Length - 1) <<< Literals.blockSizeShift) + ((Array.last array) :?> 'T[]).Length
+
+[<StructuredFormatDisplay("RRBNode({StringRepr})")>]
+type RRBNode(thread, array, sizeTable : int[]) =
+    inherit Node(thread, array)
+    static member InCurrentThread() = RRBNode(ref Thread.CurrentThread, Array.create Literals.blockSize null, Array.zeroCreate Literals.blockSize)
+    member this.SizeTable = sizeTable
+    member this.StringRepr = sprintf "sizeTable=%A,children=%A" sizeTable array
+    override this.IndexesAndChild shift treeIdx =
+        let mutable localIdx = RRBMath.radixIndex shift treeIdx
+        while sizeTable.[localIdx] <= treeIdx do
+            localIdx <- localIdx + 1
+        let child = array.[localIdx]
+        let nextTreeIdx = if localIdx = 0 then treeIdx else treeIdx - sizeTable.[localIdx - 1]
+        localIdx, child, nextTreeIdx
+
+    static member MakeRRBNode thread shift entries sizeTable =
+        if RRBMath.isSizeTableFullAtShift shift sizeTable
+        then Node(thread, entries)
+        else RRBNode(thread, entries, sizeTable) :> Node
+
+    override this.UpdatedSameSize localIdx newChild =
+        RRBNode(thread, array |> Array.copyAndSet localIdx newChild, sizeTable) :> Node
+
+    override this.TreeSize shift = sizeTable |> Array.last
+
+    override this.TwigSlotCount<'T>() =
+        if array.Length = 0 then
+            failwith "Deliberate failure: TwigSlotCount should never be called on an empty RRBNode instance"
+        else
+            Array.last sizeTable
+
+    override this.UpdatedNewSize shift localIdx newChild childSize =
+        let oldSize = if localIdx = 0 then sizeTable.[0] else sizeTable.[localIdx] - sizeTable.[localIdx - 1]
+        let sizeDiff = childSize - oldSize
+        let array' = array |> Array.copyAndSet localIdx newChild
+        let sizeTable' = if sizeDiff = 0 then sizeTable else sizeTable |> RRBMath.copyAndAddNToSizeTable localIdx sizeDiff
+        RRBNode.MakeRRBNode thread shift array' sizeTable'
+
+module RRBHelpers =
+    open RRBMath
+    open NodeCreation
 
     let emptyNode<'T> = Node(ref null, [||])
     let inline isEmpty (node : Node) = node.Array.Length = 0
@@ -74,26 +209,8 @@ module RRBHelpers =
             i <- i + 1
         i
 
-    let radixIndexOrSearch shift treeIdx (node:Node) =
-        match node with
-        | :? RRBNode as rrbNode ->
-            let localIdx = radixSearch shift treeIdx rrbNode.SizeTable
-            let child = rrbNode.Array.[localIdx]
-            let nextTreeIdx = if localIdx = 0 then treeIdx else treeIdx - rrbNode.SizeTable.[localIdx - 1]
-            localIdx, child, nextTreeIdx
-        | _ ->
-            let localIdx = radixIndex shift treeIdx
-            let child = node.Array.[localIdx]
-            let antimask = ~~~(Literals.blockIndexMask <<< shift)
-            let nextTreeIdx = treeIdx &&& antimask
-            localIdx, child, nextTreeIdx
-
     let inline getChildNode localIdx (node:Node) = node.Array.[localIdx] :?> Node
     let inline getLastChildNode (node:Node) = node.Array |> Array.last :?> Node
-
-    // Syntactic sugar for operations we'll use *all the time*: moving up and down the tree levels
-    let inline down shift = shift - Literals.blockSizeShift
-    let inline up shift = shift + Literals.blockSizeShift
 
     let rec getLeftmostTwig shift (node:Node) =
         if shift <= Literals.blockSizeShift then node
@@ -104,69 +221,23 @@ module RRBHelpers =
         else node |> getLastChildNode |> getRightmostTwig (down shift)
 
     // Find the leaf containing index `idx`, and the local index of `idx` in that leaf
-    let rec getItemFromLeaf<'T> shift treeIdx node =
-        let _, child, nextLvlIdx = radixIndexOrSearch shift treeIdx node
+    let rec getItemFromLeaf<'T> shift treeIdx (node : Node) =
+        let _, child, nextLvlIdx = node.IndexesAndChild shift treeIdx
         if shift <= Literals.blockSizeShift then
             (child :?> 'T []).[nextLvlIdx]
         else
             getItemFromLeaf (down shift) nextLvlIdx (child :?> Node)
-
-    let rec replaceItemAt shift treeIdx (newItem : 'T) (node:Node) =
-        if shift <= Literals.blockSizeShift then
-            let localIdx, child, nextIdx = radixIndexOrSearch shift treeIdx node
-            let newLeaf = (child :?> 'T[]) |> Array.copyAndSet nextIdx newItem |> box
-            node.Array |> Array.copyAndSet localIdx newLeaf |> mkNode
-        else
-            let localIdx, child, nextIdx = radixIndexOrSearch shift treeIdx node
-            let newNode = replaceItemAt (down shift) nextIdx newItem (child :?> Node)
-            match node with
-            | :? RRBNode as rrbNode -> RRBNode(rrbNode.Thread, rrbNode.Array |> Array.copyAndSet localIdx (box newNode), rrbNode.SizeTable) :> Node
-            | fullNode -> Node(fullNode.Thread, fullNode.Array |> Array.copyAndSet localIdx (box newNode))
-
-    let rec treeSize<'T> shift (node : obj) : int =
-        if shift <= 0 then
-            (node :?> 'T[]).Length
-        else
-            match (node :?> Node) with
-            | :? RRBNode as n -> Array.last n.SizeTable
-            | n ->
-                // A full node is allowed to have an incomplete rightmost entry, but all but its rightmost entry must be complete.
-                // Therefore, we can shortcut this calculation for most of the nodes, but we do need to calculate the rightmost node.
-                if shift <= Literals.blockSizeShift then
-                    ((n.Array.Length - 1) <<< shift) + ((Array.last n.Array) :?> 'T[]).Length
-                else
-                    ((n.Array.Length - 1) <<< shift) + treeSize<'T> (down shift) (Array.last n.Array)
 
     // Handy shorthand
     let inline nodeSize (node:obj) = (node :?> Node).Array.Length
 
     // slotCount and twigSlotCount are used in the rebalance function (and therefore in insertion, concatenation, etc.)
     let inline slotCount nodes = nodes |> Array.sumBy nodeSize
-    // twigSlotCount is just a time-saving special case for nodes at the "twig" level (one level up from the leaves)
-    let twigSlotCount<'T> (node : Node) =
-        match node with
-        | _ when node |> isEmpty -> 0
-        | :? RRBNode as n -> (n.SizeTable |> Array.last)
-        | n -> ((n.Array.Length - 1) <<< Literals.blockSizeShift) + ((Array.last n.Array) :?> 'T[]).Length
-
-    let createSizeTable<'T> shift (array:obj[]) =
-        let sizeTbl = Array.zeroCreate array.Length
-        let mutable total = 0
-        for i = 0 to array.Length - 1 do
-            total <- total + treeSize<'T> (down shift) (array.[i])
-            sizeTbl.[i] <- total
-        sizeTbl
 
     // TODO: Write some functions for updating one entry in an RRBNode, taking advantage of
     // the size table's properties so we don't have to recalculate the entire size table.
     // That might speed things up a bit. BUT... wait until we've finished implementing everything
     // and have measured performance, because we should not prematurely optimize.
-
-    let isSizeTableFullAtShift shift sizeTbl =
-        let len = Array.length sizeTbl
-        if len <= 1 then true else
-        let checkIdx = len - 2
-        sizeTbl.[checkIdx] = ((checkIdx + 1) <<< shift)
 
     let mkRRBNodeWithSizeTable shift entries sizeTable =
         if isSizeTableFullAtShift shift sizeTable
@@ -184,16 +255,6 @@ module RRBHelpers =
             else let s' = (up s) in loop s' (mkRRBNode<'T> s' [|node|])
         loop Literals.blockSizeShift node  // TOCHECK: I'm pretty sure this is correct in the new "leaves are just 'T arrays" world, but let's double-check
 
-    /// Used in replacing leaf nodes
-    let copyAndAddNToSizeTable incIdx n oldST =
-        let newST = Array.copy oldST
-        for i = incIdx to oldST.Length - 1 do
-            newST.[i] <- newST.[i] + n
-        newST
-
-    let inline copyAndSubtractNFromSizeTable decIdx n oldST =
-        copyAndAddNToSizeTable decIdx (-n) oldST
-
     let inline fullNodeIsTrulyFull<'T> shift node =
         shift < Literals.blockSizeShift || node |> isEmpty || treeSize<'T> (down shift) (Array.last node.Array) >= (1 <<< (down shift))
 
@@ -210,7 +271,7 @@ module RRBHelpers =
             let childIsFull = childSize = (1 <<< shift)
             if childIsFull then
                 // This is still a full node
-                n.Array |> Array.copyAndSet localIdx newChild |> mkNode
+                n.Array |> Array.copyAndSet localIdx newChild |> NodeCreation.mkNode (ref null)
             else
                 // This has become an RRB node, so recalculate the size table via mkRRBNode
                 n.Array |> Array.copyAndSet localIdx newChild |> mkRRBNode<'T> shift
@@ -226,7 +287,7 @@ module RRBHelpers =
         | _ ->
             // FullNodes are allowed to have their last item be non-full, so we have to check that
             if node |> fullNodeIsTrulyFull<'T> shift then
-                node.Array |> Array.copyAndAppend newChild |> mkNode
+                node.Array |> Array.copyAndAppend newChild |> NodeCreation.mkNode (ref null)
             else
                 node.Array |> Array.copyAndAppend newChild |> mkRRBNode<'T> shift
 
@@ -238,7 +299,7 @@ module RRBHelpers =
             | Some result -> rootNode.Array |> Array.copyAndSetLast (box result) |> mkRRBNode<'T> shift |> Some  // Using replaceChildAt here turned out to be slower
             | None -> // Rightmost subtree was full
                 if nodeSize rootNode >= Literals.blockSize then None else
-                let newNode = newPath<'T> (down shift) (mkNode [|box newLeaf|])
+                let newNode = newPath<'T> (down shift) (NodeCreation.mkNode (ref null) [|box newLeaf|])
                 rootNode |> appendChild<'T> shift newNode leafLen |> Some
 
     let appendLeafWithGrowth shift (leaf:'T[]) (root:Node) =
@@ -247,14 +308,14 @@ module RRBHelpers =
         | Some root' -> root', shift
         | None ->
             let left = root
-            let right = newPath<'T> shift (mkNode [|box leaf|])   // TOCHECK: Make sure this is the right logic for the new "Leaves are just 'T arrays" world
+            let right = newPath<'T> shift (NodeCreation.mkNode (ref null) [|box leaf|])   // TOCHECK: Make sure this is the right logic for the new "Leaves are just 'T arrays" world
             let higherShift = up shift
             match root with
             | :? RRBNode as n ->
                 let oldSize = Array.last n.SizeTable
                 mkRRBNodeWithSizeTable higherShift [|left; right|] [|oldSize; oldSize + leafLen|], higherShift
             | n ->
-                mkNode [|left; right|], higherShift
+                NodeCreation.mkNode (ref null) [|left; right|], higherShift
 
     let pushTailDown shift (tail:'T[]) (root:Node) =
         appendLeafWithGrowth shift tail root
@@ -275,14 +336,14 @@ module RRBHelpers =
                 leaf, root'
             | n ->
                 let leaf = (Array.last n.Array) :?> 'T []
-                let root' = Array.copyAndPop n.Array |> mkNode // Popping the last entry from a FullNode can't ever turn it into an RRBNode.
+                let root' = Array.copyAndPop n.Array |> NodeCreation.mkNode (ref null) // Popping the last entry from a FullNode can't ever turn it into an RRBNode.
                 leaf, root'
         else
             // Children are nodes, not leaves -- so we're going to take the rightmost and dig down into it.
             // And if the recursive call returns an empty node, we'll strip the entry off our node.
             let mkNewRoot = match root with
                             | :? RRBNode -> mkRRBNode<'T> shift
-                            | _ -> mkNode
+                            | _ -> NodeCreation.mkNode (ref null)
             let leaf, child' = removeLastLeaf (down shift) (Array.last root.Array :?> Node)
             let root' =
                 if child' |> isEmpty
@@ -349,7 +410,7 @@ module RRBHelpers =
     //              "right slice" = slice the tree and keep the right half = "Skip"
 
     let rec leftSlice<'T> shift idx (node:Node) =
-        let localIdx, child, nextIdx = radixIndexOrSearch shift idx node
+        let localIdx, child, nextIdx = node.IndexesAndChild shift idx
         let lastIdx = if nextIdx = 0 then localIdx - 1 else localIdx
         let items = node.Array.[..lastIdx]
         let mutable newChildSize = 0
@@ -374,7 +435,7 @@ module RRBHelpers =
         | _ -> mkRRBNode<'T> shift items
 
     let rec rightSlice<'T> shift idx (node:Node) =
-        let localIdx, child, nextIdx = radixIndexOrSearch shift idx node
+        let localIdx, child, nextIdx = node.IndexesAndChild shift idx
         let items = node.Array.[localIdx..]
         let mutable newChildSize = 0
         if shift <= Literals.blockSizeShift then
@@ -492,7 +553,7 @@ module RRBHelpers =
         if nodeCount > 2 * Literals.blockSize
         then true // A+tail+B scenario, and we already know there'll be enough room for the tail's items in the merged+rebalanced node
         else
-            let slots = twigSlotCount<'T> a + Array.length tail + twigSlotCount<'T> b
+            let slots = a.TwigSlotCount<'T>() + Array.length tail + b.TwigSlotCount<'T>()
             rebalanceNeeded slots nodeCount
 
     let mergeArrays<'T> shift a b =
@@ -520,8 +581,8 @@ module RRBHelpers =
         // bTwig should be the  leftmost twig of vector B
         aTwig.Array.Length < Literals.blockSize
      || bTwig.Array.Length < Literals.blockSize
-     || (twigSlotCount<'T> aTwig) + tailLength <= Literals.blockSize * (Literals.blockSize - 1)
-     || (twigSlotCount<'T> bTwig) + tailLength <= Literals.blockSize * (Literals.blockSize - 1)
+     || (aTwig.TwigSlotCount<'T>()) + tailLength <= Literals.blockSize * (Literals.blockSize - 1)
+     || (bTwig.TwigSlotCount<'T>()) + tailLength <= Literals.blockSize * (Literals.blockSize - 1)
 
     let setOrRemoveFirstChild<'T> shift newChild parentArray =
         if newChild |> Array.isEmpty
@@ -595,7 +656,7 @@ module RRBHelpers =
                 SplitNode (node.Array |> Array.insertAndSplitEvenly localIdx itemToInsert)
 
     let rec insertIntoTree shift thisLvlIdx (item : 'T) (parentOpt : Node option) idxOfNodeInParent (node : Node) =
-        let localIdx, child, nextLvlIdx = radixIndexOrSearch shift thisLvlIdx node
+        let localIdx, child, nextLvlIdx = node.IndexesAndChild shift thisLvlIdx
         let arr = node.Array
 
         if shift > Literals.blockSizeShift then
@@ -628,7 +689,7 @@ module RRBHelpers =
                     SimpleInsertion (rebalance<'T> shift overstuffedEntries)
                 else
                     let arr' = arr |> Array.copyAndSet localIdx (mkBoxedRRBNodeOrLeaf<'T> (down shift) childItems')
-                    trySlideAndInsertNode (localIdx + 1) newSibling parentOpt idxOfNodeInParent (mkNode arr')
+                    trySlideAndInsertNode (localIdx + 1) newSibling parentOpt idxOfNodeInParent (NodeCreation.mkNode (ref null) arr')
 
         else
             // At twig level: children are leaves, and we return SlideResult<Node>
@@ -660,14 +721,14 @@ module RRBHelpers =
                     SimpleInsertion (rebalance<'T> shift overstuffedEntries)
                 else
                     let arr' = arr |> Array.copyAndSet localIdx child'
-                    trySlideAndInsertNode (localIdx + 1) newSibling parentOpt idxOfNodeInParent (mkNode arr')
+                    trySlideAndInsertNode (localIdx + 1) newSibling parentOpt idxOfNodeInParent (NodeCreation.mkNode (ref null) arr')
 
     // ========
     // DELETION
     // ========
 
-    let rec removeFromTree<'T> shift shouldCheckForRebalancing thisLvlIdx thisNode =
-        let childIdx, child, nextLvlIdx = radixIndexOrSearch shift thisLvlIdx thisNode
+    let rec removeFromTree<'T> shift shouldCheckForRebalancing thisLvlIdx (thisNode : Node) =
+        let childIdx, child, nextLvlIdx = thisNode.IndexesAndChild shift thisLvlIdx
         if shift <= Literals.blockSizeShift
         then
             let childArray = child :?> 'T []
@@ -678,7 +739,7 @@ module RRBHelpers =
                 Array.copyAndRemoveAt childIdx thisNode.Array
             elif resultLen < childArray.Length && shouldCheckForRebalancing then
                 // Child shrank: rebalance might be needed
-                let slotCount' = twigSlotCount<'T> thisNode - 1
+                let slotCount' = thisNode.TwigSlotCount<'T>() - 1
                 if rebalanceNeeded slotCount' (nodeSize thisNode) then
                     Array.copyAndSet childIdx (box result) thisNode.Array |> rebalance<'T> shift
                 else
@@ -711,16 +772,16 @@ module RRBHelpers =
     let rec buildRoot shift nodes =
         let inputLen = Array.length nodes
         if inputLen <= Literals.blockSize then
-            shift, nodes |> mkNode
+            shift, nodes |> NodeCreation.mkNode (ref null)
         else
             let nodeCount = inputLen >>> Literals.blockSizeShift
             let leftovers = inputLen - (nodeCount <<< Literals.blockSizeShift)
             let resultLen = if leftovers <= 0 then nodeCount else nodeCount + 1
             let result = Array.zeroCreate resultLen
             for i=0 to nodeCount - 1 do
-                result.[i] <- Array.sub nodes (i <<< Literals.blockSizeShift) Literals.blockSize |> mkNode |> box
+                result.[i] <- Array.sub nodes (i <<< Literals.blockSizeShift) Literals.blockSize |> NodeCreation.mkNode (ref null) |> box
             if leftovers > 0 then
-                result.[nodeCount] <- Array.sub nodes (nodeCount <<< Literals.blockSizeShift) leftovers |> mkNode |> box
+                result.[nodeCount] <- Array.sub nodes (nodeCount <<< Literals.blockSizeShift) leftovers |> NodeCreation.mkNode (ref null) |> box
             buildRoot (up shift) result
 
     let buildTree (items : 'T[]) =
@@ -743,12 +804,12 @@ module RRBHelpers =
 
     let rec buildRootOfSeqWithKnownSize (shift : int) (children : seq<obj>) (inputLen : int) =
         if inputLen <= Literals.blockSize then
-            shift, children |> seqToArrayKnownSize inputLen |> mkNode
+            shift, children |> seqToArrayKnownSize inputLen |> NodeCreation.mkNode (ref null)
         else
             let nodeCount = inputLen >>> Literals.blockSizeShift
             let leftovers = inputLen - (nodeCount <<< Literals.blockSizeShift)
             let resultLen = if leftovers <= 0 then nodeCount else nodeCount + 1
-            let result = children |> Seq.chunkBySize Literals.blockSize |> Seq.map (mkNode >> box)
+            let result = children |> Seq.chunkBySize Literals.blockSize |> Seq.map (NodeCreation.mkNode (ref null) >> box)
             buildRootOfSeqWithKnownSize (up shift) result resultLen
 
     let buildTreeOfSeqWithKnownSize itemsLen (items : seq<'T>) =
@@ -777,12 +838,13 @@ module RRBHelpers =
             if len <= Literals.blockSize then
                 RRBSapling<'T>(len + Literals.blockSize, 0, aRoot, items, Literals.blockSize) :> RRBVector<'T>
             elif len <= Literals.blockSize * 2 then
-                let newRoot = mkNode [|box aRoot; Array.sub items 0 Literals.blockSize |> box|]
+                let newRoot = NodeCreation.mkNode (ref null) [|box aRoot; Array.sub items 0 Literals.blockSize |> box|]
                 RRBTree<'T>(len + Literals.blockSize, Literals.blockSizeShift, newRoot, items.[Literals.blockSize..], Literals.blockSize * 2) :> RRBVector<'T>
             else
-                let newRoot = mkNode [|box aRoot
-                                       Array.sub items 0 Literals.blockSize |> box
-                                       Array.sub items Literals.blockSize Literals.blockSize |> box|]
+                let newRoot = NodeCreation.mkNode (ref null)
+                                                  [|box aRoot
+                                                    Array.sub items 0 Literals.blockSize |> box
+                                                    Array.sub items Literals.blockSize Literals.blockSize |> box|]
                 RRBTree<'T>(len + Literals.blockSize, Literals.blockSizeShift, newRoot, items.[Literals.blockSize*2..], Literals.blockSize * 3) :> RRBVector<'T>
         else
             // Can't reuse any nodes
@@ -794,13 +856,15 @@ module RRBHelpers =
                 let root', tail' = items |> Array.splitAt Literals.blockSize
                 RRBSapling<'T>(len, 0, root', tail', Literals.blockSize) :> RRBVector<'T>
             elif len <= Literals.blockSize * 3 then
-                let newRoot = mkNode [|box (Array.sub items 0 Literals.blockSize)
-                                       box (Array.sub items Literals.blockSize Literals.blockSize)|]
+                let newRoot = NodeCreation.mkNode (ref null)
+                                                  [|box (Array.sub items 0 Literals.blockSize)
+                                                    box (Array.sub items Literals.blockSize Literals.blockSize)|]
                 RRBTree<'T>(len, Literals.blockSizeShift, newRoot, items.[Literals.blockSize*2..], Literals.blockSize * 2) :> RRBVector<'T>
             else
-                let newRoot = mkNode [|box (Array.sub items 0 Literals.blockSize)
-                                       box (Array.sub items Literals.blockSize Literals.blockSize)
-                                       box (Array.sub items (Literals.blockSize * 2) Literals.blockSize)|]
+                let newRoot = NodeCreation.mkNode (ref null)
+                                                  [|box (Array.sub items 0 Literals.blockSize)
+                                                    box (Array.sub items Literals.blockSize Literals.blockSize)
+                                                    box (Array.sub items (Literals.blockSize * 2) Literals.blockSize)|]
                 RRBTree<'T>(len, Literals.blockSizeShift, newRoot, items.[Literals.blockSize*3..], Literals.blockSize * 3) :> RRBVector<'T>
 
     // ==============
@@ -996,7 +1060,7 @@ type RRBSapling<'T> internal (count, shift : int, root : 'T [], tail : 'T [], ta
                 | rootItemsL, rootItemsR ->
                     let rootL = RRBHelpers.mkRRBNode<'T> b.Shift rootItemsL
                     let rootR = RRBHelpers.mkRRBNode<'T> b.Shift rootItemsR
-                    let newShift = RRBHelpers.up b.Shift
+                    let newShift = RRBMath.up b.Shift
                     let newRoot = RRBHelpers.mkRRBNode<'T> newShift [|box rootL; box rootR|]
                     RRBTree<'T>(count + b.Length, newShift, newRoot, b.Tail, count + b.TailOffset).AdjustTree() // :> RRBVector<'T>
 
@@ -1024,7 +1088,7 @@ type RRBSapling<'T> internal (count, shift : int, root : 'T [], tail : 'T [], ta
                 let a = newItems.[..Literals.blockSize-1]
                 let b = newItems.[Literals.blockSize..Literals.blockSize*2-1]
                 let tail' = newItems.[Literals.blockSize*2..]
-                let root' = RRBHelpers.mkNode [|box a; box b|]
+                let root' = NodeCreation.mkNode (ref null) [|box a; box b|]
                 RRBTree<'T>(count + 1, Literals.blockSizeShift, root', tail', Literals.blockSize*2) :> RRBVector<'T>
 
     override this.Remove idx = (this :> IRRBInternal<'T>).RemoveImpl true idx
@@ -1272,7 +1336,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
                 | rootItemsL, rootItemsR ->
                     let rootL = RRBHelpers.mkRRBNode<'T> higherShift rootItemsL
                     let rootR = RRBHelpers.mkRRBNode<'T> higherShift rootItemsR
-                    let newShift = RRBHelpers.up higherShift
+                    let newShift = RRBMath.up higherShift
                     let newRoot = RRBHelpers.mkRRBNode<'T> newShift [|box rootL; box rootR|]
                     RRBTree<'T>(count + b.Length, newShift, newRoot, b.Tail, count + b.TailOffset).AdjustTree() // :> RRBVector<'T>
 
@@ -1293,7 +1357,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
             | RRBHelpers.SlideResult.SplitNode (l,r) ->
                 let a = RRBHelpers.mkRRBNode<'T> shift l
                 let b = RRBHelpers.mkRRBNode<'T> shift r
-                RRBTree<'T>(count + 1, (RRBHelpers.up shift), RRBHelpers.mkRRBNode<'T> (RRBHelpers.up shift) [|a;b|], tail, tailOffset + 1).AdjustTree() // :> RRBVector<'T>
+                RRBTree<'T>(count + 1, (RRBMath.up shift), RRBHelpers.mkRRBNode<'T> (RRBMath.up shift) [|a;b|], tail, tailOffset + 1).AdjustTree() // :> RRBVector<'T>
 
     member internal this.AdjustTree() =
         let shorter : RRBVector<'T> = this.ShortenTree()
@@ -1310,7 +1374,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
             elif shift <= Literals.blockSizeShift then
                 RRBSapling<'T>(count, 0, (root.Array.[0] :?> 'T[]), tail, tailOffset) :> RRBVector<'T>
             else
-                RRBTree<'T>(count, RRBHelpers.down shift, (root |> RRBHelpers.getChildNode 0), tail, tailOffset).ShortenTree()
+                RRBTree<'T>(count, RRBMath.down shift, (root |> RRBHelpers.getChildNode 0), tail, tailOffset).ShortenTree()
 
     member internal this.ShiftNodesFromTailIfNeeded() =
         // Minor optimization: save most-often-needed thistor properties in locals so we don't hit property accesses over and over
@@ -1384,7 +1448,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
             elif idx >= tailOffset then
                 (this :> IRRBInternal<'T>).RemoveFromTailAtTailIdx(idx - tailOffset)
             elif shift = 0 then
-                let newRoot = root.Array |> Array.copyAndRemoveAt idx |> RRBHelpers.mkNode
+                let newRoot = root.Array |> Array.copyAndRemoveAt idx |> NodeCreation.mkNode (ref null)
                 RRBTree<'T>(count - 1, 0, newRoot, tail, tailOffset - 1).ShortenTree() // :> RRBVector<'T>  // No need for adjustTree at 0 shift
             else
                 let newRoot = RRBHelpers.removeFromTree<'T> shift shouldCheckForRebalancing idx root |> RRBHelpers.mkRRBNode<'T> shift
@@ -1402,7 +1466,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
             let newTail = tail |> Array.copyAndSet (idx - tailOffset) newItem
             RRBTree<'T>(count, shift, root, newTail, tailOffset) :> RRBVector<'T>
         else
-            let newRoot = root |> RRBHelpers.replaceItemAt shift idx newItem
+            let newRoot = root.UpdatedTree shift idx newItem
             RRBTree<'T>(count, shift, newRoot, tail, tailOffset) :> RRBVector<'T>
 
     override this.GetItem idx =
