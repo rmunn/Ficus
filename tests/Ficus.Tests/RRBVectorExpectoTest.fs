@@ -1319,13 +1319,13 @@ let nodeVecGenerationTests =
   testList "Generate vectors from various sources" [
     testProp "Tree from array" <| fun (arr:int[]) ->
         let expected = arr
-        let actual = RRBHelpers.buildTree arr
+        let actual = RRBHelpers.buildTree (ref null) arr
         Expect.sequenceEqual (RRBVector.toSeq actual) expected "Tree did not get built properly from array"
 
     testProp "Tree from seq" <| fun (arr:int[]) ->
         let expected = arr
         let s = arr |> Seq.ofArray
-        let actual = s |> RRBHelpers.buildTreeOfSeqWithKnownSize arr.Length
+        let actual = s |> RRBHelpers.buildTreeOfSeqWithKnownSize (ref null) arr.Length
         Expect.sequenceEqual (RRBVector.toSeq actual) expected "Tree did not get built properly from array"
   ]
 
