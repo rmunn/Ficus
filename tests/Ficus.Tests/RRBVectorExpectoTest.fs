@@ -89,9 +89,9 @@ type MyGenerators =
             override x.Shrinker _ = Seq.empty }
 
 Arb.register<MyGenerators>() |> ignore
-let testProp  name fn =  testPropertyWithConfig { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 60 ; endSize = 120 } name fn
-let ptestProp name fn = ptestPropertyWithConfig { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 60 ; endSize = 120 } name fn
-let ftestProp replay name fn = ftestPropertyWithConfig replay { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 60 ; endSize = 120 } name fn
+let testProp  name fn =  testPropertyWithConfig { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 120 ; endSize = 180 } name fn
+let ptestProp name fn = ptestPropertyWithConfig { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 120 ; endSize = 180 } name fn
+let ftestProp replay name fn = ftestPropertyWithConfig replay { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 120 ; endSize = 180 } name fn
 
 // *** TEST DATA ***
 
