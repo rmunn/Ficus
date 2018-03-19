@@ -152,7 +152,9 @@ type Node(thread, array : obj[]) =
     abstract member TwigSlotCount<'T> : unit -> int
     default this.TwigSlotCount<'T>() =
         if array.Length = 0 then
-            failwith "Deliberate failure: TwigSlotCount should never be called on an empty Node instance"
+            // failwith "Deliberate failure: TwigSlotCount should never be called on an empty Node instance"
+            // Nope, it can happen
+            0
         else
             ((array.Length - 1) <<< Literals.blockSizeShift) + ((Array.last array) :?> 'T[]).Length
 
@@ -1051,7 +1053,7 @@ type RRBSapling<'T> internal (count, shift : int, root : 'T [], tail : 'T [], ta
                     RRBHelpers.buildTreeFromTwoSaplings thread root tail b.Root b.Tail
             | :? RRBTree<'T> as b ->
                 // Left side sapling, right side full tree. Convert left side to a "full" tree before appending
-                let treeRoot = NodeCreation.mkRRBNode<'T> thread Literals.blockSizeShift [|box root|]
+                let treeRoot = if root.Length = 0 then NodeCreation.mkNode thread [||] else NodeCreation.mkRRBNode<'T> thread Literals.blockSizeShift [|box root|]
                 // Occasionally, we can end up with a vector that needs adjusting (e.g., because the tail that was pushed down was short, so the invariant is no longer true).
                 match RRBHelpers.mergeTree thread Literals.blockSizeShift treeRoot b.Shift b.Root tail with
                 | [||], rootItems
