@@ -1494,7 +1494,11 @@ let longRunningTests =
 
 let isolatedTest =
   testList "Isolated test" [
-    ftestProp (741131070, 296426303) "More command tests from empty" (Command.toProperty (RRBVectorMoreCommands.specFromData RRBVector.empty))
+    // ftestProp (741131070, 296426303) "More command tests from empty" (Command.toProperty (RRBVectorMoreCommands.specFromData RRBVector.empty))
+    // Failed case: [push 38; push 38; pop 58; push 66; mergeL "0 T19"; push 47; pop 54; pop 66; mergeL "0 T24"; push 8; pop 61]
+    // Sizes: [38; 76; 18; 84; 103 (left node 19); 150 (left node still 19?); 96 (left node still 19?); 30 (left node still 19?); 54 (is it 24-19-11? or less?); 62; 1]
+    ftestProp (1650344102, 296426315) "Try command tests from data" <| fun (vec : RRBVector<int>) -> (Command.toProperty (RRBVectorMoreCommands.specFromData vec))
+    // Failed case: Initial: "M T9", Actions: [pop 37; push 47; mergeR "0 T15"; mergeR "0 T11"; mergeL "0 T9"; mergeL "0 T10"; pop 48; pop 47]
   ]
 
 [<Tests>]
