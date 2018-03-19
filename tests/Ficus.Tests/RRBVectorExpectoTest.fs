@@ -1492,13 +1492,74 @@ let longRunningTests =
 
   ]
 
+open RRBVectorMoreCommands.ParameterizedVecCommands
 let isolatedTest =
   testList "Isolated test" [
-    // ftestProp (741131070, 296426303) "More command tests from empty" (Command.toProperty (RRBVectorMoreCommands.specFromData RRBVector.empty))
+    testProp "More command tests from empty" (Command.toProperty (RRBVectorMoreCommands.specFromData RRBVector.empty))
     // Failed case: [push 38; push 38; pop 58; push 66; mergeL "0 T19"; push 47; pop 54; pop 66; mergeL "0 T24"; push 8; pop 61]
     // Sizes: [38; 76; 18; 84; 103 (left node 19); 150 (left node still 19?); 96 (left node still 19?); 30 (left node still 19?); 54 (is it 24-19-11? or less?); 62; 1]
-    ftestProp (1650344102, 296426315) "Try command tests from data" <| fun (vec : RRBVector<int>) -> (Command.toProperty (RRBVectorMoreCommands.specFromData vec))
+    testProp "Try command tests from data" <| fun (vec : RRBVector<int>) -> (Command.toProperty (RRBVectorMoreCommands.specFromData vec))
     // Failed case: Initial: "M T9", Actions: [pop 37; push 47; mergeR "0 T15"; mergeR "0 T11"; mergeL "0 T9"; mergeL "0 T10"; pop 48; pop 47]
+
+    testCase "Manual test" <| fun _ ->
+        let vec = RRBVecGen.treeReprStrToVec "M T9"
+        logger.info (eventX "Starting with {vec}" >> setField "vec" (RRBVecGen.vecToTreeReprStr vec))
+        let mutable current = vec
+        let actions = [pop 37; push 47; mergeR <| RRBVecGen.treeReprStrToVec "0 T15"; mergeR <| RRBVecGen.treeReprStrToVec "0 T11"; mergeL <| RRBVecGen.treeReprStrToVec "0 T9"; mergeL <| RRBVecGen.treeReprStrToVec "0 T10"; pop 48; pop 47]
+        let logVec action vec = logger.info (eventX "After {action}, vec was {vec}" >> setField "action" (action.ToString()) >> setField "vec" (RRBVecGen.vecToTreeReprStr vec))
+        for action in actions do
+            current <- current |> action.RunActual
+            logVec action current
+            RRBVectorProps.checkProperties current <| sprintf "Vector after %s" (action.ToString())
+
+    ftestCase "Large manual test" <| fun _ ->
+        let bigReprStr = """
+[M 27 M 29 28 M M-1 22 25 M-1 M-1 M 27 M 25 26 28 M 26 M M 28 M-1 30 M 25 M-1 M 25 M-1 M-1 24]
+[M-1 28 29 M M-1 29 M 26 30 26 M M 27 M M 27 29 29 28 M 28 M 29 28 26 M-1 30 28 28 M-1 M-1 M-1]
+[30 28 26 M-1 M-1 M 29 M-1 27 M M M 30 M M 26 29 26 29 M M M M 26 29 26 29 29 26 29 29 26]
+[M 27 24 M-1 M-1 M-1 28 25 30 28 29 M 28 M M-1 M-1 25 30 M M 28 M 27 M M M M M-1 M-1 28 M M-1]
+[26 27 29 M-1 30 26 M-1 30 M 29 25 25 27 30 28 24 M-1 26 26 30 28 M-1 30 M-1 M-1 M M M 30 28 30 M]
+[29 M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M]
+[30 M-1 M 29 29 29 30 M M-1 M 30 M-1 M 23 M 28 26 M-1 29 29 M-1 27 M 29 M-1 29 26 25 28 M 26 28]
+[27 30 30 25 27 29 M-1 M M 29 29 29 M 30 29 29 27 M M 26 M 28 M 29 27 25 28 30 M 29 M-1 25]
+[27 29 29 24 M 30 28 27 27 28 30 30 29 M-1 30 30 M-1 M-1 M 28 M M M-1 30 27 30 29 M M-1 M 29 M]
+[28 M 28 30 M M-1 27 M 27 25 29 30 M M 28 27 26 M 28 26 M 28 M-1 30 M 28 M M M-1 27 28 M]
+[M M M-1 M M 29 30 M-1 30 26 M M M M 28 M 27 30 M 25 M M-1 M-1 27 24 M 28 30 M 25 29 M]
+[25 30 26 M M-1 26 M M 29 27 M M 30 28 30 M M 27 M 29 M M 29 M 27 29 29 M 30 27 M 30]
+[M M 28 30 M M M 26 M-1 M M-1 M 28 M-1 M-1 M M 25 29 M-1 M-1 M 28 M-1 29 27 M M M 28 27 M]
+[M 29 M 30 M-1 M 27 M 30 M 29 27 28 M M-1 29 28 M-1 M-1 M M-1 M 27 25 M M-1 M 30 30 M 27 M-1]
+[M 29 M M M-1 M 28 M M 30 M 27 30 M M M 29 M 28 30 29 M 28 M M M M 27 27 M M M-1]
+[27 M M-1 M M-1 M 27 M M M M 30 M M M 27 M-1 29 M 29 M M 26 27 29 M 30 M 29 M 28 M]
+[M 29 M M M M-1 30 M M M 27 M M M 30 M M-1 M 29 M M M 30 M M M-1 26 M 27 M M-1 30]
+[M M 28 M 22 M-1 M M M 23 M M-1 M M M 30 M M M M M-1 M 30 M 29 M 29 M M M-1 30 M]
+[M M 30 M 29 29 M M M 30 M M 29 M M 28 M M M 30 M-1 M 30 M M M M-1 M M M M M-1]
+[30 M 27 M 30 M M M M M M-1 M M-1 30 M M-1 M M M 29 28 M-1 M M 30 M M 30 M 29 M M]
+[M M M M M M M-1 M 29 M M-1 M M M M M-1 M M M-1 M-1 M M M M M 28 M 30 M M M M]
+[M 29 M-1 M-1 M M M 29 M M M M M M M M M M-1 28 M 29 M M M M M M M M 29 M M]
+[M M M M M M M-1 M M M M M M M-1 M M M 30 M M M M M M M M M M M M M M]
+[M M M M M M M M M M M-1 M M M-1 M M M 30 M-1 M M M M M-1 M M M 29 M M M M]
+[M M M M M M M M-1 29 29 M 28 28 M M M 29 M M M M 28 27 28 M M 27 M-1 27 M-1 M M]
+[M M M M 30 M 26 M M M M M M M M M 29 M M 28 30 M M M M M 29 29 M 27 M M]
+[30 M M M 30 27 25 M M M M 28 M M-1 30 M 28 M M M M M-1 M M 30 M M-1 30 M M M M]
+[M-1 M M 28 M M M M M M M-1 M 29 M M-1 M M M M M M M 27 M M M M M M M 29 M]
+[M M M M-1 M M M 27 M M M M M M M M M 27 M 30 30 M 28 M M-1 M M M M M 29 M]
+[M-1 M M M 30 M M M M M M M 30 M M M M M-1 M M 30 M M M M M M M M M M M]
+T26
+"""
+        let vec = bigReprStr.TrimStart('\n').Replace("\n", " ") |> RRBVecGen.treeReprStrToVec
+        logger.info (eventX "Starting with {vec}" >> setField "vec" (RRBVecGen.vecToTreeReprStr vec))
+        let mutable current = vec
+        let mergeL = RRBVecGen.treeReprStrToVec >> RRBVectorMoreCommands.ParameterizedVecCommands.mergeL
+        let mergeR = RRBVecGen.treeReprStrToVec >> RRBVectorMoreCommands.ParameterizedVecCommands.mergeR
+        let actions = [mergeL "M T19"; push 99; mergeL "0 T28"; push 80; push 127; push 17; push 30;
+                       push 138; remove -109; mergeR "M T9"; push 91; push 72; insert (-90,126); push 64;
+                       push 52; insert (-138,1); push 130]
+        let logVec action vec = logger.info (eventX "After {action}, vec was {vec}" >> setField "action" (action.ToString()) >> setField "vec" (RRBVecGen.vecToTreeReprStr vec))
+        for action in actions do
+            current <- current |> action.RunActual
+            logVec action current
+            RRBVectorProps.checkProperties current <| sprintf "Vector after %s" (action.ToString())
+
   ]
 
 [<Tests>]

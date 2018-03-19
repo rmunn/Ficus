@@ -92,7 +92,7 @@ let specFromData data =
                 400_000, insertGen
                 200_000, removeGen
                 200_000, pushGen
-                200_000, popGen
+                50_000, popGen
                 len, splitGen
                 100_000 - len |> max 0, mergeGen
             ] }
