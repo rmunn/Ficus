@@ -1494,25 +1494,26 @@ let longRunningTests =
 
 let isolatedTest =
   testList "Isolated test" [
+    ftestProp (741131070, 296426303) "More command tests from empty" (Command.toProperty (RRBVectorMoreCommands.specFromData RRBVector.empty))
   ]
 
 [<Tests>]
 let tests =
   testList "All tests" [
-    arrayTests
-    simpleVectorTests
-    manualVectorTests
-    constructedVectorSplitTests
-    splitJoinTests
-    insertTests
-    operationTests
-    vectorTests
-    nodeVecGenerationTests
-    regressionTests
-    mergeTests
-    apiTests
+    // arrayTests
+    // simpleVectorTests
+    // manualVectorTests
+    // constructedVectorSplitTests
+    // splitJoinTests
+    // insertTests
+    // operationTests
+    // vectorTests
+    // nodeVecGenerationTests
+    // regressionTests
+    // mergeTests
+    // apiTests
 
-    longRunningTests
+    // longRunningTests
 
     isolatedTest
 

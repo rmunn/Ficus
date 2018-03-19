@@ -11,6 +11,7 @@
     <Compile Include="RRBVecGen.fs" />
     <Compile Include="RRBVectorProps.fs" />
     <Compile Include="RRBVectorFsCheckCommands.fs" />
+    <Compile Include="RRBVectorMoreCommands.fs" />
     <Compile Include="ExperimentalFsCheckCommands.fs" />
     <Compile Include="RRBVectorExpectoTest.fs" />
     <Compile Include="Main.fs" />
