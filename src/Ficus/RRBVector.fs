@@ -66,11 +66,11 @@ module NodeCreation =
     open RRBMath
 
     // Unfortunately, we can't move these functions into the Node and RRBNode classes, apparently due to https://stackoverflow.com/q/41746333
-    let mkNode (thread : Thread ref) entries = Node(thread, entries)
+    let mkNode (thread : Thread ref) entries = if Array.length entries = 1 then SingletonNode(thread, entries) :> Node else Node(thread, entries)
 
     let mkRRBNodeWithSizeTable thread shift entries sizeTable =
-        if isSizeTableFullAtShift shift sizeTable
-        then Node(thread, entries)
+        if Array.length entries = 1 then SingletonNode(thread, entries) :> Node
+        elif isSizeTableFullAtShift shift sizeTable then Node(thread, entries)
         else RRBNode(thread, entries, sizeTable) :> Node
 
     let treeSize<'T> shift (node : obj) : int =
@@ -97,7 +97,7 @@ module ConcurrentCounter =
         // If it ever wraps around to 0 again, we want to skip 0
         if result <> 0 then result else Interlocked.Increment counter
 
-[<StructuredFormatDisplay("{StringRepr}")>]
+[<StructuredFormatDisplay("Node({StringRepr})")>]
 type Node(thread, array : obj[]) =
     let thread = thread
     new() = Node(ref null,Array.create Literals.blockSize null)
@@ -105,7 +105,7 @@ type Node(thread, array : obj[]) =
     member this.Array = array
     member this.Thread = thread
     member this.SetThread t = thread := t
-    member this.StringRepr = if array.Length = 0 then sprintf "EmptyNode" else sprintf "FullNode(%A)" array
+    member this.StringRepr = sprintf "%A" array
 
     abstract member IndexesAndChild : int -> int -> int * obj * int
     default this.IndexesAndChild shift treeIdx =
@@ -134,7 +134,7 @@ type Node(thread, array : obj[]) =
         // Note: childSize should be *tree* size, not *node* size. In other words, something appropriate for the size table at this level.
         if childSize = (1 <<< shift) then
             // This is still a full node
-            Node(thread, array |> Array.copyAndSet localIdx newChild)
+            NodeCreation.mkNode thread (array |> Array.copyAndSet localIdx newChild)
         else
             // This has become an RRB node, so recalculate the size table via mkRRBNode
             array |> Array.copyAndSet localIdx newChild |> NodeCreation.mkRRBNode<'T> thread shift
@@ -200,11 +200,10 @@ type Node(thread, array : obj[]) =
         // Don't need shift or leafLen for ordinary nodesm only for RRBNodes
         NodeCreation.mkNode thread [|box this; box newRight|]
 
-
 [<StructuredFormatDisplay("RRBNode({StringRepr})")>]
 type RRBNode(thread, array, sizeTable : int[]) =
     inherit Node(thread, array)
-    static member InCurrentThread() = RRBNode(ref Thread.CurrentThread, Array.create Literals.blockSize null, Array.zeroCreate Literals.blockSize)
+    static member InCurrentThread() = RRBNode(ref Thread.CurrentThread, Array.zeroCreate Literals.blockSize, Array.zeroCreate Literals.blockSize)
     member this.SizeTable = sizeTable
     member this.StringRepr = sprintf "sizeTable=%A,children=%A" sizeTable array
     override this.IndexesAndChild shift treeIdx =
@@ -214,11 +213,6 @@ type RRBNode(thread, array, sizeTable : int[]) =
         let child = array.[localIdx]
         let nextTreeIdx = if localIdx = 0 then treeIdx else treeIdx - sizeTable.[localIdx - 1]
         localIdx, child, nextTreeIdx
-
-    static member MakeRRBNode thread shift entries sizeTable =
-        if RRBMath.isSizeTableFullAtShift shift sizeTable
-        then Node(thread, entries)
-        else RRBNode(thread, entries, sizeTable) :> Node
 
     override this.UpdatedSameSize localIdx newChild =
         RRBNode(thread, array |> Array.copyAndSet localIdx newChild, sizeTable) :> Node
@@ -236,7 +230,7 @@ type RRBNode(thread, array, sizeTable : int[]) =
         let sizeDiff = childSize - oldSize
         let array' = array |> Array.copyAndSet localIdx newChild
         let sizeTable' = if sizeDiff = 0 then sizeTable else sizeTable |> RRBMath.copyAndAddNToSizeTable localIdx sizeDiff
-        RRBNode.MakeRRBNode thread shift array' sizeTable'
+        NodeCreation.mkRRBNodeWithSizeTable thread shift array' sizeTable'
 
     override this.AppendChild<'T> shift newChild childSize =
         let array' = array |> Array.copyAndAppend newChild
@@ -269,6 +263,21 @@ type RRBNode(thread, array, sizeTable : int[]) =
     override this.PushRootUp shift leafLen (newRight : Node) =
         let oldSize = Array.last sizeTable
         NodeCreation.mkRRBNodeWithSizeTable thread (RRBMath.up shift) [|box this; box newRight|] [|oldSize; oldSize + leafLen|]
+
+[<StructuredFormatDisplay("SingletonNode({StringRepr})")>]
+type SingletonNode(thread, array) =
+    inherit Node(thread, array)
+    static member InCurrentThread() = SingletonNode(ref Thread.CurrentThread, Array.zeroCreate 1)
+    override this.AppendChild<'T> shift newChild childSize =
+        let canStayFull =
+            if shift <= Literals.blockSizeShift
+            then (array.[0] :?> 'T[]).Length = Literals.blockSize
+            else (array.[0] :?> Node).NodeSize = Literals.blockSize && not (array.[0] :? RRBNode)
+        if canStayFull then
+            Node(thread, [|array.[0]; newChild|])
+        else
+            let firstChildTreeSize = (array.[0] :?> Node).TreeSize<'T> shift
+            RRBNode(thread, [|array.[0]; newChild|], [|firstChildTreeSize; firstChildTreeSize + childSize|]) :> Node
 
 module RRBHelpers =
     open RRBMath
