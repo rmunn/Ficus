@@ -268,6 +268,7 @@ type RRBNode(thread, array, sizeTable : int[]) =
 type SingletonNode(thread, array) =
     inherit Node(thread, array)
     static member InCurrentThread() = SingletonNode(ref Thread.CurrentThread, Array.zeroCreate 1)
+
     override this.AppendChild<'T> shift newChild childSize =
         let canStayFull =
             if shift <= Literals.blockSizeShift
@@ -278,6 +279,19 @@ type SingletonNode(thread, array) =
         else
             let firstChildTreeSize = (array.[0] :?> Node).TreeSize<'T> shift
             RRBNode(thread, [|array.[0]; newChild|], [|firstChildTreeSize; firstChildTreeSize + childSize|]) :> Node
+
+    override this.IndexesAndChild _ treeIdx =  // No need for radix math when we know that there's just one child
+        0, array.[0], treeIdx
+
+    override this.UpdatedSameSize localIdx newChild = SingletonNode(thread, Array.singleton newChild) :> Node
+
+    override this.RemoveLastChild<'T> shift =
+        if shift <= 0 then
+            failwith "Deliberate failure at shift 0 or less"  // This proves that we're not actually using this code branch
+            // TODO: Keep that deliberate failure line in here until we're *completely* finished with refactoring, in case we end up needing
+            // to use removeLastLeaf for anything else. Then once we're *completely* done refactoring, delete this unnecessary if branch.
+        else
+            Array.empty<'T>, Node(thread, Array.empty)
 
 module RRBHelpers =
     open RRBMath
