@@ -588,7 +588,7 @@ let mergeTests =
         let joined = RRBVector.append vL vR
         RRBVectorProps.checkProperties joined <| sprintf "Joined vector"
 
-    ftestCase "Joining vectors where the left tree is taller than the right produces valid results" <| fun _ ->
+    testCase "Joining vectors where the left tree is taller than the right produces valid results" <| fun _ ->
         let vL = RRBVecGen.treeReprStrToVec "[M*M]*3 TM/4"
         let vR = RRBVecGen.treeReprStrToVec "M*M/2 TM"
         RRBVectorProps.checkProperties vL "Left half of merge"

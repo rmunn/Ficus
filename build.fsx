@@ -94,6 +94,7 @@ let runTests modifyArgs modifyExpectoArgs =
             DotNetCli.RunCommand (fun c ->
             { c with
                 WorkingDir = IO.Path.GetDirectoryName proj
+                TimeOut = TimeSpan.FromHours(2.0)
             }) (tf |> selectRunnerForFramework |> modifyArgs |> addLogNameParamToArgs tf |> modifyExpectoArgs))
     )
 
