@@ -111,11 +111,11 @@ let properties = [
             check tree.Root
 
     "A full node should never contain less-than-full children except as its last child", fun (vec : RRBVector<'T>) ->
-        let rec check shift seenFullParent (node : Node) =
+        let rec check shift seenFullParent isLastChild (node : Node) =
             if shift <= 0 then true else
             if shift <= Literals.blockSizeShift then
                 match node with
-                | :? RRBNode -> not seenFullParent // RRBNode twigs satisfy the property without need for further checking, since their children are leaves... as long as no parent was full
+                | :? RRBNode -> isLastChild || not seenFullParent // RRBNode twigs satisfy the property without need for further checking, since their children are leaves... as long as no parent was full, or as long as they were the last child
                 | _ ->
                     if node.Array.Length <= 1 then true else
                     node.Array.[..node.Array.Length - 2] |> Array.forall (fun n ->
@@ -124,25 +124,27 @@ let properties = [
                 match node with
                 | :? RRBNode ->
                     if shift <= Literals.blockSizeShift then
-                        not seenFullParent // RRBNode twigs satisfy the property without need for further checking, since their children are leaves... as long as no parent was full
+                        isLastChild || not seenFullParent // RRBNode twigs satisfy the property without need for further checking, since their children are leaves... as long as no parent was full, or as long as they were the last child
                     else
-                        node.Array |> Array.forall (fun n -> check (down shift) seenFullParent (n :?> Node))
+                        node.Array |> Seq.indexed |> Seq.forall (fun (i,n) -> check (down shift) seenFullParent (i = node.NodeSize - 1) (n :?> Node))
                 | _ ->
                     let fullCheck (n : Node) =
                         if shift <= Literals.blockSizeShift then
                             isFull n && n.Array.Length = Literals.blockSize
                         else
                             isFull n
-                    if node.Array.Length <= 1 then
-                        check (down shift) seenFullParent (node.Array.[0] :?> Node)  // If a FullNode has just one element, it doesn't matter if it has an RRB child, but its children still need to be checked.
+                    if node.NodeSize = 0 then
+                        true
+                    elif node.NodeSize = 1 then
+                        check (down shift) seenFullParent true (node.Array.[0] :?> Node)  // If a FullNode has just one element, it doesn't matter if it has an RRB child, but its children still need to be checked.
                     else
                         node.Array.[..node.Array.Length - 2] |> Array.forall (fun n ->
-                            fullCheck (n :?> Node) && check (down shift) true (n :?> Node)
-                        ) && check (down shift) true ((Array.last node.Array) :?> Node)
+                            fullCheck (n :?> Node) && check (down shift) true true (n :?> Node)
+                        ) && check (down shift) true true ((Array.last node.Array) :?> Node)
         match vec with
         | :? RRBSapling<'T> as sapling -> true // Not applicable to saplings
         | :? RRBTree<'T> as tree ->
-            check tree.Shift false tree.Root
+            check tree.Shift false true tree.Root
 
     "The rightmost leaf node of the vector should always be full if its parent is full", fun (vec : RRBVector<'T>) ->
         // Except under certain conditions, that is... and I want to find out when this property turns out to be false

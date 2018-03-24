@@ -163,6 +163,69 @@ let debugBigTest4 () =
             Expect.equal tree.TailOffset (Literals.blockSize) "Wrong tail offset"
             Expect.equal tree.Tail.Length (Literals.blockSize - 1) "Wrong tail length"
 
+let debugJoinTest () =
+        // Already a unit test called "Joining vectors where the left tree is taller than the right produces valid results"
+        let vL = RRBVecGen.treeReprStrToVec "[M*M]*3 TM/4"
+        let vR = RRBVecGen.treeReprStrToVec "M*M/2 TM"
+        testProperties vL "Left half of merge"
+        testProperties vR "Right half of merge"
+        let joined = RRBVector.append vL vR
+        testProperties joined <| sprintf "Joined vector"
+
+
+open RRBVectorMoreCommands.ParameterizedVecCommands
+
+let debugReallyBigTest1 () =
+        let bigReprStr = """
+[M 27 M 29 28 M M-1 22 25 M-1 M-1 M 27 M 25 26 28 M 26 M M 28 M-1 30 M 25 M-1 M 25 M-1 M-1 24]
+[M-1 28 29 M M-1 29 M 26 30 26 M M 27 M M 27 29 29 28 M 28 M 29 28 26 M-1 30 28 28 M-1 M-1 M-1]
+[30 28 26 M-1 M-1 M 29 M-1 27 M M M 30 M M 26 29 26 29 M M M M 26 29 26 29 29 26 29 29 26]
+[M 27 24 M-1 M-1 M-1 28 25 30 28 29 M 28 M M-1 M-1 25 30 M M 28 M 27 M M M M M-1 M-1 28 M M-1]
+[26 27 29 M-1 30 26 M-1 30 M 29 25 25 27 30 28 24 M-1 26 26 30 28 M-1 30 M-1 M-1 M M M 30 28 30 M]
+[29 M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M]
+[30 M-1 M 29 29 29 30 M M-1 M 30 M-1 M 23 M 28 26 M-1 29 29 M-1 27 M 29 M-1 29 26 25 28 M 26 28]
+[27 30 30 25 27 29 M-1 M M 29 29 29 M 30 29 29 27 M M 26 M 28 M 29 27 25 28 30 M 29 M-1 25]
+[27 29 29 24 M 30 28 27 27 28 30 30 29 M-1 30 30 M-1 M-1 M 28 M M M-1 30 27 30 29 M M-1 M 29 M]
+[28 M 28 30 M M-1 27 M 27 25 29 30 M M 28 27 26 M 28 26 M 28 M-1 30 M 28 M M M-1 27 28 M]
+[M M M-1 M M 29 30 M-1 30 26 M M M M 28 M 27 30 M 25 M M-1 M-1 27 24 M 28 30 M 25 29 M]
+[25 30 26 M M-1 26 M M 29 27 M M 30 28 30 M M 27 M 29 M M 29 M 27 29 29 M 30 27 M 30]
+[M M 28 30 M M M 26 M-1 M M-1 M 28 M-1 M-1 M M 25 29 M-1 M-1 M 28 M-1 29 27 M M M 28 27 M]
+[M 29 M 30 M-1 M 27 M 30 M 29 27 28 M M-1 29 28 M-1 M-1 M M-1 M 27 25 M M-1 M 30 30 M 27 M-1]
+[M 29 M M M-1 M 28 M M 30 M 27 30 M M M 29 M 28 30 29 M 28 M M M M 27 27 M M M-1]
+[27 M M-1 M M-1 M 27 M M M M 30 M M M 27 M-1 29 M 29 M M 26 27 29 M 30 M 29 M 28 M]
+[M 29 M M M M-1 30 M M M 27 M M M 30 M M-1 M 29 M M M 30 M M M-1 26 M 27 M M-1 30]
+[M M 28 M 22 M-1 M M M 23 M M-1 M M M 30 M M M M M-1 M 30 M 29 M 29 M M M-1 30 M]
+[M M 30 M 29 29 M M M 30 M M 29 M M 28 M M M 30 M-1 M 30 M M M M-1 M M M M M-1]
+[30 M 27 M 30 M M M M M M-1 M M-1 30 M M-1 M M M 29 28 M-1 M M 30 M M 30 M 29 M M]
+[M M M M M M M-1 M 29 M M-1 M M M M M-1 M M M-1 M-1 M M M M M 28 M 30 M M M M]
+[M 29 M-1 M-1 M M M 29 M M M M M M M M M M-1 28 M 29 M M M M M M M M 29 M M]
+[M M M M M M M-1 M M M M M M M-1 M M M 30 M M M M M M M M M M M M M M]
+[M M M M M M M M M M M-1 M M M-1 M M M 30 M-1 M M M M M-1 M M M 29 M M M M]
+[M M M M M M M M-1 29 29 M 28 28 M M M 29 M M M M 28 27 28 M M 27 M-1 27 M-1 M M]
+[M M M M 30 M 26 M M M M M M M M M 29 M M 28 30 M M M M M 29 29 M 27 M M]
+[30 M M M 30 27 25 M M M M 28 M M-1 30 M 28 M M M M M-1 M M 30 M M-1 30 M M M M]
+[M-1 M M 28 M M M M M M M-1 M 29 M M-1 M M M M M M M 27 M M M M M M M 29 M]
+[M M M M-1 M M M 27 M M M M M M M M M 27 M 30 30 M 28 M M-1 M M M M M 29 M]
+[M-1 M M M 30 M M M M M M M 30 M M M M M-1 M M 30 M M M M M M M M M M M]
+T26
+"""
+        let vec = bigReprStr.TrimStart('\n').Replace("\n", " ") |> RRBVecGen.treeReprStrToVec
+        printfn "Starting with %s" (RRBVecGen.vecToTreeReprStr vec)
+        let mutable current = vec
+        let mergeL = RRBVecGen.treeReprStrToVec >> RRBVectorMoreCommands.ParameterizedVecCommands.mergeL
+        let mergeR = RRBVecGen.treeReprStrToVec >> RRBVectorMoreCommands.ParameterizedVecCommands.mergeR
+        let actions = [mergeL "M T19"; push 99; mergeL "0 T28"; push 80; push 127; push 17; push 30;
+                       push 138; remove -109; mergeR "M T9"; push 91; push 72; insert (-90,126); push 64;
+                       push 52; insert (-138,1); push 130]
+        let logVec action vec = printfn "After %s, vec was %s with actual structure %A" (action.ToString()) (RRBVecGen.vecToTreeReprStr vec) vec
+        for action in actions do
+            if action.ToString() = "remove -109" then
+                printfn "Breakpoint here"
+            current <- current |> action.RunActual
+            logVec action current
+            testProperties current <| sprintf "Vector after %s" (action.ToString())
+
+
 let doJoinTest v1 v2 =
     testProperties v1 "v1 in join test"
     testProperties v2 "v2 in join test"
@@ -216,7 +279,7 @@ let main argv =
         let githash  = AssemblyInfo.getGitHash assembly
         printfn "%s - %A - %s - %s" name.Name version releaseDate githash
     if argv |> Array.contains "--debug-vscode" then
-        debugSmallTest1()
+        debugJoinTest()
         0
     elif argv |> Array.contains "--stress" then
         printfn "Stress testing requested"
