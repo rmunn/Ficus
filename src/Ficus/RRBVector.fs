@@ -285,14 +285,6 @@ type SingletonNode(thread, array) =
 
     override this.UpdatedSameSize localIdx newChild = SingletonNode(thread, Array.singleton newChild) :> Node
 
-    override this.RemoveLastChild<'T> shift =
-        if shift <= 0 then
-            failwith "Deliberate failure at shift 0 or less"  // This proves that we're not actually using this code branch
-            // TODO: Keep that deliberate failure line in here until we're *completely* finished with refactoring, in case we end up needing
-            // to use removeLastLeaf for anything else. Then once we're *completely* done refactoring, delete this unnecessary if branch.
-        else
-            Array.empty<'T>, Node(thread, Array.empty)
-
 module RRBHelpers =
     open RRBMath
     open NodeCreation
