@@ -209,7 +209,7 @@ let fleshOutRightmostLeafIfNecessary<'a> g level root = gen {
             let! newItems = Gen.arrayOfLength missingItemCount g
             return (Array.append leaf newItems)
         }
-        return root |> replaceLastLeaf (level * Literals.blockSizeShift) newLeaf
+        return root |> replaceLastLeaf (ref null) (level * Literals.blockSizeShift) newLeaf
 }
 
 let genVec<'a> level childCount =

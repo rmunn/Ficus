@@ -153,7 +153,10 @@ type Node(thread, array : obj[]) =
             // This has probably become an RRB node (unless the updated child was the last child)
             let newNode = this.EnsureEditable mutator
             newNode.Array.[localIdx] <- newChild
-            newNode.ToRRBIfNeeded shift
+            newNode.ToRRBIfNeeded<'T> shift
+        // TODO: Can this be simplified into two lines as follows?
+        // let newNode = this.UpdatedSameSize mutator localIdx newChild
+        // if childSize = (1 <<< shift) then newNode else newNode.ToRRBIfNeeded<'T> shift
 
     abstract member NodeSize : int
     default this.NodeSize = array.Length
@@ -163,9 +166,9 @@ type Node(thread, array : obj[]) =
         // A full node is allowed to have an incomplete rightmost entry, but all but its rightmost entry must be complete.
         // Therefore, we can shortcut this calculation for most of the nodes, but we do need to calculate the rightmost node.
         if shift <= Literals.blockSizeShift then
-            ((array.Length - 1) <<< shift) + ((Array.last array) :?> 'T[]).Length
+            ((this.NodeSize - 1) <<< shift) + ((array.[this.NodeSize - 1]) :?> 'T[]).Length
         else
-            ((array.Length - 1) <<< shift) + ((Array.last array) :?> Node).TreeSize<'T> (RRBMath.down shift)
+            ((this.NodeSize - 1) <<< shift) + ((array.[this.NodeSize - 1]) :?> Node).TreeSize<'T> (RRBMath.down shift)
 
     abstract member TwigSlotCount<'T> : unit -> int
     default this.TwigSlotCount<'T>() =
@@ -174,7 +177,7 @@ type Node(thread, array : obj[]) =
             // Nope, it can happen
             0
         else
-            ((array.Length - 1) <<< Literals.blockSizeShift) + ((Array.last array) :?> 'T[]).Length
+            ((this.NodeSize - 1) <<< Literals.blockSizeShift) + ((array.[this.NodeSize - 1]) :?> 'T[]).Length
 
     // Uses "this.Array" instead of "array" because of error FS1113. TODO: Is there a real speed benefit to making this an inline function? If not, just make it a normal method.
     member inline this.FullNodeIsTrulyFull<'T> shift =
@@ -185,37 +188,46 @@ type Node(thread, array : obj[]) =
     default this.AppendChild<'T> mutator shift newChild childSize =
         // Full nodes are allowed to have their last item be non-full, so we have to check that
         if this.FullNodeIsTrulyFull<'T> shift then
-            array |> Array.copyAndAppend newChild |> NodeCreation.mkNode thread
+            array |> Array.copyAndAppend newChild |> NodeCreation.mkNode mutator
         else
-            array |> Array.copyAndAppend newChild |> NodeCreation.mkRRBNode<'T> thread shift
+            array |> Array.copyAndAppend newChild |> NodeCreation.mkRRBNode<'T> mutator shift
 
-    abstract member RemoveFirstChild<'T> : Thread ref -> Node
-    default this.RemoveFirstChild mutator = this
+    abstract member RemoveLastChild<'T> : Thread ref -> int -> Node
+    default this.RemoveLastChild<'T> mutator shift =
+        // Expanded nodes can do this in a transient way, but "normal" nodes can't
+        array |> Array.copyAndPop |> NodeCreation.mkNode mutator
 
-    abstract member RemoveLastChild<'T> : Thread ref -> Node
-    default this.RemoveLastChild mutator = this
+    abstract member ConcatOtherNode<'T> : Thread ref -> int -> Node -> Node
+    default this.ConcatOtherNode<'T> mutator shift otherNode =
+        // Concatenate the other node to the right-hand side of this one
+        // It's the calling function's responsibility to ensure array size is small enough
+        // Expanded nodes can do this in a transient way, but "normal" nodes can't
+        Array.append array otherNode.Array |> NodeCreation.mkRRBNode<'T> mutator shift
+        // TODO: Put rebalancing logic in here as well; this will become the node equivalent of mergeArrays<'T>
 
     abstract member RemoveLastLeaf<'T> : Thread ref -> int -> 'T[] * Node
-    default this.RemoveLastLeaf mutator shift =
+    default this.RemoveLastLeaf<'T> mutator shift =
         if shift <= 0 then
             failwith "Deliberate failure at shift 0 or less"  // This proves that we're not actually using this code branch
             // TODO: Keep that deliberate failure line in here until we're *completely* finished with refactoring, in case we end up needing
             // to use removeLastLeaf for anything else. Then once we're *completely* done refactoring, delete this unnecessary if branch.
         elif shift <= Literals.blockSizeShift then
             // Children of this node are leaves
-            if array.Length = 0 then Array.empty, this
+            if this.NodeSize = 0 then Array.empty, this
             else
-                let leaf = (Array.last array) :?> 'T []
-                let newNode = Array.copyAndPop array |> NodeCreation.mkNode thread // Popping the last entry from a FullNode can't ever turn it into an RRBNode.
+                let leaf = (array.[this.NodeSize - 1]) :?> 'T []
+                let newNode = this.RemoveLastChild<'T> mutator shift // Popping the last entry from a FullNode can't ever turn it into an RRBNode.
                 leaf, newNode
         else
             // Children are nodes, not leaves -- so we're going to take the rightmost and dig down into it.
             // And if the recursive call returns an empty node, we'll strip the entry off our node.
-            let leaf, child' = (Array.last array :?> Node).RemoveLastLeaf<'T> mutator (RRBMath.down shift)
+            let leaf, child' = (array.[this.NodeSize - 1] :?> Node).RemoveLastLeaf<'T> mutator (RRBMath.down shift)
             let newNode =
-                if child'.Array.Length = 0
-                then array |> Array.copyAndPop |> NodeCreation.mkNode thread
-                else array |> Array.copyAndSetLast (box child') |> NodeCreation.mkNode thread
+                if child'.NodeSize = 0
+                then this.RemoveLastChild<'T> mutator shift
+                else
+                    let childSize' = child'.TreeSize<'T> (RRBMath.down shift)  // Or, wait, should this be treesize (down shift)? TODO: Find out
+                    this.UpdatedNewSize<'T> mutator shift (this.NodeSize - 1) child' childSize' // array |> Array.copyAndSetLast (box child') |> NodeCreation.mkNode mutator
             leaf, newNode
 
     // Used in appendLeafWithGrowth, which creates the new path and then calls us to create a new "root" node above us, with us as the left
@@ -228,6 +240,7 @@ type Node(thread, array : obj[]) =
 type ExpandedNode(thread, realLength : int, array : obj[]) =
     inherit Node(thread, array)
     let thread = thread
+    member val CurrentLength = realLength with get, set
     new() = ExpandedNode(ref null, 0, Array.create Literals.blockSize null)
     static member InCurrentThread() = Node(ref Thread.CurrentThread, Array.zeroCreate Literals.blockSize)
     member this.Array = array
@@ -235,9 +248,12 @@ type ExpandedNode(thread, realLength : int, array : obj[]) =
     member this.SetThread t = thread := t
     member this.StringRepr = sprintf "%A" array
 
-    override this.NodeSize = realLength
+    override this.NodeSize = this.CurrentLength
 
-    override this.UpdatedSameSize mutator localIdx newChild = Node(thread, array |> Array.copyAndSet localIdx newChild)
+    override this.EnsureEditable mutator =
+        if LanguagePrimitives.PhysicalEquality mutator thread  // Note that this is NOT "if mutator = thread"
+        then this :> Node
+        else ExpandedNode(mutator, this.CurrentLength, Array.copy array) :> Node
 
     member this.UpdatedTree mutator shift treeIdx (newItem : 'T) =
         // TODO: Perhaps this belongs on the tree class instead of the node class?
@@ -259,59 +275,43 @@ type ExpandedNode(thread, realLength : int, array : obj[]) =
             // This has become an RRB node, so recalculate the size table via mkRRBNode
             array |> Array.copyAndSet localIdx newChild |> NodeCreation.mkRRBNode<'T> thread shift
 
-    override this.TreeSize<'T> shift =
-        // A full node is allowed to have an incomplete rightmost entry, but all but its rightmost entry must be complete.
-        // Therefore, we can shortcut this calculation for most of the nodes, but we do need to calculate the rightmost node.
-        if shift <= Literals.blockSizeShift then
-            ((realLength - 1) <<< shift) + ((array.[realLength - 1]) :?> 'T[]).Length
-        else
-            ((realLength - 1) <<< shift) + ((array.[realLength - 1]) :?> Node).TreeSize<'T> (RRBMath.down shift)
-
     override this.TwigSlotCount<'T>() =
-        if realLength = 0 then
+        if this.CurrentLength = 0 then
             // failwith "Deliberate failure: TwigSlotCount should never be called on an empty Node instance"
             // Nope, it can happen
             0
         else
-            ((realLength - 1) <<< Literals.blockSizeShift) + ((array.[realLength - 1]) :?> 'T[]).Length
+            ((this.CurrentLength - 1) <<< Literals.blockSizeShift) + ((array.[this.CurrentLength - 1]) :?> 'T[]).Length
 
     // Uses "this.Array" instead of "array" because of error FS1113. TODO: Is there a real speed benefit to making this an inline function? If not, just make it a normal method.
     member inline this.FullNodeIsTrulyFull<'T> shift =
-        shift < Literals.blockSizeShift || this.Array |> Array.isEmpty || NodeCreation.treeSize<'T> (RRBMath.down shift) (Array.last this.Array) >= (1 <<< (RRBMath.down shift))
+        shift < Literals.blockSizeShift || this.Array |> Array.isEmpty || NodeCreation.treeSize<'T> (RRBMath.down shift) (this.Array.[this.NodeSize - 1]) >= (1 <<< (RRBMath.down shift))
 
     // Assumes that the node does *not* yet have blockSize children; verifying that is the job of the caller function
     override this.AppendChild<'T> mutator shift newChild childSize =
         // Full nodes are allowed to have their last item be non-full, so we have to check that
-        if this.FullNodeIsTrulyFull<'T> shift then
-            array |> Array.copyAndAppend newChild |> NodeCreation.mkNode thread
-        else
-            array |> Array.copyAndAppend newChild |> NodeCreation.mkRRBNode<'T> thread shift
+        let newNode = this.EnsureEditable mutator :?> ExpandedNode
+        newNode.Array.[newNode.NodeSize] <- newChild
+        newNode.CurrentLength <- newNode.CurrentLength + 1
+        if newNode.FullNodeIsTrulyFull<'T> shift then newNode :> Node else newNode.ToRRBIfNeeded<'T> shift
 
-    override this.RemoveLastLeaf mutator shift =
-        if shift <= 0 then
-            failwith "Deliberate failure at shift 0 or less"  // This proves that we're not actually using this code branch
-            // TODO: Keep that deliberate failure line in here until we're *completely* finished with refactoring, in case we end up needing
-            // to use removeLastLeaf for anything else. Then once we're *completely* done refactoring, delete this unnecessary if branch.
-        elif shift <= Literals.blockSizeShift then
-            // Children of this node are leaves
-            if array.Length = 0 then Array.empty, this :> Node
-            else
-                let leaf = (array.[realLength - 1]) :?> 'T []
-                let newNode = Array.copyAndPop array |> NodeCreation.mkNode thread // Popping the last entry from a FullNode can't ever turn it into an RRBNode.
-                leaf, newNode
-        else
-            // Children are nodes, not leaves -- so we're going to take the rightmost and dig down into it.
-            // And if the recursive call returns an empty node, we'll strip the entry off our node.
-            let leaf, child' = (array.[realLength - 1] :?> Node).RemoveLastLeaf<'T> mutator (RRBMath.down shift)
-            let newNode =
-                if child'.Array.Length = 0
-                then array |> Array.copyAndPop |> NodeCreation.mkNode thread
-                else array |> Array.copyAndSetLast (box child') |> NodeCreation.mkNode thread
-            leaf, newNode
+    override this.RemoveLastChild<'T> mutator shift =
+        let newNode = this.EnsureEditable mutator :?> ExpandedNode
+        newNode.Array.[newNode.CurrentLength - 1] <- null
+        newNode.CurrentLength <- newNode.CurrentLength - 1
+        newNode :> Node
+
+    // TODO: Implement this (if it turns out to be useful)
+    // override this.ConcatOtherNode<'T> mutator shift otherNode =
+    //     // Concatenate the other node to the right-hand side of this one
+    //     // It's the calling function's responsibility to ensure array size is small enough
+    //     // Only expanded nodes will actually do this in a transient way
+    //     Array.append array otherNode.Array |> NodeCreation.mkRRBNode<'T> mutator shift
+    //     // TODO: Put rebalancing logic in here as well; this will become the node equivalent of mergeArrays<'T>
 
     // Used in appendLeafWithGrowth, which creates the new path and then calls us to create a new "root" node above us, with us as the left
     override this.PushRootUp shift leafLen (newRight : Node) =
-        // Don't need shift or leafLen for ordinary nodesm only for RRBNodes
+        // Don't need shift or leafLen for ordinary nodes, only for RRBNodes
         NodeCreation.mkNode thread [|box this; box newRight|]
 
 [<StructuredFormatDisplay("SingletonNode({StringRepr})")>]
@@ -349,10 +349,17 @@ type RRBNode(thread, array, sizeTable : int[]) =
         let nextTreeIdx = if localIdx = 0 then treeIdx else treeIdx - sizeTable.[localIdx - 1]
         localIdx, child, nextTreeIdx
 
+    override this.EnsureEditable mutator =
+        if LanguagePrimitives.PhysicalEquality mutator thread  // Note that this is NOT "if mutator = thread"
+        then this :> Node
+        else RRBNode(mutator, Array.copy array, Array.copy sizeTable) :> Node
+
     override this.UpdatedSameSize mutator localIdx newChild =
+        let newNode = this.EnsureEditable mutator
+        newNode.Array.[localIdx] <- newChild
         RRBNode(thread, array |> Array.copyAndSet localIdx newChild, sizeTable) :> Node
 
-    override this.TreeSize shift = sizeTable |> Array.last
+    override this.TreeSize shift = sizeTable.[this.NodeSize - 1]
 
     override this.TwigSlotCount<'T>() =
         if array.Length = 0 then
@@ -373,31 +380,122 @@ type RRBNode(thread, array, sizeTable : int[]) =
         let sizeTable' = sizeTable |> Array.copyAndAppend (childSize + lastSizeTableEntry)
         NodeCreation.mkRRBNodeWithSizeTable thread shift array' sizeTable'
 
-    override this.RemoveLastLeaf<'T> mutator shift =
-        if shift <= 0 then
-            failwith "Deliberate failure at shift 0 or less"  // This proves that we're not actually using this code branch
-            // TODO: Keep that deliberate failure line in here until we're *completely* finished with refactoring, in case we end up needing
-            // to use removeLastLeaf for anything else. Then once we're *completely* done refactoring, delete this unnecessary if branch.
-        elif shift <= Literals.blockSizeShift then
-            // Children of this node are leaves
-            // TODO: Is there some way we could not have this code block duplicated?
-            if array.Length = 0 then Array.empty, this :> Node else
-            let leaf = (Array.last array) :?> 'T []
-            let newNode = NodeCreation.mkRRBNodeWithSizeTable thread shift (Array.copyAndPop array) (Array.copyAndPop sizeTable)
-            leaf, newNode
-        else
-            // Children are nodes, not leaves -- so we're going to take the rightmost and dig down into it.
-            // And if the recursive call returns an empty node, we'll strip the entry off our node.
-            let leaf, child' = (Array.last array :?> Node).RemoveLastLeaf<'T> mutator (RRBMath.down shift)
-            let newNode =
-                if child'.Array.Length = 0
-                then array |> Array.copyAndPop |> NodeCreation.mkRRBNode<'T> thread shift
-                else array |> Array.copyAndSetLast (box child') |> NodeCreation.mkRRBNode<'T> thread shift
-            leaf, newNode
+    override this.RemoveLastChild mutator shift =
+        let array' = array |> Array.copyAndPop
+        let sizeTable' = sizeTable |> Array.copyAndPop
+        NodeCreation.mkRRBNodeWithSizeTable mutator shift array' sizeTable'
+
+    // COMMENTED OUT 2018-03-28 by RM because I don't think we need this override any more, now that we've done RemoveLastChild correctly.
+    // If that's truly the case (after implementing the expanded-node versions), then make this function no longer be abstract/virtual
+    // override this.RemoveLastLeaf<'T> mutator shift =
+    //     if shift <= 0 then
+    //         failwith "Deliberate failure at shift 0 or less"  // This proves that we're not actually using this code branch
+    //         // TODO: Keep that deliberate failure line in here until we're *completely* finished with refactoring, in case we end up needing
+    //         // to use removeLastLeaf for anything else. Then once we're *completely* done refactoring, delete this unnecessary if branch.
+    //     elif shift <= Literals.blockSizeShift then
+    //         // Children of this node are leaves
+    //         // TODO: Is there some way we could not have this code block duplicated?
+    //         if array.Length = 0 then Array.empty, this :> Node else
+    //         let leaf = (array.[this.NodeSize - 1]) :?> 'T []
+    //         let newNode = this.RemoveLastChild<'T> mutator shift
+    //         leaf, newNode
+    //     else
+    //         // Children are nodes, not leaves -- so we're going to take the rightmost and dig down into it.
+    //         // And if the recursive call returns an empty node, we'll strip the entry off our node.
+    //         let leaf, child' = (array.[this.NodeSize - 1] :?> Node).RemoveLastLeaf<'T> mutator (RRBMath.down shift)
+    //         let newNode =
+    //             if child'.Array.Length = 0
+    //             then this.RemoveLastChild<'T> mutator shift
+    //             else array |> Array.copyAndSetLast (box child') |> NodeCreation.mkRRBNode<'T> thread shift
+    //         leaf, newNode
 
     override this.PushRootUp shift leafLen (newRight : Node) =
         let oldSize = Array.last sizeTable
         NodeCreation.mkRRBNodeWithSizeTable thread (RRBMath.up shift) [|box this; box newRight|] [|oldSize; oldSize + leafLen|]
+
+
+
+[<StructuredFormatDisplay("ExpandedNode({StringRepr})")>]
+type ExpandedRRBNode(thread : Thread ref, realLength : int, array : obj[], sizeTable : int[]) =
+    inherit RRBNode(thread, array, sizeTable)
+    let thread = thread
+    member val CurrentLength = realLength with get, set
+    new() = ExpandedRRBNode(ref null, 0, Array.zeroCreate Literals.blockSize, Array.zeroCreate Literals.blockSize)
+    static member InCurrentThread() = Node(ref Thread.CurrentThread, Array.zeroCreate Literals.blockSize)
+    member this.Array = array
+    member this.Thread = thread
+    member this.SetThread t = thread := t
+    member this.StringRepr = sprintf "%A" array
+
+    override this.NodeSize = this.CurrentLength
+
+    override this.EnsureEditable mutator =
+        if LanguagePrimitives.PhysicalEquality mutator thread  // Note that this is NOT "if mutator = thread"
+        then this :> Node
+        else ExpandedRRBNode(mutator, this.CurrentLength, Array.copy array, Array.copy sizeTable) :> Node
+
+    override this.UpdatedSameSize mutator localIdx newChild = Node(thread, array |> Array.copyAndSet localIdx newChild)
+
+    member this.UpdatedTree mutator shift treeIdx (newItem : 'T) =
+        // // TODO: Perhaps this belongs on the tree class instead of the node class?
+        if shift <= Literals.blockSizeShift then
+            let localIdx, child, nextIdx = this.IndexesAndChild shift treeIdx
+            let newLeaf = (child :?> 'T[]) |> Array.copyAndSet nextIdx newItem |> box
+            this.UpdatedSameSize mutator localIdx newLeaf
+        else
+            let localIdx, child, nextIdx = this.IndexesAndChild shift treeIdx
+            let newNode = (child :?> Node).UpdatedTree mutator (RRBMath.down shift) nextIdx newItem
+            this.UpdatedSameSize mutator localIdx newNode
+
+    override this.UpdatedNewSize<'T> mutator shift localIdx newChild childSize =
+        // // Note: childSize should be *tree* size, not *node* size. In other words, something appropriate for the size table at this level.
+        // if childSize = (1 <<< shift) then
+        //     // This is still a full node
+        //     NodeCreation.mkNode thread (array |> Array.copyAndSet localIdx newChild)
+        // else
+        //     // This has become an RRB node, so recalculate the size table via mkRRBNode
+        //     array |> Array.copyAndSet localIdx newChild |> NodeCreation.mkRRBNode<'T> thread shift
+        let oldSize = if localIdx = 0 then sizeTable.[0] else sizeTable.[localIdx] - sizeTable.[localIdx - 1]
+        let sizeDiff = childSize - oldSize
+        let newNode = this.EnsureEditable mutator :?> RRBNode
+        newNode.Array.[localIdx] <- newChild
+        if sizeDiff <> 0 then
+            for i = localIdx to this.NodeSize - 1 do
+                newNode.SizeTable.[i] <- newNode.SizeTable.[i] + sizeDiff
+        newNode :> Node
+
+    override this.TwigSlotCount<'T>() =
+        if this.CurrentLength = 0 then 0 else sizeTable.[this.CurrentLength - 1]
+
+    // Assumes that the node does *not* yet have blockSize children; verifying that is the job of the caller function
+    override this.AppendChild<'T> mutator shift newChild childSize =
+        let lastSizeTableEntry = if this.NodeSize = 0 then 0 else sizeTable.[this.NodeSize - 1]
+        let newNode = this.EnsureEditable mutator :?> ExpandedRRBNode
+        newNode.Array.[newNode.CurrentLength] <- newChild
+        newNode.SizeTable.[newNode.CurrentLength] <- lastSizeTableEntry + childSize
+        newNode.CurrentLength <- newNode.CurrentLength + 1
+        newNode :> Node
+
+    override this.RemoveLastChild<'T> mutator shift =
+        let newNode = this.EnsureEditable mutator :?> ExpandedRRBNode
+        newNode.CurrentLength <- newNode.CurrentLength - 1
+        newNode.Array.[newNode.CurrentLength] <- null
+        newNode.SizeTable.[newNode.CurrentLength] <- 0
+        newNode :> Node
+
+    // Used in appendLeafWithGrowth, which creates the new path and then calls us to create a new "root" node above us, with us as the left
+    override this.PushRootUp shift leafLen (newRight : Node) =
+        // // Don't need shift or leafLen for ordinary nodes, only for RRBNodes
+        // NodeCreation.mkNode thread [|box this; box newRight|]
+        let oldSize = sizeTable.[this.NodeSize - 1]
+        // This is an actual use case for InCurrentThread()... so write it correctly, then use it here. TODO
+        let newRoot = ExpandedRRBNode(thread, 2, Array.zeroCreate Literals.blockSize, Array.zeroCreate Literals.blockSize)
+        newRoot.Array.[0] <- box this
+        newRoot.Array.[1] <- box newRight
+        newRoot.SizeTable.[0] <- oldSize
+        newRoot.SizeTable.[1] <- oldSize + leafLen
+        newRoot :> Node
+
 
 module RRBHelpers =
     open RRBMath
@@ -435,7 +533,7 @@ module RRBHelpers =
             getItemFromLeaf<'T> (down shift) nextLvlIdx (child :?> Node)
 
     // Handy shorthand
-    let inline nodeSize (node:obj) = (node :?> Node).Array.Length
+    let inline nodeSize (node:obj) = (node :?> Node).NodeSize
 
     // slotCount and twigSlotCount are used in the rebalance function (and therefore in insertion, concatenation, etc.)
     let inline slotCount nodes = nodes |> Array.sumBy nodeSize
@@ -812,7 +910,7 @@ module RRBHelpers =
                 let overstuffedEntries = arr |> Array.copyAndInsertAt (localIdx + 1) newSibling
                 overstuffedEntries.[localIdx] <- child'
 
-                let slotCnt = overstuffedEntries |> Array.sumBy (fun n -> (n :?> Node).Array.Length)
+                let slotCnt = overstuffedEntries |> Array.sumBy (fun n -> (n :?> Node).NodeSize)
                 let nodeCnt = overstuffedEntries.Length
                 if rebalanceNeeded slotCnt nodeCnt then
                     SimpleInsertion (rebalance<'T> thread shift overstuffedEntries)
@@ -879,7 +977,7 @@ module RRBHelpers =
         else
             let result = removeFromTree<'T> thread (down shift) shouldCheckForRebalancing nextLvlIdx (child :?> Node) |> NodeCreation.mkRRBNode<'T> thread (down shift)
             // TODO: Can probably leverage mkRRBNodeWithSizeTable here for greater efficiency: subtract 1 from size table and we have it
-            let resultLen = Array.length result.Array
+            let resultLen = nodeSize result
             if resultLen <= 0 then
                 // Child vanished
                 Array.copyAndRemoveAt childIdx thisNode.Array
@@ -1527,6 +1625,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
             match lastTwig with
             | :? RRBNode -> this :> RRBVector<'T>  // Only need to shift nodes from tail if the last twig was a full node
             | _ ->
+                // TODO: Implement this on the nodes themselves
                 let tail = this.Tail
                 let lastLeaf = (Array.last lastTwig.Array) :?> 'T []
                 let shiftCount = Literals.blockSize - lastLeaf.Length
@@ -1534,7 +1633,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
                     this :> RRBVector<'T>
                 elif shiftCount >= tail.Length then
                     // Would shift everything out of the tail, so instead we'll promote a new tail
-                    let lastLeaf, root' = root.RemoveLastLeaf thread shift
+                    let lastLeaf, root' = root.RemoveLastLeaf<'T> thread shift
                     let tail' = tail |> Array.append lastLeaf
                     // In certain rare cases, we might need to recurse. For example, the vector [M 5] [5] T1 will become [M 5] T6, which then needs to become M T11.
                     RRBTree<'T>(this.Length, shift, root', tail').AdjustTree()
@@ -1545,7 +1644,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
                     RRBTree<'T>(this.Length, shift, root', tail') :> RRBVector<'T>
 
     static member internal promoteTail thread shift root newLength =
-        let newTail, newRoot = root.RemoveLastLeaf thread shift
+        let newTail, newRoot = root.RemoveLastLeaf<'T> thread shift
         RRBTree<'T>(newLength, shift, newRoot, newTail).AdjustTree()
 
     interface IRRBInternal<'T> with
