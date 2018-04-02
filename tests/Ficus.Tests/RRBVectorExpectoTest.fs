@@ -1003,7 +1003,7 @@ let insertTests =
         RRBVectorProps.checkProperties v' (sprintf "Vector with insertion at %d" i)
         Expect.sequenceEqual (v' |> RRBVector.toSeq) (expected |> Array.toSeq) "insert did not insert the right value"
     )
-    testProp "insert into random vectors" (fun (vec : RRBVector<int>) (idx : int) ->
+    testPropMed "insert into random vectors" (fun (vec : RRBVector<int>) (idx : int) ->
         let i = (abs idx) % (RRBVector.length vec + 1)
         let expected = vec |> RRBVector.toArray |> Array.copyAndInsertAt i 512
         let vec' = vec |> RRBVector.insert i 512
