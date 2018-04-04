@@ -165,8 +165,10 @@ let debugBigTest4 () =
 
 let debugJoinTest () =
         // Already a unit test called "Joining vectors where the left tree is taller than the right produces valid results"
-        let vL = RRBVecGen.treeReprStrToVec "[M*M]*3 TM/4"
-        let vR = RRBVecGen.treeReprStrToVec "M*M/2 TM"
+        // let vL = RRBVecGen.treeReprStrToVec "[M*M]*3 TM/4"
+        // let vR = RRBVecGen.treeReprStrToVec "M*M/2 TM"
+        let vL = RRBVecGen.treeReprStrToVec "[M*M] [M*M] [M*M] [M*20] TM"
+        let vR = RRBVecGen.treeReprStrToVec "M M M M 5 TM-3"
         testProperties vL "Left half of merge"
         testProperties vR "Right half of merge"
         let joined = RRBVector.append vL vR
