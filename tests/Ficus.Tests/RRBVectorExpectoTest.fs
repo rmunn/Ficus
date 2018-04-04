@@ -1324,16 +1324,17 @@ let apiTests =
         Expect.isFasterThan calcActual calcExpected "Array.insertAndSplitEvenly should be faster than the intermediate-array version"
   ] *)
 let nodeVecGenerationTests =
+  // Not sure these are worth keeping any more. TODO: Get rid of these if they're duplicates
   testList "Generate vectors from various sources" [
     testProp "Tree from array" <| fun (arr:int[]) ->
         let expected = arr
-        let actual = RRBHelpers.buildTree (ref null) arr
+        let actual = RRBVector.ofArray arr
         Expect.sequenceEqual (RRBVector.toSeq actual) expected "Tree did not get built properly from array"
 
     testProp "Tree from seq" <| fun (arr:int[]) ->
         let expected = arr
         let s = arr |> Seq.ofArray
-        let actual = s |> RRBHelpers.buildTreeOfSeqWithKnownSize (ref null) arr.Length
+        let actual = s |> RRBVector.ofSeq
         Expect.sequenceEqual (RRBVector.toSeq actual) expected "Tree did not get built properly from array"
   ]
 

@@ -1112,68 +1112,6 @@ module RRBHelpers =
     // BUILDING TREES from various sources (arrays, sequences of known size, etc) in an efficient way
     // ==============
 
-    // TODO: Replace with transients once they're implemented and tested
-
-    let rec buildRoot thread shift nodes =
-        let inputLen = Array.length nodes
-        if inputLen <= Literals.blockSize then
-            shift, nodes |> NodeCreation.mkNode thread
-        else
-            let nodeCount = inputLen >>> Literals.blockSizeShift
-            let leftovers = inputLen - (nodeCount <<< Literals.blockSizeShift)
-            let resultLen = if leftovers <= 0 then nodeCount else nodeCount + 1
-            let result = Array.zeroCreate resultLen
-            for i=0 to nodeCount - 1 do
-                result.[i] <- Array.sub nodes (i <<< Literals.blockSizeShift) Literals.blockSize |> NodeCreation.mkNode thread |> box
-            if leftovers > 0 then
-                result.[nodeCount] <- Array.sub nodes (nodeCount <<< Literals.blockSizeShift) leftovers |> NodeCreation.mkNode thread |> box
-            buildRoot thread (up shift) result
-
-    let buildTree thread (items : 'T[]) =
-        let itemsLen = Array.length items
-        if itemsLen <= Literals.blockSize then
-            RRBSapling<'T>(itemsLen, 0, Array.empty, items, 0) :> RRBVector<'T>
-        elif itemsLen <= Literals.blockSize * 2 then
-            let root,tail = items |> Array.splitAt Literals.blockSize
-            RRBSapling<'T>(itemsLen, 0, root, tail, Literals.blockSize) :> RRBVector<'T>
-        else
-            let twigCount = (itemsLen - 1) >>> Literals.blockSizeShift
-            let tailOffset = twigCount <<< Literals.blockSizeShift
-            let remaining = itemsLen - tailOffset
-            let twigArray = Array.zeroCreate twigCount
-            for i=0 to twigCount-1 do
-                twigArray.[i] <- Array.sub items (i <<< Literals.blockSizeShift) Literals.blockSize |> box
-            let tail = Array.sub items tailOffset remaining
-            let shift, root = buildRoot thread Literals.blockSizeShift twigArray
-            RRBTree<'T>(itemsLen, shift, root, tail, tailOffset) :> RRBVector<'T>
-
-    let rec buildRootOfSeqWithKnownSize thread (shift : int) (children : seq<obj>) (inputLen : int) =
-        if inputLen <= Literals.blockSize then
-            shift, children |> seqToArrayKnownSize inputLen |> NodeCreation.mkNode thread
-        else
-            let nodeCount = inputLen >>> Literals.blockSizeShift
-            let leftovers = inputLen - (nodeCount <<< Literals.blockSizeShift)
-            let resultLen = if leftovers <= 0 then nodeCount else nodeCount + 1
-            let result = children |> Seq.chunkBySize Literals.blockSize |> Seq.map (NodeCreation.mkNode thread >> box)
-            buildRootOfSeqWithKnownSize thread (up shift) result resultLen
-
-    let buildTreeOfSeqWithKnownSize thread itemsLen (items : seq<'T>) =
-        if itemsLen <= Literals.blockSize then
-            RRBSapling<'T>(itemsLen, 0, Array.empty, items |> seqToArrayKnownSize itemsLen, 0) :> RRBVector<'T>
-        elif itemsLen <= Literals.blockSize * 2 then
-            let rootSeq, tailSeq = items |> seqSplitAt Literals.blockSize
-            let root = rootSeq |> seqToArrayKnownSize Literals.blockSize
-            let tail = tailSeq |> seqToArrayKnownSize (itemsLen - Literals.blockSize)
-            RRBSapling<'T>(itemsLen, 0, root, tail, Literals.blockSize) :> RRBVector<'T>
-        else
-            let leafCount = (itemsLen - 1) >>> Literals.blockSizeShift
-            let tailOffset = leafCount <<< Literals.blockSizeShift
-            let tailCount = itemsLen - tailOffset
-            let treeItems, tailItems = items |> seqSplitAt tailOffset
-            let leaves = treeItems |> Seq.chunkBySize Literals.blockSize |> Seq.map box
-            let shift, root = buildRootOfSeqWithKnownSize thread Literals.blockSizeShift leaves (tailOffset >>> Literals.blockSizeShift)
-            RRBTree<'T>(itemsLen, shift, root, tailItems |> seqToArrayKnownSize tailCount, tailOffset) :> RRBVector<'T>
-
     // Helper function for RRBVector.Append (optimized construction of vector from two "saplings" - root+tail vectors)
     let buildTreeFromTwoSaplings thread (aRoot : 'T[]) (aTail : 'T[]) (bRoot : 'T[]) (bTail : 'T[]) =
         if aRoot.Length = Literals.blockSize then
@@ -1270,6 +1208,7 @@ type RRBSapling<'T> internal (count, shift : int, root : 'T [], tail : 'T [], ta
     let hashCode = ref None
     let thread = ref null  // TOCONVERT: When transients are implemented, this needs to change in the transient. Maybe there's a GetThread() method/field in all vectors.
     static member EmptyTree : RRBSapling<'T> = RRBSapling<'T>(0,0,Array.empty,Array.empty,0)
+    static member Singleton (item : 'T) : RRBSapling<'T> = RRBSapling<'T>(1,0,Array.empty,Array.singleton item,0)
 
     override this.GetHashCode() =
         // This MUST follow the same algorithm as the GetHashCode() method from PersistentVector so that the Equals() logic will be valid
@@ -1836,56 +1775,14 @@ and [<StructuredFormatDisplay("{StringRepr}")>] TransientRRBTree<'T> internal (c
 
     let hashCode = ref None
 
-    new() = TransientRRBTree<'T>(0, 0, ExpandedNode.InCurrentThread(), Array.zeroCreate Literals.blockSize, 0)
+    // TODO: Why does uncommenting this constructor cause this.Persistent(), below, to produce a type error?
+    // new() = TransientRRBTree<'T>(0, 0, ExpandedNode.InCurrentThread(), Array.zeroCreate<'T> Literals.blockSize, 0)
 
-    member this.Length = count
-    member internal this.Shift = shift
-    member internal this.Root = root
-    member internal this.Tail = tail
-    member internal this.TailOffset = tailOffset
-    member internal this.Thread = root.Thread
-
-    // static member Empty() : RRBTree<'T> = RRBTree<'T>(0,0,RRBHelpers.emptyNode,Array.empty,0)
-    member this.IsEmpty() = count = 0
-
-    override this.ToString() =
-        sprintf "TransientRRBTree<length=%d,shift=%d,tailOffset=%d,root=%A,tail=%A>" count shift tailOffset root tail
-
-    member this.StringRepr = this.ToString()
-
-    member this.Push item =
-        let tailLen = count - tailOffset
-        if tailLen < Literals.blockSize then
-            // Easy: just add new item in tail and we're done
-            tail.[tailLen - 1] <- item
-        else
-            let root', shift' = RRBHelpers.pushTailDown this.Thread shift tail root  // This does all the work
-            root <- root'
-            shift <- shift'
-        count <- count + 1
-        this
-
-    member this.Update idx newItem =
-        let idx = if idx < 0 then idx + count else idx
-        if idx >= count then
-            invalidArg "idx" "Tried to update item past the end of the vector"
-        if idx >= tailOffset then
-            tail.[idx - tailOffset] <- newItem
-            this
-        else
-            let newRoot = root.UpdatedTree this.Thread shift idx newItem
-            if not (LanguagePrimitives.PhysicalEquality newRoot root) then
-                root <- newRoot
-            this
-
-    member this.Persistent() =
-        // Why does the following have a type error???
+    member this.Persistent() : RRBVector<'T> =
         if tailOffset = 0 then
-            let tree = RRBSapling<'T>(count, 0, Array.empty<'T>, tail, tailOffset)
-            tree :> RRBVector<'T>
+            RRBSapling<'T>(count, 0, [||], tail, tailOffset) :> RRBVector<'T>
         elif root.NodeSize = 1 then
-            let tree = RRBSapling<'T>(count, 0, root.Array.[0] :?> 'T[], tail, tailOffset)
-            tree :> RRBVector<'T>
+            RRBSapling<'T>(count, 0, root.Array.[0] :?> 'T[], tail, tailOffset) :> RRBVector<'T>
         else
             root.SetThread null
             root <- root.Shrink()
@@ -1897,14 +1794,52 @@ and [<StructuredFormatDisplay("{StringRepr}")>] TransientRRBTree<'T> internal (c
                 curNode.Array.[lastIdx] <- box lastChild
                 curNode <- lastChild
                 curShift <- (RRBMath.down shift)
-            let tree = RRBTree<'T>(count, shift, root, tail, tailOffset)
-            tree :> RRBVector<'T>
+            RRBTree<'T>(count, shift, root, tail, tailOffset) :> RRBVector<'T>
 
     member this.GetItem idx =
         if idx < tailOffset
         then RRBHelpers.getItemFromLeaf<'T> shift idx root
         else tail.[idx - tailOffset]
 
+    member this.Length = count
+    member internal this.Shift = shift
+    member internal this.Root = root
+    member internal this.Tail = tail
+    member internal this.TailOffset = tailOffset
+    member internal this.Thread = root.Thread
+
+    static member Empty<'T>() = TransientRRBTree<'T>(0, 0, ExpandedNode.InCurrentThread(), Array.zeroCreate<'T> Literals.blockSize, 0)
+    member this.IsEmpty() = count = 0
+
+    override this.ToString() =
+        sprintf "TransientRRBTree<length=%d,shift=%d,tailOffset=%d,root=%A,tail=%A>" count shift tailOffset root tail
+
+    member this.StringRepr = this.ToString()
+
+    member this.Push (item : 'T) =
+        let tailLen = count - tailOffset
+        if tailLen < Literals.blockSize then
+            // Easy: just add new item in tail and we're done
+            tail.[tailLen - 1] <- item
+        else
+            let root', shift' = RRBHelpers.pushTailDown this.Thread shift tail root  // This does all the work
+            root <- root'
+            shift <- shift'
+        count <- count + 1
+        this
+
+    member this.Update (idx : int) (newItem : 'T) =
+        let idx = if idx < 0 then idx + count else idx
+        if idx >= count then
+            invalidArg "idx" "Tried to update item past the end of the vector"
+        if idx >= tailOffset then
+            tail.[idx - tailOffset] <- newItem
+            this
+        else
+            let newRoot = root.UpdatedTree this.Thread shift idx newItem
+            if not (LanguagePrimitives.PhysicalEquality newRoot root) then
+                root <- newRoot
+            this
 
 (* Type error above is:
 A use of the function '.ctor' does not match a type inferred elsewhere. The inferred type of the function is    int * int * 'T [] * 'T [] * int -> RRBSapling<'T>.    The type of the function required at this point of use is    int * int * 'T0 [] * 'T0 [] * int -> RRBSapling<'T0>    This error may be due to limitations associated with generic recursion within a 'let rec' collection or within a group of classes. Consider giving a full type signature for the targets of recursive calls including type annotations for both argument and return types.
@@ -1938,61 +1873,97 @@ module RRBVector =
 
     let inline toSeq (vec : RRBVector<'T>) = vec :> System.Collections.Generic.IEnumerable<'T>
     let inline toList (vec : RRBVector<'T>) = vec |> List.ofSeq
-    let inline ofArray (a : 'T[]) = RRBHelpers.buildTree (ref null) a
-    let inline ofSeq (s : seq<'T>) = s |> Array.ofSeq |> RRBHelpers.buildTree (ref null)  // TODO: Implement transient vectors so this can be more efficient
-    let inline ofList (l : 'T list) = l |> Seq.ofList |> ofSeq
-    let inline ofPersistentVector (vec : PersistentVector<'T>) = vec |> ofSeq  // TODO: Get rid of this and replace its uses with transients
+    let ofSeq (s : seq<'T>) =
+        let mutable transient = TransientRRBTree.Empty<'T>()
+        for item in s do
+            transient <- transient.Push item
+        transient.Persistent()
+    let inline ofArray (a : 'T[]) = a |> ofSeq
+    let inline ofList (l : 'T list) = l |> ofSeq
+
     // TODO: Try improving average and averageBy by using iterLeafArrays(), summing up each array, and then dividing by count at the end. MIGHT be faster than Seq.average.
-    let inline average (vec : RRBVector<'T>) = vec |> toSeq |> Seq.average
-    let inline averageBy f (vec : RRBVector<'T>) = vec |> toSeq |> Seq.averageBy f
+    let inline average (vec : RRBVector<'T>) = vec |> Seq.average
+    let inline averageBy f (vec : RRBVector<'T>) = vec |> Seq.averageBy f
     let choose (chooser : 'T -> 'U option) (vec : RRBVector<'T>) : RRBVector<'U> =
-        let mutable transient = TransientVector<'U>()
+        let mutable transient = TransientRRBTree.Empty<'U>()
         for item in vec do
             match chooser item with
             | None -> ()
-            | Some value -> transient <- transient.conj value
-        transient.persistent() |> ofPersistentVector
+            | Some value -> transient <- transient.Push value
+        transient.Persistent()
+    // Alternate version. TODO: Benchmark
+    let chooseAlt (chooser : 'T -> 'U option) (vec : RRBVector<'T>) : RRBVector<'U> =
+        vec |> Seq.choose chooser |> ofSeq
 
     let chunkBySize chunkSize (vec : RRBVector<'T>) =
-        let mutable transient = TransientVector()
+        let mutable transient = TransientRRBTree.Empty()
         let mutable remaining = vec
         while remaining.Length > 0 do
-            transient <- transient.conj (remaining.Take chunkSize)
+            transient <- transient.Push (remaining.Take chunkSize)
             remaining <- remaining.Skip chunkSize
-        transient.persistent() |> ofPersistentVector
+        transient.Persistent()
 
     let concat (vecs : seq<RRBVector<'T>>) =
-        // TODO: Implement transient RRBVectors so this will be faster (no need to build and throw away so many intermediate result vectors)
+        // TODO: Implement concatenation transient RRBVectors so this will be faster (no need to build and throw away so many intermediate result vectors)
+        // TODO: Actually, benchmark that and see if it really is all that much faster, considering the complications inherent in concatenating transients
         let mutable result = RRBSapling<'T>.EmptyTree :> RRBVector<'T>
         for vec in vecs do
             result <- result.Append vec
         result
 
-    let inline collect (f : 'T -> RRBVector<'T>) (vec : RRBVector<'T>) = vec |> Seq.map f |> concat
+    let inline collect (f : 'T -> RRBVector<'T>) (vec : RRBVector<'T>) =
+        // TODO: Benchmark the following two options, because I have no idea which is slower.
+        // Option 1, the merging version
+        vec |> Seq.map f |> concat
+
+        // Option 2, the one-at-a-time version
+        // let mutable transient = TransientRRBTree.Empty()
+        // for src in vec do
+        //     for item in f src do
+        //         transient <- transient.Push item
+        // transient.Persistent()
+
     let inline compareWith f (vec1 : RRBVector<'T>) (vec2 : RRBVector<'T>) = (vec1, vec2) ||> Seq.compareWith f
-    let inline countBy f (vec : RRBVector<'T>) = vec |> toArray |> Array.countBy f |> ofArray  // TODO: Measure whether this is faster than using Seq.countBy
+    let inline countBy f (vec : RRBVector<'T>) = vec |> Seq.countBy f |> ofSeq
     let inline contains item (vec : RRBVector<'T>) = vec |> Seq.contains item
     let inline distinct (vec : RRBVector<'T>) = vec |> Seq.distinct |> ofSeq
     let inline distinctBy f (vec : RRBVector<'T>) = vec |> Seq.distinctBy f |> ofSeq
     let inline empty<'T> = RRBSapling<'T>.EmptyTree :> RRBVector<'T>
     let exactlyOne (vec : RRBVector<'T>) =
         if vec.Length <> 1 then invalidArg "vec" <| sprintf "exactlyOne called on a vector of %d items (requires a vector of exactly 1 item)" vec.Length
-        match vec with
-        | :? RRBSapling<'T> as vec -> vec.Tail.[0]
-        | :? RRBTree<'T> as vec -> vec.Tail.[0]
+        vec.Peek()
+    let except (vec : RRBVector<'T>) (excludedVec : RRBVector<'T>) =
+        let excludedSet = System.Collections.Generic.HashSet<'T>(excludedVec)
+        let mutable transient = TransientRRBTree.Empty<'T>()
+        for item in vec do
+            if not (excludedSet.Contains item) then transient <- transient.Push item
+        transient.Persistent()
     let inline exists f (vec : RRBVector<'T>) = vec |> Seq.exists f
     let inline exists2 f (vec1 : RRBVector<'T>) (vec2 : RRBVector<'U>) = (vec1, vec2) ||> Seq.exists2 f
     let filter pred (vec : RRBVector<'T>) =
-        let mutable transient = TransientVector<'T>()
+        let mutable transient = TransientRRBTree.Empty<'T>()
         for item in vec do
-            if pred item then transient <- transient.conj item
-        transient.persistent() |> ofPersistentVector
-    let except (vec : RRBVector<'T>) (excludedVec : RRBVector<'T>) =
-        let excludedSet = System.Collections.Generic.HashSet<'T>(excludedVec)
-        let mutable transient = TransientVector<'T>()
+            if pred item then transient <- transient.Push item
+        transient.Persistent()
+    let filteri pred (vec : RRBVector<'T>) =
+        let mutable transient = TransientRRBTree.Empty<'T>()
+        let mutable i = 0
         for item in vec do
-            if not (excludedSet.Contains item) then transient <- transient.conj item
-        transient.persistent() |> ofPersistentVector
+            if pred i item then transient <- transient.Push item
+            i <- i + 1
+        transient.Persistent()
+    let filter2 pred (vec1 : RRBVector<'T>) (vec2 : RRBVector<'T>) =
+        let mutable transient = TransientRRBTree.Empty<'T>()
+        for item1, item2 in Seq.zip vec1 vec2  do
+            if pred item1 item2 then transient <- transient.Push item
+        transient.Persistent()
+    let filteri2 pred (vec1 : RRBVector<'T>) (vec2 : RRBVector<'T>) =
+        let mutable transient = TransientRRBTree.Empty<'T>()
+        let mutable i = 0
+        for item1, item2 in Seq.zip vec1 vec2  do
+            if pred i item1 item2 then transient <- transient.Push item
+            i <- i + 1
+        transient.Persistent()
     let inline find f (vec : RRBVector<'T>) = vec |> Seq.find f
     let inline findBack f (vec : RRBVector<'T>) = vec.RevIterItems() |> Seq.find f
     let inline findIndex f (vec : RRBVector<'T>) = vec |> Seq.findIndex f
@@ -2007,10 +1978,25 @@ module RRBVector =
     let head (vec : RRBVector<'T>) =
         if vec.Length = 0 then invalidArg "vec" "Can't get head of empty vector"
         vec.[0]
-    let inline indexed (vec : RRBVector<'T>) = vec |> Seq.indexed |> RRBHelpers.buildTreeOfSeqWithKnownSize (ref null) vec.Length
-    let inline init size f = Seq.init size f |> RRBHelpers.buildTreeOfSeqWithKnownSize (ref null) size
-    let inline isEmpty (vec : RRBVector<'T>) = vec.Length = 0
-    let inline item idx (vec : RRBVector<'T>) = vec.[idx]
+
+    let indexed (vec : RRBVector<'T>) =
+        // TODO: Benchmark the ofSeq version vs. the "unrolled" one below
+        vec |> Seq.indexed |> ofSeq
+
+        // "Unrolled" version, which may or may not be faster
+        // let mutable transient = TransientRRBTree.Empty<int * 'T>()
+        // let mutable i = 0
+        // for item in vec do
+        //     transient <- transient.Push (i, item)
+        //     i <- i + 1
+        // transient.Persistent()
+
+    //  vec |> Seq.indexed |> RRBHelpers.buildTreeOfSeqWithKnownSize (ref null) vec.Length
+    let inline init size f = Seq.init size f |> ofSeq
+    let inline isEmpty (vec : RRBVector<'T>) = vec.IsEmpty()
+    // Marking the `item` function as "inline" gets error FS1114: The value 'Ficus.RRBVector.RRBVectorModule.item' was marked inline but was not bound in the optimization environment
+    // What does that mean?
+    let item idx (vec : RRBVector<'T>) = vec.[idx]
     let inline iter f (vec : RRBVector<'T>) = vec |> Seq.iter f
     let inline iter2 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) = (vec1, vec2) ||> Seq.iter2 f
     let inline iteri f (vec : RRBVector<'T>) = vec |> Seq.iteri f
@@ -2019,49 +2005,43 @@ module RRBVector =
         if vec.Length = 0 then invalidArg "vec" "Can't get last item of empty vector"
         vec.[vec.Length - 1]
     let inline length (vec : RRBVector<'T>) = vec.Length
-    let inline map f (vec : RRBVector<'T>) = vec |> Seq.map f |> RRBHelpers.buildTreeOfSeqWithKnownSize (ref null) vec.Length
-    let inline map2 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) =
-        let minLength = Operators.min vec1.Length vec2.Length
-        (vec1, vec2) ||> Seq.map2 f |> RRBHelpers.buildTreeOfSeqWithKnownSize (ref null) minLength
-    let inline map3 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) (vec3 : RRBVector<'T3>) =
-        let minLength = Operators.min (Operators.min vec1.Length vec2.Length) vec3.Length
-        (vec1, vec2, vec3) |||> Seq.map3 f |> RRBHelpers.buildTreeOfSeqWithKnownSize (ref null) minLength
-    let inline mapi f (vec : RRBVector<'T>) = vec |> Seq.mapi f |> RRBHelpers.buildTreeOfSeqWithKnownSize (ref null) vec.Length
-    let inline mapi2 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) =
-        let minLength = Operators.min vec1.Length vec2.Length
-        (vec1, vec2) ||> Seq.mapi2 f |> RRBHelpers.buildTreeOfSeqWithKnownSize (ref null) minLength
+    let inline map f (vec : RRBVector<'T>) = Seq.map f vec |> ofSeq
+    let inline map2 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) = Seq.map2 f vec1 vec2 |> ofSeq
+    let inline map3 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) (vec3 : RRBVector<'T3>) = Seq.map3 f vec1 vec2 vec3 |> ofSeq
+    let inline mapi f (vec : RRBVector<'T>) = Seq.mapi f vec |> ofSeq
+    let inline mapi2 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) = Seq.mapi2 f vec1 vec2 |> ofSeq
 
     let mapFold folder initState (vec : RRBVector<'T>) =
         if isEmpty vec then empty<'T> else
-        let mutable transient = TransientVector<'T>()
+        let mutable transient = TransientRRBTree.Empty<'T>()
         let mutable state = initState
         for item in vec do
             let item',state' = folder state item
-            transient <- transient.conj item'
+            transient <- transient.Push item'
             state <- state'
-        transient.persistent() |> ofPersistentVector
+        transient.Persistent()
 
     let mapFoldBack folder (vec : RRBVector<'T>) initState =
         if isEmpty vec then empty<'T> else
-        let mutable transient = TransientVector<'T>()
+        let mutable transient = TransientRRBTree.Empty<'T>()
         let mutable state = initState
         for item in vec.RevIterItems() do
             let item',state' = folder item state
-            transient <- transient.conj item'
+            transient <- transient.Push item'
             state <- state'
-        transient.persistent() |> ofPersistentVector
+        transient.Persistent()
 
     let inline max (vec : RRBVector<'T>) = vec |> Seq.max
     let inline maxBy f (vec : RRBVector<'T>) = vec |> Seq.maxBy f
     let inline min (vec : RRBVector<'T>) = vec |> Seq.min
     let inline minBy f (vec : RRBVector<'T>) = vec |> Seq.minBy f
-    let inline pairwise (vec : RRBVector<'T>) = vec |> Seq.pairwise |> RRBHelpers.buildTreeOfSeqWithKnownSize (ref null) (Operators.max 0 (vec.Length - 1)) :> RRBVector<_>
+    let inline pairwise (vec : RRBVector<'T>) = vec |> Seq.pairwise |> ofSeq
     let partition pred (vec : RRBVector<'T>) =
-        let mutable trueItems = TransientVector<'T>()
-        let mutable falseItems = TransientVector<'T>()
+        let mutable trueItems = TransientRRBTree.Empty<'T>()
+        let mutable falseItems = TransientRRBTree.Empty<'T>()
         for item in vec do
-            if pred item then trueItems <- trueItems.conj item else falseItems <- falseItems.conj item
-        trueItems.persistent() |> ofPersistentVector, falseItems.persistent() |> ofPersistentVector
+            if pred item then trueItems <- trueItems.Push item else falseItems <- falseItems.Push item
+        trueItems.Persistent(), falseItems.Persistent()
 
     let permute f (vec : RRBVector<'T>) = // TODO: Implement a better version once we have transient RRBVectors, so we don't have to build an intermediate array
         let arr = Array.zeroCreate vec.Length
@@ -2075,13 +2055,29 @@ module RRBVector =
     let inline pick f (vec : RRBVector<'T>) = vec |> Seq.pick f
     let inline reduce f (vec : RRBVector<'T>) = vec |> Seq.reduce f
     let reduceBack f (vec : RRBVector<'T>) = let f' = flip f in vec.RevIterItems() |> Seq.reduce f'
-    let inline replicate count value (vec : RRBVector<'T>) = // TODO: Implement this better once we have transient RRBVectors (or once we can do updates on transient PersistentVectors)
-        Array.create count value |> ofArray
-    let inline rev (vec : RRBVector<'T>) =  vec.RevIterItems() |> RRBHelpers.buildTreeOfSeqWithKnownSize (ref null) vec.Length
-    let inline scan f initState (vec : RRBVector<'T>) = vec |> Seq.scan f initState |> RRBHelpers.buildTreeOfSeqWithKnownSize (ref null) (vec.Length + 1)
-    let scanBack initState f (vec : RRBVector<'T>) = let f' = flip f in vec.RevIterItems() |> Seq.scan f' initState |> RRBHelpers.buildTreeOfSeqWithKnownSize (ref null) (vec.Length + 1)
-    // TODO: Why does this cause a type error?
-    // let singleton (item : 'T) = RRBSapling<'T>(1, 0, Array.empty<'T>, Array.singleton item, 0) :> RRBVector<'T>
+    let replicate count value = // TODO: Implement this better once we have transient RRBVectors (or once we can do updates on transient PersistentVectors)
+        if count = 0 then empty<'T> else
+        let mutable transient = TransientRRBTree.Empty<'T>()
+        for i = 1 to count do
+            transient <- transient.Push value
+        transient.Persistent()
+
+    let rev (vec : RRBVector<'T>) =
+        if isEmpty vec then empty<'T> else
+        let mutable transient = TransientRRBTree.Empty<'T>()
+        for item in vec.RevIterItems() do
+            transient <- transient.Push item
+        transient.Persistent()
+
+    let inline scan f initState (vec : RRBVector<'T>) = vec |> Seq.scan f initState |> ofSeq
+    let scanBack initState f (vec : RRBVector<'T>) =
+        let f' = flip f
+        vec.RevIterItems() |> Seq.scan f' initState |> ofSeq
+
+    // TODO: Why does this first version cause a type error, while the second one doesn't?
+    // let singleton<'T> (item : 'T) = RRBSapling<'T>(1, 0, [||], [|item|], 0) :> RRBVector<'T>
+    let singleton (item : 'T) = RRBSapling.Singleton item :> RRBVector<'T>
+
     let inline skip count (vec : RRBVector<'T>) = vec.Skip count
     let skipWhile pred (vec : RRBVector<'T>) = // TODO: Test this
         let rec loop pred n =
@@ -2089,6 +2085,7 @@ module RRBVector =
             elif pred vec.[n] then loop pred (n+1)
             else vec.Skip n
         loop pred 0
+    // TODO: Implement a sort-in-place algorithm (perhaps TimSort from Python?) on transients, then benchmark against this simple version of sorting
     let sort (vec : RRBVector<'T>) =
         let arr = toArray vec
         Array.sortInPlace arr
@@ -2139,23 +2136,24 @@ module RRBVector =
     let inline tryPick f (vec : RRBVector<'T>) = vec |> Seq.tryPick f
     let inline unfold f initState = Seq.unfold f initState |> ofSeq
     let unzip (vec : RRBVector<'T1 * 'T2>) =
-        let mutable vec1 = TransientVector<'T1>()
-        let mutable vec2 = TransientVector<'T2>()
+        let mutable vec1 = TransientRRBTree.Empty<'T1>()
+        let mutable vec2 = TransientRRBTree.Empty<'T2>()
         for a, b in vec do
-            vec1 <- vec1.conj a
-            vec2 <- vec2.conj b
-        vec1.persistent() |> ofPersistentVector, vec2.persistent() |> ofPersistentVector
+            vec1 <- vec1.Push a
+            vec2 <- vec2.Push b
+        vec1.Persistent(), vec2.Persistent()
     let unzip3 (vec : RRBVector<'T1 * 'T2 * 'T3>) =
-        let mutable vec1 = TransientVector<'T1>()
-        let mutable vec2 = TransientVector<'T2>()
-        let mutable vec3 = TransientVector<'T3>()
+        let mutable vec1 = TransientRRBTree.Empty<'T1>()
+        let mutable vec2 = TransientRRBTree.Empty<'T2>()
+        let mutable vec3 = TransientRRBTree.Empty<'T3>()
         for a, b, c in vec do
-            vec1 <- vec1.conj a
-            vec2 <- vec2.conj b
-            vec3 <- vec3.conj c
-        vec1.persistent() |> ofPersistentVector, vec2.persistent() |> ofPersistentVector, vec3.persistent() |> ofPersistentVector
+            vec1 <- vec1.Push a
+            vec2 <- vec2.Push b
+            vec3 <- vec3.Push c
+        vec1.Persistent(), vec2.Persistent(), vec3.Persistent()
     let inline where pred (vec : RRBVector<'T>) = filter pred vec
-    // TODO: Why does this cause a type error?
+    // TODO: Why does this cause a type error? ... Don't know yet, but I bet it's related to creating the saplings directly. Should use a static method on the saplings for creating them.
+    // See the RRBVector.singleton<'T> implementation for another example of the same type error
 (* Disabled until I can figure out why this causes a "Type parameter would escape its scope" error
     let windowed windowSize (vec : RRBVector<'T>) =
         if windowSize <= Literals.blockSize then
@@ -2201,8 +2199,6 @@ module RRBVector =
             }
 *)
     let inline zip (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) =
-        let minLength = Operators.min vec1.Length vec2.Length
-        (vec1, vec2) ||> Seq.zip |> RRBHelpers.buildTreeOfSeqWithKnownSize (ref null) minLength
+        (vec1, vec2) ||> Seq.zip |> ofSeq
     let inline zip3 (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) (vec3 : RRBVector<'T3>) =
-        let minLength = Operators.min (Operators.min vec1.Length vec2.Length) vec3.Length
-        (vec1, vec2, vec3) |||> Seq.zip3 |> RRBHelpers.buildTreeOfSeqWithKnownSize (ref null) minLength
+        (vec1, vec2, vec3) |||> Seq.zip3 |> ofSeq
