@@ -114,6 +114,9 @@ type Node(thread, array : obj[]) =
     member this.SetThread t = thread := t
     member this.StringRepr = sprintf "%A" array
 
+    abstract member Shrink : unit -> Node
+    default this.Shrink() = this
+
     abstract member EnsureEditable : Thread ref -> Node
     default this.EnsureEditable mutator =
         if LanguagePrimitives.PhysicalEquality mutator thread && not (isNull !thread)  // Note that this is NOT "if mutator = thread"
@@ -266,11 +269,14 @@ type ExpandedNode(thread, realLength : int, array : obj[]) =
     let thread = thread
     member val CurrentLength = realLength with get, set
     new() = ExpandedNode(ref null, 0, Array.create Literals.blockSize null)
-    static member InCurrentThread() = Node(ref Thread.CurrentThread, Array.zeroCreate Literals.blockSize)
+    static member InCurrentThread() = ExpandedNode(ref Thread.CurrentThread, Literals.blockSize, Array.zeroCreate Literals.blockSize)
     member this.Array = array
     member this.Thread = thread
     member this.SetThread t = thread := t
     member this.StringRepr = sprintf "%A" array
+
+    override this.Shrink() = Node(thread, Array.sub this.Array 0 this.NodeSize)
+
 
     override this.NodeSize = this.CurrentLength
 
@@ -509,6 +515,8 @@ type ExpandedRRBNode(thread : Thread ref, realLength : int, array : obj[], sizeT
     member this.StringRepr = sprintf "%A" array
 
     override this.NodeSize = this.CurrentLength
+
+    override this.Shrink() = RRBNode(thread, Array.sub this.Array 0 this.NodeSize, Array.sub this.SizeTable 0 this.NodeSize) :> Node
 
     override this.EnsureEditable mutator =
         if LanguagePrimitives.PhysicalEquality mutator thread && not (isNull !thread)  // Note that this is NOT "if mutator = thread"
@@ -1814,7 +1822,96 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
         then RRBHelpers.getItemFromLeaf<'T> shift idx root
         else tail.[idx - tailOffset]
 
+and [<StructuredFormatDisplay("{StringRepr}")>] TransientRRBTree<'T> internal (count, shift : int, root : Node, tail : 'T [], tailOffset : int)  =
+    // Design of transient trees: you can push items onto the end, but that's it. They do NOT inherit from RRBVector; they are limited-purpose things.
+    // They can be created from a persistent tree or they can be converted into a persistent tree.
 
+    // inherit RRBVector<'T>()    // DISABLED. The new design is for these to be tree builders and that's it. Append only.
+
+    let mutable count = count
+    let mutable shift = shift
+    let mutable root = root
+    let mutable tail = tail
+    let mutable tailOffset = tailOffset
+
+    let hashCode = ref None
+
+    new() = TransientRRBTree<'T>(0, 0, ExpandedNode.InCurrentThread(), Array.zeroCreate Literals.blockSize, 0)
+
+    member this.Length = count
+    member internal this.Shift = shift
+    member internal this.Root = root
+    member internal this.Tail = tail
+    member internal this.TailOffset = tailOffset
+    member internal this.Thread = root.Thread
+
+    // static member Empty() : RRBTree<'T> = RRBTree<'T>(0,0,RRBHelpers.emptyNode,Array.empty,0)
+    member this.IsEmpty() = count = 0
+
+    override this.ToString() =
+        sprintf "TransientRRBTree<length=%d,shift=%d,tailOffset=%d,root=%A,tail=%A>" count shift tailOffset root tail
+
+    member this.StringRepr = this.ToString()
+
+    member this.Push item =
+        let tailLen = count - tailOffset
+        if tailLen < Literals.blockSize then
+            // Easy: just add new item in tail and we're done
+            tail.[tailLen - 1] <- item
+        else
+            let root', shift' = RRBHelpers.pushTailDown this.Thread shift tail root  // This does all the work
+            root <- root'
+            shift <- shift'
+        count <- count + 1
+        this
+
+    member this.Update idx newItem =
+        let idx = if idx < 0 then idx + count else idx
+        if idx >= count then
+            invalidArg "idx" "Tried to update item past the end of the vector"
+        if idx >= tailOffset then
+            tail.[idx - tailOffset] <- newItem
+            this
+        else
+            let newRoot = root.UpdatedTree this.Thread shift idx newItem
+            if not (LanguagePrimitives.PhysicalEquality newRoot root) then
+                root <- newRoot
+            this
+
+    member this.Persistent() =
+        // Why does the following have a type error???
+        if tailOffset = 0 then
+            let tree = RRBSapling<'T>(count, 0, Array.empty<'T>, tail, tailOffset)
+            tree :> RRBVector<'T>
+        elif root.NodeSize = 1 then
+            let tree = RRBSapling<'T>(count, 0, root.Array.[0] :?> 'T[], tail, tailOffset)
+            tree :> RRBVector<'T>
+        else
+            root.SetThread null
+            root <- root.Shrink()
+            let mutable curShift = shift
+            let mutable curNode = root
+            while curShift > Literals.blockSizeShift && curNode.NodeSize > 0 do
+                let lastIdx = curNode.NodeSize - 1
+                let lastChild = (curNode.Array.[lastIdx] :?> Node).Shrink()
+                curNode.Array.[lastIdx] <- box lastChild
+                curNode <- lastChild
+                curShift <- (RRBMath.down shift)
+            let tree = RRBTree<'T>(count, shift, root, tail, tailOffset)
+            tree :> RRBVector<'T>
+
+    member this.GetItem idx =
+        if idx < tailOffset
+        then RRBHelpers.getItemFromLeaf<'T> shift idx root
+        else tail.[idx - tailOffset]
+
+
+(* Type error above is:
+A use of the function '.ctor' does not match a type inferred elsewhere. The inferred type of the function is    int * int * 'T [] * 'T [] * int -> RRBSapling<'T>.    The type of the function required at this point of use is    int * int * 'T0 [] * 'T0 [] * int -> RRBSapling<'T0>    This error may be due to limitations associated with generic recursion within a 'let rec' collection or within a group of classes. Consider giving a full type signature for the targets of recursive calls including type annotations for both argument and return types.
+
+Even stranger was:
+A use of the function '.ctor' does not match a type inferred elsewhere. The inferred type of the function is    Microsoft.FSharp.Core.int * Microsoft.FSharp.Core.int * Ficus.RRBVector.Node * 'T Microsoft.FSharp.Core.[] * Microsoft.FSharp.Core.int -> Ficus.RRBVector.RRBTree<'T>.    The type of the function required at this point of use is    Microsoft.FSharp.Core.int * Microsoft.FSharp.Core.int * Ficus.RRBVector.Node * 'T Microsoft.FSharp.Core.[] * Microsoft.FSharp.Core.int -> Ficus.RRBVector.RRBTree<'T>    This error may be due to limitations associated with generic recursion within a 'let rec' collection or within a group of classes. Consider giving a full type signature for the targets of recursive calls including type annotations for both argument and return types.
+*)
 // BASIC API
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
