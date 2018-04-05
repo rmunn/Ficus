@@ -2,6 +2,7 @@ module ExpectoTemplate.RRBVectorProps
 
 open System
 open Ficus
+open Ficus.RRBVectorNodes
 open Ficus.RRBVector
 open FsCheck
 

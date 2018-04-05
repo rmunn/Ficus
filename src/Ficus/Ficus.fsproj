@@ -25,6 +25,7 @@
     <Compile Include="Library.fs" />
     <Compile Include="PersistentVector.fs" />
     <Compile Include="RRBArrayExtensions.fs" />
+    <Compile Include="RRBVectorNodes.fs" />
     <Compile Include="RRBVector.fs" />
   </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />

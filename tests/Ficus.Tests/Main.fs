@@ -2,6 +2,7 @@ module ExpectoTemplate.Main
 open Expecto
 open System.Reflection
 open Ficus
+open Ficus.RRBVectorNodes
 open Ficus.RRBVector
 
 module AssemblyInfo =

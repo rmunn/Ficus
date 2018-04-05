@@ -3,6 +3,7 @@ module ExpectoTemplate.RRBVectorExpectoTest
 open Expecto
 open Ficus
 open Ficus.RRBArrayExtensions
+open Ficus.RRBVectorNodes
 open Ficus.RRBVector
 open FsCheck
 open Expecto.Logging
@@ -579,7 +580,7 @@ let mergeTests =
         // TODO: Adjust namespaces here
         let fullLeaf = [|1..Literals.blockSize|]
         let fullLeafMinusOne = [|1..Literals.blockSize-1|]
-        let vR_root = RRBVector.RRBNode(ref null, [|box fullLeaf; box fullLeaf; box fullLeafMinusOne|], [|Literals.blockSize; Literals.blockSize*2; Literals.blockSize*3-1|])
+        let vR_root = RRBNode(ref null, [|box fullLeaf; box fullLeaf; box fullLeafMinusOne|], [|Literals.blockSize; Literals.blockSize*2; Literals.blockSize*3-1|])
         let vR = RRBTree<int>(Literals.blockSize * 3 + 1, Literals.blockSizeShift, vR_root, [|1;2|]) :> RRBVector<int>
         RRBVectorProps.checkProperties vL "Left half of merge"
         // vR still does not pass property checks, because we have a property that verifies that no could-have-been-full RRBNodes are created.

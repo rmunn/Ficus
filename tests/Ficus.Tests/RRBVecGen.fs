@@ -1,6 +1,7 @@
 module ExpectoTemplate.RRBVecGen
 
 open Ficus
+open Ficus.RRBVectorNodes
 open Ficus.RRBVector
 open Ficus.RRBVector.RRBHelpers
 open FsCheck

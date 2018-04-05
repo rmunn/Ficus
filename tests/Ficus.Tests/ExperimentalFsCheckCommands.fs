@@ -3,6 +3,7 @@ module ExpectoTemplate.ExperimentalFsCheckCommands
 // https://fscheck.github.io/FsCheck/StatefulTesting.html
 
 open Ficus.RRBArrayExtensions
+open Ficus.RRBVectorNodes
 open Ficus.RRBVector
 open FsCheck
 open FsCheck.Experimental
