@@ -117,6 +117,12 @@ type Node(thread, array : obj[]) =
     abstract member Shrink : unit -> Node
     default this.Shrink() = this
 
+    abstract member Expand : Thread ref -> Node
+    default this.Expand mutator =
+        let array' = Array.zeroCreate Literals.blockSize
+        this.Array.CopyTo(array', 0)
+        ExpandedNode(mutator, this.NodeSize, array') :> Node
+
     abstract member EnsureEditable : Thread ref -> Node
     default this.EnsureEditable mutator =
         if LanguagePrimitives.PhysicalEquality mutator thread && not (isNull !thread)  // Note that this is NOT "if mutator = thread"
@@ -269,14 +275,14 @@ type ExpandedNode(thread, realLength : int, array : obj[]) =
     let thread = thread
     member val CurrentLength = realLength with get, set
     new() = ExpandedNode(ref null, 0, Array.create Literals.blockSize null)
-    static member InCurrentThread() = ExpandedNode(ref Thread.CurrentThread, Literals.blockSize, Array.zeroCreate Literals.blockSize)
+    static member InCurrentThread() = ExpandedNode(ref Thread.CurrentThread, 0, Array.zeroCreate Literals.blockSize)
     member this.Array = array
     member this.Thread = thread
     member this.SetThread t = thread := t
     member this.StringRepr = sprintf "%A" array
 
     override this.Shrink() = Node(thread, Array.sub this.Array 0 this.NodeSize)
-
+    override this.Expand mutator = this.EnsureEditable mutator
 
     override this.NodeSize = this.CurrentLength
 
@@ -415,6 +421,15 @@ type RRBNode(thread, array, sizeTable : int[]) =
         let nextTreeIdx = if localIdx = 0 then treeIdx else treeIdx - sizeTable.[localIdx - 1]
         localIdx, child, nextTreeIdx
 
+    override this.Expand mutator =
+        // TODO: Optimize for the case where: a) the mutator is the same as our thread ref, and b) we're already at size Literals.blockSize; in which case we don't have to copy.
+        // TODO: But first, consider: can that ever happen? Or is this.Expand() only called in the process of creating a transient, in which case all old thread refs would be invalidated anyway?
+        let array' = Array.zeroCreate Literals.blockSize
+        let sizeTable' = Array.zeroCreate Literals.blockSize
+        this.Array.CopyTo(array', 0)
+        this.SizeTable.CopyTo(sizeTable', 0)
+        ExpandedRRBNode(mutator, this.NodeSize, array', sizeTable') :> Node
+
     override this.EnsureEditable mutator =
         if LanguagePrimitives.PhysicalEquality mutator thread && not (isNull !thread)  // Note that this is NOT "if mutator = thread"
         then this :> Node
@@ -517,6 +532,7 @@ type ExpandedRRBNode(thread : Thread ref, realLength : int, array : obj[], sizeT
     override this.NodeSize = this.CurrentLength
 
     override this.Shrink() = RRBNode(thread, Array.sub this.Array 0 this.NodeSize, Array.sub this.SizeTable 0 this.NodeSize) :> Node
+    override this.Expand mutator = this.EnsureEditable mutator
 
     override this.EnsureEditable mutator =
         if LanguagePrimitives.PhysicalEquality mutator thread && not (isNull !thread)  // Note that this is NOT "if mutator = thread"
@@ -1201,6 +1217,7 @@ type internal IRRBInternal<'T> =
     abstract member RemoveFromTailAtTailIdx : int -> RRBVector<'T>
     abstract member RemoveImpl : bool -> int -> RRBVector<'T>
     abstract member RemoveWithoutRebalance : int -> RRBVector<'T>
+    abstract member Transient : unit -> TransientRRBTree<'T>
 
 type RRBSapling<'T> internal (count, shift : int, root : 'T [], tail : 'T [], tailOffset : int)  =
     inherit RRBVector<'T>()
@@ -1433,6 +1450,19 @@ type RRBSapling<'T> internal (count, shift : int, root : 'T [], tail : 'T [], ta
                 RRBSapling<'T>(count - 1, 0, root |> Array.copyAndRemoveAt idx, tail, tailOffset - 1) :> RRBVector<'T>
 
         member this.RemoveWithoutRebalance idx = (this :> IRRBInternal<'T>).RemoveImpl false idx // Will be used in RRBVector.windowed implementation
+
+        member this.Transient() =
+            // TODO: See if this can be optimized for various cases like "tail is full", or "root is full" (as opposed to root not being full, which can happen in a split)
+            if count <= Literals.blockSize then
+                let tail' = Array.append root tail
+                let rootNode = ExpandedNode.InCurrentThread()
+                TransientRRBTree<'T>(count, Literals.blockSizeShift, rootNode, tail', 0)
+            else
+                let root', tail' = Array.appendAndSplitAt Literals.blockSize root tail
+                let rootNode = ExpandedNode.InCurrentThread()
+                rootNode.Array.[0] <- box root'
+                rootNode.CurrentLength <- 1
+                TransientRRBTree<'T>(count, Literals.blockSizeShift, rootNode, tail', Literals.blockSize)
 
     // override this.Update : int -> 'T -> RRBVector<'T>
     // override this.Item : int -> 'T
@@ -1743,6 +1773,22 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
 
         member this.RemoveWithoutRebalance idx = (this :> IRRBInternal<'T>).RemoveImpl false idx // Will be used in RRBVector.windowed implementation
 
+        member this.Transient() =
+            let rec expandTree mutator shift (node : Node) =
+                if shift > Literals.blockSizeShift then
+                    let lastIdx = node.NodeSize - 1
+                    let lastChild = node.Array.[lastIdx] :?> Node |> expandTree mutator (RRBMath.down shift)
+                    let newNode = node.Expand mutator
+                    newNode.Array.[lastIdx] <- box lastChild
+                    newNode
+                else
+                    node.Expand mutator
+            let thread = ref System.Threading.Thread.CurrentThread
+            let root' = root |> expandTree thread shift
+            let tail' = Array.zeroCreate Literals.blockSizeShift
+            tail.CopyTo(tail', 0)
+            TransientRRBTree<'T>(count, shift, root', tail', tailOffset)
+
     override this.Remove idx = (this :> IRRBInternal<'T>).RemoveImpl true idx
 
     override this.Update idx newItem =
@@ -1779,6 +1825,9 @@ and [<StructuredFormatDisplay("{StringRepr}")>] TransientRRBTree<'T> internal (c
     // new() = TransientRRBTree<'T>(0, 0, ExpandedNode.InCurrentThread(), Array.zeroCreate<'T> Literals.blockSize, 0)
 
     member this.Persistent() : RRBVector<'T> =
+        let tailLen = (count - tailOffset)
+        if tailLen < Literals.blockSize then
+            tail <- Array.sub tail 0 tailLen
         if tailOffset = 0 then
             RRBSapling<'T>(count, 0, [||], tail, tailOffset) :> RRBVector<'T>
         elif root.NodeSize = 1 then
@@ -1808,7 +1857,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] TransientRRBTree<'T> internal (c
     member internal this.TailOffset = tailOffset
     member internal this.Thread = root.Thread
 
-    static member Empty<'T>() = TransientRRBTree<'T>(0, 0, ExpandedNode.InCurrentThread(), Array.zeroCreate<'T> Literals.blockSize, 0)
+    static member Empty<'T>() = TransientRRBTree<'T>(0, Literals.blockSizeShift, ExpandedNode.InCurrentThread(), Array.zeroCreate<'T> Literals.blockSize, 0)
     member this.IsEmpty() = count = 0
 
     override this.ToString() =
@@ -1819,12 +1868,22 @@ and [<StructuredFormatDisplay("{StringRepr}")>] TransientRRBTree<'T> internal (c
     member this.Push (item : 'T) =
         let tailLen = count - tailOffset
         if tailLen < Literals.blockSize then
+            // printfn "Pushing %A into tail %A; count is %d and tailOffset is %d and tailLen is %d" item tail count tailOffset tailLen
             // Easy: just add new item in tail and we're done
-            tail.[tailLen - 1] <- item
+            tail.[tailLen] <- item
+        elif tailOffset = 0 then
+            // Empty root means this is the first time we're pushing the tail down
+            root <- root.AppendChild<'T> this.Thread shift (box tail) Literals.blockSize
+            tailOffset <- Literals.blockSize
+            tail <- Array.zeroCreate Literals.blockSize
+            tail.[0] <- item
         else
             let root', shift' = RRBHelpers.pushTailDown this.Thread shift tail root  // This does all the work
             root <- root'
             shift <- shift'
+            tailOffset <- tailOffset + Literals.blockSize
+            tail <- Array.zeroCreate Literals.blockSize
+            tail.[0] <- item
         count <- count + 1
         this
 

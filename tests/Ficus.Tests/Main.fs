@@ -227,6 +227,8 @@ T26
             logVec action current
             testProperties current <| sprintf "Vector after %s" (action.ToString())
 
+// TODO: All those debugBigTest functions need to be turned into specific Expecto tests
+
 
 let doJoinTest v1 v2 =
     testProperties v1 "v1 in join test"
@@ -268,8 +270,17 @@ let debugSmallTest1 () =
     testProperties joined "Joined vector"
     if joined = (RRBVector.remove 0 vec) then printfn "Good" else printfn "Split + remove idx 0 of left + joined vectors did not equal original vector with its idx 0 removed"
 
-
-// TODO: All those debugBigTest functions need to be turned into specific Expecto tests
+let debugToArray () =
+    let a1 = [|1..63|]
+    let a2 = [|1..65|]
+    let v1 = RRBVector.ofArray a1
+    let v2 = RRBVector.ofArray a2
+    let a1' = v1 |> RRBVector.toArray
+    let a2' = v2 |> RRBVector.toArray
+    if a1 = a1' then
+        printfn "Good 1"
+    if a2 = a2' then
+        printfn "Good 2"
 
 [<EntryPoint>]
 let main argv =
@@ -281,7 +292,7 @@ let main argv =
         let githash  = AssemblyInfo.getGitHash assembly
         printfn "%s - %A - %s - %s" name.Name version releaseDate githash
     if argv |> Array.contains "--debug-vscode" then
-        debugJoinTest()
+        debugToArray()
         0
     elif argv |> Array.contains "--stress" then
         printfn "Stress testing requested"
