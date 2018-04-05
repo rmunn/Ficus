@@ -611,6 +611,9 @@ type RRBSapling<'T> internal (count, shift : int, root : 'T [], tail : 'T [], ta
     static member EmptyTree : RRBSapling<'T> = RRBSapling<'T>(0,0,Array.empty,Array.empty,0)
     static member Singleton (item : 'T) : RRBSapling<'T> = RRBSapling<'T>(1,0,Array.empty,Array.singleton item,0)
 
+    static member internal OfTail (tail : 'T[]) = RRBSapling<'T>(tail.Length, 0, Array.empty, tail, 0)
+    static member internal OfRootAndTail (root : 'T[]) (tail : 'T[]) = RRBSapling<'T>(root.Length + tail.Length, 0, root, tail, root.Length)
+
     override this.GetHashCode() =
         // This MUST follow the same algorithm as the GetHashCode() method from PersistentVector so that the Equals() logic will be valid
         match !hashCode with
@@ -1595,9 +1598,7 @@ module RRBVector =
             vec3 <- vec3.Push c
         vec1.Persistent(), vec2.Persistent(), vec3.Persistent()
     let inline where pred (vec : RRBVector<'T>) = filter pred vec
-    // TODO: Why does this cause a type error? ... Don't know yet, but I bet it's related to creating the saplings directly. Should use a static method on the saplings for creating them.
-    // See the RRBVector.singleton<'T> implementation for another example of the same type error
-(* Disabled until I can figure out why this causes a "Type parameter would escape its scope" error
+
     let windowed windowSize (vec : RRBVector<'T>) =
         if windowSize <= Literals.blockSize then
             // Sequence of tail-only vectors
@@ -1608,10 +1609,10 @@ module RRBVector =
                 while count < windowSize && itemEnumerator.MoveNext() do
                     tail.[count] <- itemEnumerator.Current
                     count <- count + 1
-                yield RRBSapling<'T>(windowSize, 0, Array.empty, tail, windowSize) :> RRBVector<'T>
+                yield RRBSapling<'T>.OfTail tail :> RRBVector<'T>
                 while itemEnumerator.MoveNext() do
                     tail <- tail |> Array.popFirstAndPush itemEnumerator.Current
-                    yield RRBSapling<'T>(windowSize, 0, Array.empty, tail, windowSize) :> RRBVector<'T>
+                    yield RRBSapling<'T>.OfTail tail :> RRBVector<'T>
             }
         elif windowSize <= Literals.blockSize * 2 then
             // Sequence of root+tail vectors (always-full root)
@@ -1623,11 +1624,11 @@ module RRBVector =
                     items.[count] <- itemEnumerator.Current
                     count <- count + 1
                 let mutable root, tail = items |> Array.splitAt Literals.blockSize
-                yield RRBSapling<'T>(windowSize, 0, root, tail, Literals.blockSize) :> RRBVector<'T>
+                yield RRBSapling<'T>.OfRootAndTail root tail :> RRBVector<'T>
                 while itemEnumerator.MoveNext() do
                     root <- root |> Array.popFirstAndPush tail.[0]
                     tail <- tail |> Array.popFirstAndPush itemEnumerator.Current
-                    yield RRBSapling<'T>(windowSize, 0, root, tail, Literals.blockSize) :> RRBVector<'T>
+                    yield RRBSapling<'T>.OfRootAndTail root tail :> RRBVector<'T>
             }
         else
             // Sequence of vectors that share as much structure as possible with the original vector and with each other
@@ -1640,7 +1641,7 @@ module RRBVector =
                     slidingVec <- slidingVec.Push item
                     yield slidingVec
             }
-*)
+
     let inline zip (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) =
         (vec1, vec2) ||> Seq.zip |> ofSeq
     let inline zip3 (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) (vec3 : RRBVector<'T3>) =
