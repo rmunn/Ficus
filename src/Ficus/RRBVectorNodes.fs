@@ -210,6 +210,8 @@ type Node(thread, array : obj[]) =
     abstract member RemoveLastChild<'T> : Thread ref -> int -> Node
     default this.RemoveLastChild<'T> mutator shift =
         // Expanded nodes can do this in a transient way, but "normal" nodes can't
+        // TODO: First make sure that "mutator" isn't null at this point, because that's causing a failure in one of my tests
+        // [push 1063; rev(); pop 118] --> after the rev(), we're a transient node that has become persistent so our mutator is now null -- but we failed to check that.
         array |> Array.copyAndPop |> NodeCreation.mkNode mutator
 
     abstract member ConcatOtherNode<'T> : Thread ref -> int -> Node -> Node

@@ -140,9 +140,9 @@ let leafToTreeReprStr (leaf : 'T []) =
 
 let rec nodeToTreeReprStr<'T> level (node : obj []) =
     if level > 1 then
-        node |> Seq.cast<Node> |> Seq.map (fun node -> nodeToTreeReprStr (level - 1) node.Array) |> strJoin " " |> sprintf "[%s]"
+        node |> Seq.filter (not << isNull) |> Seq.cast<Node> |> Seq.map (fun node -> nodeToTreeReprStr (level - 1) node.Array) |> strJoin " " |> sprintf "[%s]"
     elif level = 1 then
-        node |> Seq.cast<'T []> |> Seq.map leafToTreeReprStr |> strJoin " " |> sprintf "[%s]"
+        node |> Seq.filter (not << isNull) |> Seq.cast<'T []> |> Seq.map leafToTreeReprStr |> strJoin " " |> sprintf "[%s]"
     else
         leafToTreeReprStr node
 

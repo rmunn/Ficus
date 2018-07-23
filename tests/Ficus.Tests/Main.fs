@@ -283,6 +283,23 @@ let debugToArray () =
     if a2 = a2' then
         printfn "Good 2"
 
+// open ExpectoTemplate.RRBVectorMoreCommands.ParameterizedVecCommands
+let debugNullReference () =
+    let mergeL' = mergeL << RRBVecGen.treeReprStrToVec
+    let mergeR' = mergeR << RRBVecGen.treeReprStrToVec
+    // let actions = [push 84; mergeL' "M T4"; push 21; push 95; mergeL' "M T13"; push 27; push 73; mergeR' "M T2"; mergeR' "0 T17"; push 110; push 25; push 23; push 112; push 88; push 41; push 96; push 41; push 96; rev(); pop 118]
+    let actions = [push 84; mergeL' "M T4"; push 115; mergeL' "M T13"; push 100; mergeR' "M T2"; mergeR' "0 T17"; push 632; rev(); pop 118]
+    let actionsShort = [push 1063; rev(); pop 118]
+    let start = RRBVector.empty
+    let mutable current = start
+    let logVec action vec = printfn "After %O, vec was %s" action (RRBVecGen.vecToTreeReprStr vec)
+    for action in actionsShort do
+        current <- current |> action.RunActual
+        logVec action current
+        testProperties current <| sprintf "Vector after %O" action
+    printfn "All done, breakpoint here"
+
+
 [<EntryPoint>]
 let main argv =
     if argv |> Seq.contains ("--version") then
@@ -293,7 +310,7 @@ let main argv =
         let githash  = AssemblyInfo.getGitHash assembly
         printfn "%s - %A - %s - %s" name.Name version releaseDate githash
     if argv |> Array.contains "--debug-vscode" then
-        debugToArray()
+        debugNullReference()
         0
     elif argv |> Array.contains "--stress" then
         printfn "Stress testing requested"

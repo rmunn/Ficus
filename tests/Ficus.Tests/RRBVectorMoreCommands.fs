@@ -72,6 +72,78 @@ module ParameterizedVecCommands =
 
     let merge (otherVec,leftOrRight) = if leftOrRight then mergeL otherVec else mergeR otherVec
 
+    let calcSliceIdx length idx =
+        if idx < 0
+        then length + idx |> max 0
+        else (length * idx) / 100
+
+    let toStartPlusLen length (start,stop) =
+        let a = calcSliceIdx length start |> max 0 |> min length
+        let b = calcSliceIdx length stop |> max 0 |> min length
+        if a <= b then a,(b-a) else b,(a-b)
+
+    let slice start stop = { new Cmd() with
+                                override __.RunActual vec =
+                                    let from,len = toStartPlusLen (vec.Length) (start,stop)
+                                    vec.[from .. from+len-1]
+
+                                override __.RunModel arr =
+                                    let from,len = toStartPlusLen (Array.length arr) (start,stop)
+                                    Array.sub arr from len
+                                override __.Post(vec, arr) =
+                                    let from,len = toStartPlusLen (Array.length arr) (start,stop)
+                                    vecEqual vec arr <| sprintf "After slicing from %d to %d (orig %d to %d), vec != arr" from (from+len-1) start stop
+                                override __.ToString() = sprintf "slice %d %d" start stop }
+    let genSliceIdx = Gen.frequency [3, Gen.choose(0,100); 1, Gen.choose(-32,100)]
+
+    let choose (f : int -> int option) = { new Cmd()
+                                           with override __.RunActual vec = vec |> RRBVector.choose f
+                                                override __.RunModel arr = arr |> Array.choose f
+                                                override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After choose f, vec != arr"
+                                                override __.ToString() = sprintf "choose %A" f }
+
+    let distinct = { new Cmd()
+                     with override __.RunActual vec = vec |> RRBVector.distinct
+                          override __.RunModel arr = arr |> Array.distinct
+                          override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After distinct, vec != arr"
+                          override __.ToString() = sprintf "distinct" }
+
+    let distinctBy (f : int -> int) = { new Cmd()
+                                        with override __.RunActual vec = vec |> RRBVector.distinctBy f
+                                             override __.RunModel arr = arr |> Array.distinctBy f
+                                             override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After distinctBy f, vec != arr"
+                                             override __.ToString() = sprintf "distinctBy %A" f }
+
+    let filter (f : int -> bool) = { new Cmd()
+                                     with override __.RunActual vec = vec |> RRBVector.filter f
+                                          override __.RunModel arr = arr |> Array.filter f
+                                          override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After filter f, vec != arr"
+                                          override __.ToString() = sprintf "filter %A" f }
+
+    let map (f : int -> int) = { new Cmd()
+                                 with override __.RunActual vec = vec |> RRBVector.map f
+                                      override __.RunModel arr = arr |> Array.map f
+                                      override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After map f, vec != arr"
+                                      override __.ToString() = sprintf "map %A" f }
+
+    let partition b (f : int -> bool) = { new Cmd()
+                                          with override __.RunActual vec = vec |> RRBVector.partition f |> (if b then fst else snd)
+                                               override __.RunModel arr = arr |> Array.partition f |> (if b then fst else snd)
+                                               override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After partitioning f and keeping %A items, vec != arr" b
+                                               override __.ToString() = sprintf "partition %A %A" b f }
+
+    let rev _ = { new Cmd()
+                with override __.RunActual vec = vec |> RRBVector.rev
+                     override __.RunModel arr = arr |> Array.rev
+                     override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After reversing, vec != arr"
+                     override __.ToString() = "rev" }
+
+    let scan (f : int -> int -> int) initState = { new Cmd()
+                                                   with override __.RunActual vec = vec |> RRBVector.scan f initState
+                                                        override __.RunModel arr = arr |> Array.scan f initState
+                                                        override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After scan f, vec != arr"
+                                                        override __.ToString() = sprintf "scan %A %d" f initState }
+
     // Generators for the above
     // TODO: Generate *non-negative* ints for indices
     let insertGen = Arb.generate<int> |> Gen.two |> Gen.map insert
@@ -80,6 +152,16 @@ module ParameterizedVecCommands =
     let popGen = Arb.generate<NonNegativeInt> |> Gen.map (fun (NonNegativeInt n) -> pop n)
     let splitGen = Arb.generate<NonNegativeInt * bool> |> Gen.map split
     let mergeGen = Arb.generate<RRBVector<int> * bool> |> Gen.map merge
+    let sliceGen = Gen.map2 slice genSliceIdx genSliceIdx
+    // Simpler than: // let sliceGen = gen { let! start = genSliceIdx in let! stop = genSliceIdx in return slice start stop }
+    let chooseGen = Arb.generate<int -> int option> |> Gen.map choose
+    let distinctGen = Gen.constant distinct
+    let distinctByGen = Arb.generate<int -> int> |> Gen.map distinctBy
+    let filterGen = Arb.generate<int -> bool> |> Gen.map filter
+    let mapGen = Arb.generate<int -> int> |> Gen.map map
+    let partitionGen = (Arb.generate<bool>, Arb.generate<int -> bool>) ||> Gen.map2 partition
+    let revGen = Gen.constant (rev ())
+    let scanGen = (Arb.generate<int -> int -> int>, Arb.generate<int>) ||> Gen.map2 scan
 
 open ParameterizedVecCommands
 let specFromData data =
@@ -95,4 +177,13 @@ let specFromData data =
                 50_000, popGen
                 len, splitGen
                 100_000 - len |> max 0, mergeGen
+                len, sliceGen
+                len / 2, chooseGen
+                len, distinctGen
+                len, distinctByGen
+                len / 4, filterGen
+                20_000, mapGen
+                len, partitionGen
+                20_000, revGen
+                25_000, scanGen
             ] }
