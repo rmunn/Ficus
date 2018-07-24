@@ -539,6 +539,20 @@ let regressionTests =
         let step2 = step1 |> RRBVector.remove 5
         RRBVectorProps.checkProperties step2 "Vector after second step"
 
+    testCase "An insert that splits the last leaf will not cause later pushes to break the invariant" <| fun _ ->
+        let vec = RRBVector.ofSeq { 0..1982 }
+        let vec = RRBVecGen.treeReprStrToVec "[M*M] [M*M-3] T31"
+        let mutable vec' = vec.Insert (vec.Length - 42) -42
+        RRBVectorProps.checkProperties vec "Original vector"
+        RRBVectorProps.checkProperties vec' "Vector after insertion"
+        for i = 1 to Literals.blockSize * 2 + 1 do
+            vec' <- vec'.Push i
+        RRBVectorProps.checkProperties vec' "Vector after 65 pushes"
+        // Up to this point, the vector looks like "[M*M] [M*M-4 M/2+1 M/2 M M] TM", and the root node can still be a full node
+        vec' <- vec'.Push (Literals.blockSize * 2 + 2)
+        // Now the vector looks like "[M*M] [M*M-4 M/2+1 M/2 M M] [M] T1", and the root node should have been converted to a relaxed node
+        RRBVectorProps.checkProperties vec' "Vector after 66th push"
+
     testCase "A join that pushes down a short tail will still maintain the invariant" <| fun _ ->
         // The join ends up with [M*M-1 4] [M] T1 at the end of the vector. Then the pop promotes the M to the tail,
         // and ends up with [M*M-1 4] -- which was a full node, so now it needs to shift items from the tail to maintain the invariant.
@@ -1575,13 +1589,13 @@ let tests =
     // operationTests
     // vectorTests
     // nodeVecGenerationTests
-    // regressionTests
+    regressionTests
     // mergeTests
     // apiTests
 
     // longRunningTests
 
-    isolatedTest
+    // isolatedTest
 
     // perfTests
   ]

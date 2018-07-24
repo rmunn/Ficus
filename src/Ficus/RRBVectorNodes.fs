@@ -195,8 +195,8 @@ type Node(thread, array : obj[]) =
             ((this.NodeSize - 1) <<< Literals.blockSizeShift) + ((array.[this.NodeSize - 1]) :?> 'T[]).Length
 
     // Uses "this.Array" instead of "array" because of error FS1113. TODO: Is there a real speed benefit to making this an inline function? If not, just make it a normal method.
-    member inline this.FullNodeIsTrulyFull<'T> shift =
-        shift < Literals.blockSizeShift || this.NodeSize = 0 || NodeCreation.treeSize<'T> (RRBMath.down shift) (this.Array.[this.NodeSize - 1]) >= (1 <<< (RRBMath.down shift))
+    member this.FullNodeIsTrulyFull<'T> shift =
+        shift < Literals.blockSizeShift || this.NodeSize = 0 || NodeCreation.treeSize<'T> (RRBMath.down shift) (this.Array.[this.NodeSize - 1]) >= (1 <<< shift)
 
     // Assumes that the node does *not* yet have blockSize children; verifying that is the job of the caller function
     abstract member AppendChild<'T> : Thread ref -> int -> obj -> int -> Node
@@ -315,7 +315,7 @@ type ExpandedNode(thread, realLength : int, array : obj[]) =
     // Uses "this.Array" instead of "array" because of error FS1113. TODO: Is there a real speed benefit to making this an inline function? If not, just make it a normal method.
     member inline this.FullNodeIsTrulyFull<'T> shift =
         // TODO: Is this really needed? Can't we just inherit from parent class?
-        shift < Literals.blockSizeShift || this.NodeSize = 0 || NodeCreation.treeSize<'T> (RRBMath.down shift) (this.Array.[this.NodeSize - 1]) >= (1 <<< (RRBMath.down shift))
+        shift < Literals.blockSizeShift || this.NodeSize = 0 || NodeCreation.treeSize<'T> (RRBMath.down shift) (this.Array.[this.NodeSize - 1]) >= (1 <<< shift)
 
     // Assumes that the node does *not* yet have blockSize children; verifying that is the job of the caller function
     override this.AppendChild<'T> mutator shift newChild childSize =

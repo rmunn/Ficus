@@ -33,7 +33,7 @@ module ParameterizedVecCommands =
                                  override __.RunModel arr = let idx' = if idx < 0 then idx + arr.Length else idx in arr |> Array.copyAndInsertAt idx' item
                                  override __.Pre(arr) = (abs idx) <= arr.Length
                                  override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After inserting %d at index %d, vec != arr" item idx
-                                 override __.ToString() = sprintf "insert %d %d" idx item }
+                                 override __.ToString() = sprintf "insert (%d,%d)" idx item }
 
     let remove idx = { new Cmd()
                        with override __.RunActual vec = vec |> RRBVector.remove idx
@@ -100,7 +100,7 @@ module ParameterizedVecCommands =
                                            with override __.RunActual vec = vec |> RRBVector.choose f
                                                 override __.RunModel arr = arr |> Array.choose f
                                                 override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After choose f, vec != arr"
-                                                override __.ToString() = sprintf "choose %A" f }
+                                                override __.ToString() = sprintf "choose choosef" }
 
     let distinct = { new Cmd()
                      with override __.RunActual vec = vec |> RRBVector.distinct
@@ -112,25 +112,25 @@ module ParameterizedVecCommands =
                                         with override __.RunActual vec = vec |> RRBVector.distinctBy f
                                              override __.RunModel arr = arr |> Array.distinctBy f
                                              override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After distinctBy f, vec != arr"
-                                             override __.ToString() = sprintf "distinctBy %A" f }
+                                             override __.ToString() = sprintf "distinctBy distinctf" }
 
     let filter (f : int -> bool) = { new Cmd()
                                      with override __.RunActual vec = vec |> RRBVector.filter f
                                           override __.RunModel arr = arr |> Array.filter f
                                           override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After filter f, vec != arr"
-                                          override __.ToString() = sprintf "filter %A" f }
+                                          override __.ToString() = sprintf "filter pred" }
 
     let map (f : int -> int) = { new Cmd()
                                  with override __.RunActual vec = vec |> RRBVector.map f
                                       override __.RunModel arr = arr |> Array.map f
                                       override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After map f, vec != arr"
-                                      override __.ToString() = sprintf "map %A" f }
+                                      override __.ToString() = sprintf "map mapf" }
 
     let partition b (f : int -> bool) = { new Cmd()
                                           with override __.RunActual vec = vec |> RRBVector.partition f |> (if b then fst else snd)
                                                override __.RunModel arr = arr |> Array.partition f |> (if b then fst else snd)
                                                override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After partitioning f and keeping %A items, vec != arr" b
-                                               override __.ToString() = sprintf "partition %A %A" b f }
+                                               override __.ToString() = sprintf "partition %A partf" b }
 
     let rev _ = { new Cmd()
                 with override __.RunActual vec = vec |> RRBVector.rev
@@ -142,7 +142,7 @@ module ParameterizedVecCommands =
                                                    with override __.RunActual vec = vec |> RRBVector.scan f initState
                                                         override __.RunModel arr = arr |> Array.scan f initState
                                                         override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After scan f, vec != arr"
-                                                        override __.ToString() = sprintf "scan %A %d" f initState }
+                                                        override __.ToString() = sprintf "scan scanf %d" initState }
 
     // Generators for the above
     // TODO: Generate *non-negative* ints for indices

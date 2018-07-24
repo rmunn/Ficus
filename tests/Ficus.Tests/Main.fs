@@ -120,7 +120,7 @@ T23"""
 let testProperties (vec : RRBVector<'T>) name =
     let propertyFailures = RRBVectorProps.getPropertyResults vec
     if propertyFailures.Length > 0 then
-        printfn "Vector %A (called \"%s\") had some property failures" vec name
+        printfn "Vector %A (called \"%s\" and with repr %s) had some property failures" vec (RRBVecGen.vecToTreeReprStr vec) name
         printfn "Failed properties: %A" propertyFailures
     else
         printfn "Looks good"
@@ -177,6 +177,7 @@ let debugJoinTest () =
 
 
 open RRBVectorMoreCommands.ParameterizedVecCommands
+open Ficus.RRBVector
 
 let debugReallyBigTest1 () =
         let bigReprStr = """
@@ -300,6 +301,48 @@ let debugNullReference () =
     printfn "All done, breakpoint here"
 
 
+let debugSomethingElse () =
+    let mergeL = mergeL << RRBVecGen.treeReprStrToVec
+    let mergeR = mergeR << RRBVecGen.treeReprStrToVec
+    let scanf a _ = a + 1  // So that scans will produce increasing sequences
+    let mapf a = a  // So that map won't change the numbers
+    let actions = [
+      push 124; mergeR "M T5"; push 35; push 58; push 94; push 24; push 54;
+      mergeR "0 T27"; mergeL "M T6"; push 64; push 12; mergeL "0 T22"; mergeR "M T2";
+      mergeR "0 T7"; push 34; push 85; push 73; push 32; push 126; push 125;
+      mergeR "0 T27"; insert (-127,-101); insert (-58,21); mergeR "M T11";
+      insert (-109,-118); push 116; push 16; insert (78,40); mergeR "0 T19";
+      insert (27,-59); insert (110,-80); insert (-69,95); insert (79,38);
+      scan scanf 83; insert (117,73); scan scanf -31; push 54;
+      mergeR "0 T3"; mergeR "0 T6"; push 114; insert (-42,-78); insert (60,-45); push 14;
+      scan scanf -70; insert (71,-14); push 93; insert (29,-69); push 51;
+      insert (-114,-117); insert (101,34); push 50; mergeL "0 T24"; insert (32,-67);
+      insert (-105,111); push 16; insert (115,64); insert (-109,110); mergeR "M T22";
+      push 117; insert (14,-93); insert (20,-93); insert (88,-87); insert (-85,-19);
+      map mapf; mergeR "M T3"; insert (-42,114); push 66 ]
+    let actionsShort = [ map mapf; mergeR "M T3"; insert (-42,114) ] // Removed "push 66", which we'll do at the end
+    let actionsEvenShorter = [ insert (-42,114) ] // Removed "push 66", which we'll do at the end
+    let start = RRBVector.empty
+    let startFull = RRBVecGen.treeReprStrToVec "[26 18 25 24 17 26 24 M M M M M M M M M M M M M M M M M M M] [M M M M M M M M M M M M M M M M M M M M M M M M M 17 16 M 17 25 24 M] [M M M M 17 16 M] T24"
+    let startEvenShorter = { 0..1982 } |> RRBVector.ofSeq
+    // [M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M] [M M M M M M M M M M M M M M M M M M M M M M M M M M M M M] T31
+    // let mutable current = startFull
+    let mutable current = startEvenShorter
+    let logVec action vec = printfn "After %O, vec was %s" action (RRBVecGen.vecToTreeReprStr vec)
+    for action in actionsEvenShorter do
+        current <- current |> action.RunActual
+        logVec action current
+        testProperties current <| sprintf "Vector after %O" action
+    for i = 1 to 65 do
+        current <- current.Push i
+        printfn "After pushing %d, vec was %s" i (RRBVecGen.vecToTreeReprStr current)
+        testProperties current <| sprintf "Vector after pushing %d" i
+    current <- current.Push 66
+    printfn "After pushing %d, vec was %s" 66 (RRBVecGen.vecToTreeReprStr current)
+    testProperties current <| sprintf "Vector after pushing %d" 66
+    printfn "All done, breakpoint here"
+
+
 [<EntryPoint>]
 let main argv =
     if argv |> Seq.contains ("--version") then
@@ -310,7 +353,7 @@ let main argv =
         let githash  = AssemblyInfo.getGitHash assembly
         printfn "%s - %A - %s - %s" name.Name version releaseDate githash
     if argv |> Array.contains "--debug-vscode" then
-        debugNullReference()
+        debugSomethingElse()
         0
     elif argv |> Array.contains "--stress" then
         printfn "Stress testing requested"
