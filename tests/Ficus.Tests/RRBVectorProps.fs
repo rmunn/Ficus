@@ -8,7 +8,7 @@ open FsCheck
 
 module Literals = Ficus.Literals
 
-let isEmpty (node : Node) = node.Array.Length <= 0
+let isEmpty (node : Node) = node.NodeSize <= 0
 // Note: do NOT call isNotTwig or isTwig on empty nodes!
 let isNotTwig (node : Node) = node.Array.[0] :? Node
 let isTwig (node : Node) = not (isNotTwig node)
@@ -19,8 +19,8 @@ let children (node : Node) = if isNotTwig node then node.Array else [||]
 
 let rec itemCount<'T> (node : Node) =
     if isEmpty node then 0
-    elif node |> isTwig then node.Array |> Array.sumBy (fun leaf -> (leaf :?> 'T[]).Length)
-    else node.Array |> Array.sumBy (fun n -> n :?> Node |> itemCount<'T>)
+    elif node |> isTwig then node.Array.[0..node.NodeSize-1] |> Array.sumBy (fun leaf -> (leaf :?> 'T[]).Length)
+    else node.Array.[0..node.NodeSize-1] |> Array.sumBy (fun n -> n :?> Node |> itemCount<'T>)
 
 let inline down shift = shift - Literals.blockSizeShift
 
@@ -36,7 +36,7 @@ let properties = [
             if shift <= Literals.blockSizeShift then
                 not (isEmpty node) && isTwig node
             else
-                not (isEmpty node) && isNotTwig node && node.Array |> Array.forall (fun n -> n :? Node && check (down shift) (n :?> Node))
+                not (isEmpty node) && isNotTwig node && node.Array.[0 .. node.NodeSize - 1] |> Array.forall (fun n -> n :? Node && check (down shift) (n :?> Node))
         match vec with
         | :? RRBSapling<'T> -> true // Saplings just have root and leaf, both at height 0
         | :? RRBTree<'T> as tree ->
@@ -67,11 +67,11 @@ let properties = [
     "The number of items in each node should be <= the branching factor (Literals.blockSize)", fun (vec : RRBVector<'T>) ->
         let rec check shift (node : Node) =
             if shift <= Literals.blockSizeShift then
-                node.Array.Length <= Literals.blockSize &&
-                node.Array |> Array.forall (fun n -> (n :?> 'T []).Length <= Literals.blockSize)
+                node.NodeSize <= Literals.blockSize &&
+                node.Array.[0..node.NodeSize-1] |> Array.forall (fun n -> (n :?> 'T []).Length <= Literals.blockSize)
             else
-                node.Array.Length <= Literals.blockSize &&
-                node.Array |> Array.forall (fun n -> n :?> Node |> check (down shift))
+                node.NodeSize <= Literals.blockSize &&
+                node.Array.[0..node.NodeSize-1] |> Array.forall (fun n -> n :?> Node |> check (down shift))
         match vec with
         | :? RRBSapling<'T> as sapling ->
             sapling.Root.Length <= Literals.blockSize
@@ -91,9 +91,9 @@ let properties = [
             | :? RRBNode as n ->
                 let expectedSizeTable =
                     if shift <= Literals.blockSizeShift then
-                        node.Array |> Array.map (fun n -> (n :?> 'T[]).Length) |> Array.scan (+) 0 |> Array.skip 1
+                        node.Array.[0 .. node.NodeSize - 1] |> Array.map (fun n -> (n :?> 'T[]).Length) |> Array.scan (+) 0 |> Array.skip 1
                     else
-                        node.Array |> Array.map (fun n -> n :?> Node |> itemCount<'T>) |> Array.scan (+) 0 |> Array.skip 1
+                        node.Array.[0 .. node.NodeSize - 1] |> Array.map (fun n -> n :?> Node |> itemCount<'T>) |> Array.scan (+) 0 |> Array.skip 1
                 n.SizeTable = expectedSizeTable
             | _ -> true
         match vec with
@@ -118,8 +118,8 @@ let properties = [
                 match node with
                 | :? RRBNode -> isLastChild || not seenFullParent // RRBNode twigs satisfy the property without need for further checking, since their children are leaves... as long as no parent was full, or as long as they were the last child
                 | _ ->
-                    if node.Array.Length <= 1 then true else
-                    node.Array.[..node.Array.Length - 2] |> Array.forall (fun n ->
+                    if node.NodeSize <= 1 then true else
+                    node.Array.[..node.NodeSize - 2] |> Array.forall (fun n ->
                         (n :?> 'T[]).Length = Literals.blockSize)
             else
                 match node with
@@ -127,11 +127,11 @@ let properties = [
                     if shift <= Literals.blockSizeShift then
                         isLastChild || not seenFullParent // RRBNode twigs satisfy the property without need for further checking, since their children are leaves... as long as no parent was full, or as long as they were the last child
                     else
-                        node.Array |> Seq.indexed |> Seq.forall (fun (i,n) -> check (down shift) seenFullParent (i = node.NodeSize - 1) (n :?> Node))
+                        node.Array.[0 .. node.NodeSize - 1] |> Seq.indexed |> Seq.forall (fun (i,n) -> check (down shift) seenFullParent (i = node.NodeSize - 1) (n :?> Node))
                 | _ ->
                     let fullCheck (n : Node) =
                         if shift <= Literals.blockSizeShift then
-                            isFull n && n.Array.Length = Literals.blockSize
+                            isFull n && n.NodeSize = Literals.blockSize
                         else
                             isFull n
                     if node.NodeSize = 0 then
@@ -139,7 +139,7 @@ let properties = [
                     elif node.NodeSize = 1 then
                         check (down shift) seenFullParent true (node.Array.[0] :?> Node)  // If a FullNode has just one element, it doesn't matter if it has an RRB child, but its children still need to be checked.
                     else
-                        node.Array.[..node.Array.Length - 2] |> Array.forall (fun n ->
+                        node.Array.[..node.NodeSize - 2] |> Array.forall (fun n ->
                             fullCheck (n :?> Node) && check (down shift) true true (n :?> Node)
                         ) && check (down shift) true true ((Array.last node.Array) :?> Node)
         match vec with
@@ -160,10 +160,10 @@ let properties = [
                 if node |> isEmpty then
                     false
                 elif node |> isTwig then
-                    ((node.Array |> Array.last) :?> 'T[]).Length = Literals.blockSize
+                    ((node.Array.[node.NodeSize - 1]) :?> 'T[]).Length = Literals.blockSize
                 else
                     let arr = node.Array
-                    Array.length arr > 0 && arr |> Array.last |> (fun n -> n :?> Node |> check)
+                    node.NodeSize > 0 && node.Array.[node.NodeSize - 1] |> (fun n -> n :?> Node |> check)
 
             let twig = RRBHelpers.getRightmostTwig tree.Shift tree.Root
             match twig with
@@ -182,7 +182,7 @@ let properties = [
         match vec with
         | :? RRBSapling<'T> as sapling -> true // Not applicable to saplings
         | :? RRBTree<'T> as tree ->
-            tree.Shift <= Literals.blockSizeShift || tree.Root.Array |> Array.length >= 2
+            tree.Shift <= Literals.blockSizeShift || tree.Root.NodeSize >= 2
 
     "Leaf nodes' arrays should all contain items of type 'T, and all other nodes' arrays should contain nodes", fun (vec : RRBVector<'T>) ->
         match vec with
@@ -191,16 +191,16 @@ let properties = [
             let isNode (x:obj) = (x :? Node)
             let rec check level (node : Node) =
                 if level <= Literals.blockSizeShift then
-                    node.Array |> Array.forall (fun (x : obj) -> x :? 'T [])
+                    node.Array.[0 .. node.NodeSize - 1] |> Array.forall (fun (x : obj) -> x :? 'T [])
                 else
-                    node.Array |> Array.forall isNode &&
-                    node.Array |> Array.forall (fun n -> n :?> Node |> check (level - Literals.blockSizeShift))
+                    node.Array.[0 .. node.NodeSize - 1] |> Array.forall isNode &&
+                    node.Array.[0 .. node.NodeSize - 1] |> Array.forall (fun n -> n :?> Node |> check (level - Literals.blockSizeShift))
             check tree.Shift tree.Root  // No need to check the tail since it's defined as 'T []
 
     "Internal nodes that are at shift > Literals.blockSizeShift should never be twigs", fun (vec : RRBVector<'T>) ->
         let rec check shift node =
             if shift <= Literals.blockSizeShift then true else
-            node |> isNotTwig && node.Array |> Array.forall (fun child -> child :? Node && child :?> Node |> check (shift - Literals.blockSizeShift))
+            node |> isNotTwig && node.Array.[0 .. node.NodeSize - 1] |> Array.forall (fun child -> child :? Node && child :?> Node |> check (shift - Literals.blockSizeShift))
         match vec with
         | :? RRBSapling<'T> as sapling -> true // Not applicable to saplings
         | :? RRBTree<'T> as tree ->
@@ -211,7 +211,7 @@ let properties = [
         | :? RRBSapling<'T> as sapling ->
             (sapling.Root.Length = 0) = (sapling.TailOffset = 0)
         | :? RRBTree<'T> as tree ->
-            (tree.Root.Array.Length = 0) = (tree.TailOffset = 0)
+            (tree.Root.NodeSize = 0) = (tree.TailOffset = 0)
 
     "If vector height > 0, the root node should not be empty", fun (vec : RRBVector<'T>) ->
         match vec with
@@ -236,7 +236,7 @@ let properties = [
         | :? RRBTree<'T> as tree ->
             let rec check shift node =
                 if shift <= Literals.blockSizeShift then node |> (not << isEmpty)
-                else node |> (not << isEmpty) && node.Array |> Array.forall (fun n -> n :?> Node |> check (down shift))
+                else node |> (not << isEmpty) && node.Array.[0 .. node.NodeSize - 1] |> Array.forall (fun n -> n :?> Node |> check (down shift))
             check tree.Shift tree.Root
 
     // TODO: Think about disabling this property, because in some rare circumstances, it is possible for this to happen.
@@ -245,12 +245,12 @@ let properties = [
     "If vector height > 0, the root node should contain more than one node", fun (vec : RRBVector<'T>) ->
         match vec with
         | :? RRBSapling<'T> as sapling -> true
-        | :? RRBTree<'T> as tree -> tree.Root.Array.Length > 1
+        | :? RRBTree<'T> as tree -> tree.Root.NodeSize > 1
 
     "If vector length <= (Literals.blockSize * 2), the root node should contain more than one node", fun (vec : RRBVector<'T>) ->
         match vec with
         | :? RRBSapling<'T> as sapling -> sapling.Length <= Literals.blockSize * 2
-        | :? RRBTree<'T> as tree -> tree.Length <= Literals.blockSize * 2 || tree.Root.Array.Length > 1
+        | :? RRBTree<'T> as tree -> tree.Length <= Literals.blockSize * 2 || tree.Root.NodeSize > 1
 
     "No RRBNode should contain a \"full\" size table. If the size table was full, it should have been turned into a FullNode.", fun (vec : RRBVector<'T>) ->
         let rec check shift (node : Node) =
@@ -265,7 +265,7 @@ let properties = [
                 if shift <= Literals.blockSizeShift then
                     true  // No need to descend further as there are no RRBNodes at the leaf level
                 else
-                    node.Array |> Array.forall (fun n -> n :?> Node |> check (down shift))
+                    node.Array.[0 .. node.NodeSize - 1] |> Array.forall (fun n -> n :?> Node |> check (down shift))
         match vec with
         | :? RRBSapling<'T> as sapling -> true // Not applicable to saplings
         | :? RRBTree<'T> as tree ->

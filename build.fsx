@@ -3,7 +3,6 @@ open Fake
 open Fake.Git
 open Fake.AssemblyInfoFile
 open Fake.ReleaseNotesHelper
-open Fake.UserInputHelper
 open System
 
 let release = LoadReleaseNotes "RELEASE_NOTES.md"
@@ -101,6 +100,11 @@ let runTests modifyArgs modifyExpectoArgs =
 
 Target "DotnetTest" (fun _ ->
     runTests (sprintf "%s --no-build") id
+    |> Seq.iter invoke
+)
+
+Target "DotnetStressTest" (fun _ ->
+    runTests (sprintf "%s --no-build") (sprintf "%s --stress 30 --stress-timeout 5 --stress-memory-limit 1024")
     |> Seq.iter invoke
 )
 

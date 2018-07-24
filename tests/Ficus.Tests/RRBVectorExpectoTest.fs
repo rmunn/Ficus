@@ -1065,17 +1065,6 @@ let fixedSpecTest (spec : RRBVectorFsCheckCommands.Cmd list) () =
         // )
         RRBVectorProps.checkPropertiesSimple vec
 
-let experimentalTests =
-  testList "Experimental tests" [
-    testProp "append and pop" <| fun (vec : RRBVector<int>) ->
-        // logger.debug (
-        //     eventX "Testing vector {vec} = \"{repr}\""
-        //     >> setField "vec" (sprintf "%A" vec)
-        //     >> setField "repr" (RRBVecGen.vecToTreeReprStr vec)
-        // )
-        FsCheck.Experimental.StateMachine.toProperty (ExpectoTemplate.ExperimentalFsCheckCommands.VecCommands.machine vec)
-  ]
-
 let operationTests =
   testList "Operational transform tests" [
     testProp "Extra-small lists from empty" (Command.toProperty RRBVectorFsCheckCommands.specExtraSmallFromEmpty)
@@ -1516,7 +1505,8 @@ let isolatedTest =
         logger.info (eventX "Starting with {vec}" >> setField "vec" (RRBVecGen.vecToTreeReprStr vec))
         let mutable current = vec
         let actions = [pop 37; push 47; mergeR <| RRBVecGen.treeReprStrToVec "0 T15"; mergeR <| RRBVecGen.treeReprStrToVec "0 T11"; mergeL <| RRBVecGen.treeReprStrToVec "0 T9"; mergeL <| RRBVecGen.treeReprStrToVec "0 T10"; pop 48; pop 47]
-        let logVec action vec = logger.info (eventX "After {action}, vec was {vec}" >> setField "action" (action.ToString()) >> setField "vec" (RRBVecGen.vecToTreeReprStr vec))
+        let logVec action = ignore
+        // let logVec action vec = logger.info (eventX "After {action}, vec was {vec}" >> setField "action" (action.ToString()) >> setField "vec" (RRBVecGen.vecToTreeReprStr vec))
         for action in actions do
             current <- current |> action.RunActual
             logVec action current
@@ -1564,7 +1554,8 @@ T26
         let actions = [mergeL "M T19"; push 99; mergeL "0 T28"; push 80; push 127; push 17; push 30;
                        push 138; remove -109; mergeR "M T9"; push 91; push 72; insert (-90,126); push 64;
                        push 52; insert (-138,1); push 130]
-        let logVec action vec = logger.info (eventX "After {action}, vec was {vec}" >> setField "action" (action.ToString()) >> setField "vec" (RRBVecGen.vecToTreeReprStr vec))
+        // let logVec action vec = logger.info (eventX "After {action}, vec was {vec}" >> setField "action" (action.ToString()) >> setField "vec" (RRBVecGen.vecToTreeReprStr vec))
+        let logVec action = ignore
         for action in actions do
             current <- current |> action.RunActual
             logVec action current
@@ -1575,22 +1566,22 @@ T26
 [<Tests>]
 let tests =
   testList "All tests" [
-    arrayTests
-    simpleVectorTests
-    manualVectorTests
-    constructedVectorSplitTests
-    splitJoinTests
-    insertTests
-    operationTests
-    vectorTests
-    nodeVecGenerationTests
-    regressionTests
-    mergeTests
-    apiTests
+    // arrayTests
+    // simpleVectorTests
+    // manualVectorTests
+    // constructedVectorSplitTests
+    // splitJoinTests
+    // insertTests
+    // operationTests
+    // vectorTests
+    // nodeVecGenerationTests
+    // regressionTests
+    // mergeTests
+    // apiTests
 
     // longRunningTests
 
-    // isolatedTest
+    isolatedTest
 
     // perfTests
   ]
