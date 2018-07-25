@@ -342,6 +342,57 @@ let debugSomethingElse () =
     testProperties current <| sprintf "Vector after pushing %d" 66
     printfn "All done, breakpoint here"
 
+let debugSomethingElse2 () =
+    let mergeL = mergeL << RRBVecGen.treeReprStrToVec
+    let mergeR = mergeR << RRBVecGen.treeReprStrToVec
+    let scanf a _ = a + 1  // So that scans will produce increasing sequences
+    let mapf a = a  // So that map won't change the numbers
+    let actions = [
+            push 501;
+            mergeR "0 T14"; push 155; mergeR "26 30 M 28 28 23 29 30 30 26 M T24";
+            mergeL "M T18"; map mapf ]
+    let actionsShort = [ map mapf; mergeR "M T3"; insert (-42,114) ] // Removed "push 66", which we'll do at the end
+    let actionsEvenShorter = [ insert (-42,114) ] // Removed "push 66", which we'll do at the end
+    let start = RRBVector.empty
+    let startFull = RRBVecGen.treeReprStrToVec "[26 18 25 24 17 26 24 M M M M M M M M M M M M M M M M M M M] [M M M M M M M M M M M M M M M M M M M M M M M M M 17 16 M 17 25 24 M] [M M M M 17 16 M] T24"
+    let startEvenShorter = { 0..1982 } |> RRBVector.ofSeq
+    // [M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M] [M M M M M M M M M M M M M M M M M M M M M M M M M M M M M] T31
+    // let mutable current = startFull
+    let mutable current = start
+    let logVec action vec = printfn "After %O, vec was %s" action (RRBVecGen.vecToTreeReprStr vec)
+    for action in actions do
+        current <- current |> action.RunActual
+        logVec action current
+        testProperties current <| sprintf "Vector after %O" action
+    for i = 1 to 71 do
+        current <- current.Pop()
+        printfn "After popping %d times, vec was %s" i (RRBVecGen.vecToTreeReprStr current)
+        testProperties current <| sprintf "Vector after popping %d times" i
+        let arr = current |> RRBVector.toArray
+        if arr.Length <> RRBVector.length current then
+            printfn "Oops"
+    current <- current.Pop()
+    printfn "After popping %d times, vec was %s" 72 (RRBVecGen.vecToTreeReprStr current)
+    testProperties current <| sprintf "Vector after popping %d times" 72
+    let arr = current |> RRBVector.toArray
+    if arr.Length <> RRBVector.length current then
+        printfn "Oops"
+    printfn "All done, breakpoint here"
+
+let debugSomethingElse3() =
+    let mergeL = mergeL << RRBVecGen.treeReprStrToVec
+    let mergeR = mergeR << RRBVecGen.treeReprStrToVec
+    let scanf _ a = a + 1  // So that scans will produce increasing sequences
+    let mapf a = a  // So that map won't change the numbers
+    let actions = [mergeR "M T13"; push 166; scan scanf 8; pop 157; remove 51]
+    let start = { 0..848 } |> RRBVector.ofSeq
+    let mutable current = start
+    let logVec action vec = printfn "After %O, vec was %s" action (RRBVecGen.vecToTreeReprStr vec)
+    for action in actions do
+        current <- current |> action.RunActual
+        logVec action current
+        testProperties current <| sprintf "Vector after %O" action
+    printfn "All done, breakpoint here"
 
 [<EntryPoint>]
 let main argv =
@@ -353,10 +404,10 @@ let main argv =
         let githash  = AssemblyInfo.getGitHash assembly
         printfn "%s - %A - %s - %s" name.Name version releaseDate githash
     if argv |> Array.contains "--debug-vscode" then
-        debugSomethingElse()
+        debugSomethingElse3()
         0
-    elif argv |> Array.contains "--stress" then
-        printfn "Stress testing requested"
+    elif argv |> Array.contains "--stress" || argv |> Array.contains "--fscheck-only" then
+        printfn "Running only FsCheck tests%s" (if argv |> Array.contains "--stress" then " for stress testing" else "")
         let noop = TestList([], Pending)
         let rec containsTests = function
             | TestCase _ -> true
@@ -378,7 +429,7 @@ let main argv =
                     noop
             | Test.Sequenced(_, test) -> filter test
         let config = { defaultConfig with filter = filter }
-        runTestsWithArgs config argv RRBVectorExpectoTest.tests
+        runTestsWithArgs config (argv |> Array.filter ((<>) "--fscheck-only")) RRBVectorExpectoTest.tests
     else
         runTestsWithArgs defaultConfig argv RRBVectorExpectoTest.tests
         // runTestsWithArgs defaultConfig argv experimentalTests

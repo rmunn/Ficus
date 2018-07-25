@@ -113,22 +113,22 @@ module RRBHelpers =
 
     // These iterate only the tree; the methods on the RRBVector class will include the tail in their interations
 
-    let rec iterLeaves<'T> shift (arr:obj[]) : seq<'T []> =
+    let rec iterLeaves<'T> shift (node : Node) : seq<'T []> =
         seq {
-            if shift <= Literals.blockSizeShift then yield! (arr |> Seq.cast<'T []>)
+            if shift <= Literals.blockSizeShift then yield! (node.IterChildren() |> Seq.cast<'T []>)
             else
-                for child in arr do
-                    yield! iterLeaves (down shift) (child :?> Node).Array
+                for child in node.IterChildren() do
+                    yield! iterLeaves (down shift) (child :?> Node)
         }
 
-    let rec revIterLeaves<'T> shift (arr:obj[]) : seq<'T []> =
+    let rec revIterLeaves<'T> shift (node : Node) : seq<'T []> =
         seq {
             if shift <= Literals.blockSizeShift then
-                for i = arr.Length - 1 downto 0 do
-                    yield (arr.[i] :?> 'T [])
+                for child in node.RevIterChildren() do
+                    yield (child :?> 'T [])
             else
-                for i = arr.Length - 1 downto 0 do
-                    yield! revIterLeaves (down shift) (arr.[i] :?> Node).Array
+                for child in node.RevIterChildren() do
+                    yield! revIterLeaves (down shift) (child :?> Node)
         }
 
     let seqSplitAt splitIdx (s:#seq<'a>) =
@@ -155,7 +155,7 @@ module RRBHelpers =
     let rec leftSlice<'T> thread shift idx (node:Node) =
         let localIdx, child, nextIdx = node.IndexesAndChild shift idx
         let lastIdx = if nextIdx = 0 then localIdx - 1 else localIdx
-        let items = node.Array.[..lastIdx]
+        let items = node.Children.[..lastIdx]
         let mutable newChildSize = 0
         if shift <= Literals.blockSizeShift then
             let leaf = child :?> 'T[]
@@ -179,7 +179,7 @@ module RRBHelpers =
 
     let rec rightSlice<'T> thread shift idx (node:Node) =
         let localIdx, child, nextIdx = node.IndexesAndChild shift idx
-        let items = node.Array.[localIdx..]
+        let items = node.Children.[localIdx..]
         let mutable newChildSize = 0
         if shift <= Literals.blockSizeShift then
             let leaf = child :?> 'T[]
@@ -400,7 +400,7 @@ module RRBHelpers =
 
     let rec insertIntoTree thread shift thisLvlIdx (item : 'T) (parentOpt : Node option) idxOfNodeInParent (node : Node) =
         let localIdx, child, nextLvlIdx = node.IndexesAndChild shift thisLvlIdx
-        let arr = node.Array
+        let arr = node.Children
 
         if shift > Literals.blockSizeShift then
             // Above twig level: children are nodes, and we return SlideResult<Node>
@@ -479,34 +479,34 @@ module RRBHelpers =
             let resultLen = Array.length result
             if resultLen <= 0 then
                 // Child vanished
-                Array.copyAndRemoveAt childIdx thisNode.Array
+                Array.sliceAndRemoveAt childIdx thisNode.Array thisNode.NodeSize
             elif resultLen < childArray.Length && shouldCheckForRebalancing then
                 // Child shrank: rebalance might be needed
                 let slotCount' = thisNode.TwigSlotCount<'T>() - 1
                 if rebalanceNeeded slotCount' (nodeSize thisNode) then
-                    Array.copyAndSet childIdx (box result) thisNode.Array |> rebalance<'T> thread shift
+                    Array.copyAndSet childIdx (box result) thisNode.Children |> rebalance<'T> thread shift
                 else
-                    Array.copyAndSet childIdx (box result) thisNode.Array
+                    Array.copyAndSet childIdx (box result) thisNode.Children
             else
                 // Child did not shrink
-                Array.copyAndSet childIdx (box result) thisNode.Array
+                Array.copyAndSet childIdx (box result) thisNode.Children
         else
             let result = removeFromTree<'T> thread (down shift) shouldCheckForRebalancing nextLvlIdx (child :?> Node) |> NodeCreation.mkRRBNode<'T> thread (down shift)
             // TODO: Can probably leverage mkRRBNodeWithSizeTable here for greater efficiency: subtract 1 from size table and we have it
             let resultLen = nodeSize result
             if resultLen <= 0 then
                 // Child vanished
-                Array.copyAndRemoveAt childIdx thisNode.Array
+                Array.sliceAndRemoveAt childIdx thisNode.Array thisNode.NodeSize
             elif resultLen < nodeSize child && shouldCheckForRebalancing then
                 // Child shrank: check if rebalance needed
-                let slotCount' = slotCount thisNode.Array - 1
+                let slotCount' = slotCount thisNode.Children - 1
                 if rebalanceNeeded slotCount' (nodeSize thisNode) then
-                    Array.copyAndSet childIdx (box result) thisNode.Array |> rebalance<'T> thread shift
+                    Array.copyAndSet childIdx (box result) thisNode.Children |> rebalance<'T> thread shift
                 else
-                    Array.copyAndSet childIdx (box result) thisNode.Array
+                    Array.copyAndSet childIdx (box result) thisNode.Children
             else
                 // Child did not shrink
-                Array.copyAndSet childIdx (box result) thisNode.Array
+                Array.copyAndSet childIdx (box result) thisNode.Children
 
     // ==============
     // BUILDING TREES from various sources (arrays, sequences of known size, etc) in an efficient way
@@ -903,12 +903,12 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
     override this.Length = count
 
     override this.IterLeaves() =
-        seq { yield! RRBHelpers.iterLeaves shift root.Array
+        seq { yield! RRBHelpers.iterLeaves shift root
               yield tail }
 
     override this.RevIterLeaves() =
         seq { yield tail
-              yield! RRBHelpers.revIterLeaves shift root.Array }
+              yield! RRBHelpers.revIterLeaves shift root }
 
     override this.IterItems() = seq { for arr in this.IterLeaves() do yield! arr }
 

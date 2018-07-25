@@ -1508,11 +1508,73 @@ let longRunningTests =
 open RRBVectorMoreCommands.ParameterizedVecCommands
 let isolatedTest =
   testList "Isolated test" [
-    testProp "More command tests from empty" (Command.toProperty (RRBVectorMoreCommands.specFromData RRBVector.empty))
+    // ftestProp (1380433896, 296477427) (*788968584, 296477381*) "More command tests from empty" (Command.toProperty (RRBVectorMoreCommands.specFromData RRBVector.empty))
     // Failed case: [push 38; push 38; pop 58; push 66; mergeL "0 T19"; push 47; pop 54; pop 66; mergeL "0 T24"; push 8; pop 61]
     // Sizes: [38; 76; 18; 84; 103 (left node 19); 150 (left node still 19?); 96 (left node still 19?); 30 (left node still 19?); 54 (is it 24-19-11? or less?); 62; 1]
-    testProp "Try command tests from data" <| fun (vec : RRBVector<int>) -> (Command.toProperty (RRBVectorMoreCommands.specFromData vec))
+    // Also: ftestPropertyWithConfig (788968584, 296477381) "More command tests from empty"
+    testProp (*2044959467, 296477380*) "Try command tests from data" <| fun (vec : RRBVector<int>) -> (Command.toProperty (RRBVectorMoreCommands.specFromData vec))
     // Failed case: Initial: "M T9", Actions: [pop 37; push 47; mergeR "0 T15"; mergeR "0 T11"; mergeL "0 T9"; mergeL "0 T10"; pop 48; pop 47]
+    // Also: ftestPropertyWithConfig (2044959467, 296477380) "Try command tests from data"
+
+    testCase "Manual test from empty" <| fun _ ->
+        let mergeL = mergeL << RRBVecGen.treeReprStrToVec
+        let mergeR = mergeR << RRBVecGen.treeReprStrToVec
+        let actions = [
+            mergeR "0 T14"; push 155; mergeR "26 30 M 28 28 23 29 30 30 26 M T24";
+            mergeL "M T18"; map id ]
+            // pop 72
+        // TODO: This is a failure in IterLeaves() when there's an ExpandedNode in there that could have nulls in its leaf arrays. Need to fix that.
+        let vec = { 0..500 } |> RRBVector.ofSeq
+        let mutable current = vec
+        let logVec action = ignore
+        // let logVec action vec = logger.info (eventX "After {action}, vec was {vec}" >> setField "action" (action.ToString()) >> setField "vec" (RRBVecGen.vecToTreeReprStr vec))
+        for action in actions do
+            current <- current |> action.RunActual
+            logVec action current
+            RRBVectorProps.checkProperties current <| sprintf "Vector after %s" (action.ToString())
+
+    ftestCase "Manual test of (1380433896, 296477427)" <| fun _ ->
+        let scanf (x : int) a = a + 1  // So that scans will produce increasing sequences
+        // let mergeR = mergeR << RRBVecGen.treeReprStrToVec
+        // let actions = [mergeR "M T13"; push 166; scan scanf 8; pop 157; remove 51]
+        // TODO: Check if starting with the `scan` results, then doing 157 pops, is enough here
+        let vec = { 0..848 } |> RRBVector.ofSeq
+        let mutable current = vec
+        // let logVec action = ignore
+        let logVec action vec = printfn "After %O, vec was %s" action (RRBVecGen.vecToTreeReprStr vec)
+        // for action in actions do
+        //     current <- current |> action.RunActual
+        //     logVec action current
+        //     RRBVectorProps.checkProperties current <| sprintf "Vector after %s" (action.ToString())
+
+        // Crash is:
+        // System.NullReferenceException: Object reference not set to an instance of an object
+        //   at Ficus.RRBVectorNodes+NodeCreation.treeSize[T] (System.Int32 shift, System.Object node) [0x00004] in <5b56e30f3ec9364ca74503830fe3565b>:0
+        //   at Ficus.RRBVectorNodes+NodeCreation.createSizeTable[T] (System.Int32 shift, System.Object[] array) [0x0000f] in <5b56e30f3ec9364ca74503830fe3565b>:0
+        //   at Ficus.RRBVector+RRBTree`1[T].Ficus-RRBVector-IRRBInternal`1-RemoveImpl (System.Boolean shouldCheckForRebalancing, System.Int32 idx) [0x000e0] in <5b56e30f3ec9364ca74503830fe3565b>:0
+        //   at Ficus.RRBVector+RRBTree`1[T].Remove (System.Int32 idx) [0x00000] in <5b56e30f3ec9364ca74503830fe3565b>:0
+        //   at ExpectoTemplate.RRBVectorExpectoTest+isolatedTest@1537-2.Invoke (Microsoft.FSharp.Core.Unit _arg2) [0x000cc] in <5b56e315492c3c0ba745038315e3565b>:0
+        //   at Expecto.Impl+execTestAsync@878-1.Invoke (Microsoft.FSharp.Core.Unit unitVar) [0x00027] in <5a9db3dddf69a9a4a7450383ddb39d5a>:0
+        //   at Microsoft.FSharp.Control.AsyncBuilderImpl+callA@522[b,a].Invoke (Microsoft.FSharp.Control.AsyncParams`1[T] args) [0x00051] in <5a7d678a904cf4daa74503838a677d5a>:0
+
+        current <- RRBVector.append current (RRBVecGen.treeReprStrToVec "M T13")
+        logVec "mergeR \"M T13\"" current
+        RRBVectorProps.checkProperties current "Vector after mergeR \"M T13\""
+        for i = 1 to 166 do
+            current <- current.Push i
+        logVec "push 166" current
+        RRBVectorProps.checkProperties current "Vector after push 166"
+        current <- current |> RRBVector.scan scanf 8
+        logVec "scan scanf 8" current
+        RRBVectorProps.checkProperties current "Vector after scan scanf 8"
+        for i = 1 to 157 do
+            current <- current.Pop()
+        logVec "pop 157" current
+        RRBVectorProps.checkProperties current "Vector after pop 157"
+        current <- current |> RRBVector.remove 51
+        logVec "remove 51" current
+        RRBVectorProps.checkProperties current "Vector after remove 51"
+
 
     testCase "Manual test" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "M T9"
@@ -1577,6 +1639,35 @@ T26
 
   ]
 
+let transientResidueTests =
+  let startingVec =
+    let mutable current = { 0..(Literals.blockSize * Literals.blockSize + Literals.blockSize) } |> RRBVector.ofSeq
+    for i = 0 to Literals.blockSize do
+      current <- current.Pop()
+    // We now have a vector of one ExpandedNode and a tail, and the ExpandedNode has a single null in its last array element.
+    current
+
+  let runTest name f =
+    let result = startingVec |> f
+    RRBVectorProps.checkProperties result name
+
+  let mkTest name f =
+    testCase name <| fun _ -> runTest name f
+
+  testList "Transient-residue tests" [
+    mkTest "remove" (RRBVector.remove (Literals.blockSize + 3))
+    mkTest "insert" (RRBVector.insert (Literals.blockSize + 3) -512)
+    mkTest "pop" (RRBVector.pop)
+    mkTest "push" (RRBVector.push -512)
+    mkTest "take" (RRBVector.take (Literals.blockSize + 3))
+    mkTest "truncate" (RRBVector.truncate (Literals.blockSize + 3))
+    mkTest "truncate more" (RRBVector.truncate (Literals.blockSize * Literals.blockSize + 3))
+    mkTest "skip" (RRBVector.skip (Literals.blockSize + 3))
+    mkTest "choose" (RRBVector.choose (fun n -> if n % 2 = 0 then Some (n / 2) else None))
+    mkTest "distinct" (RRBVector.distinct)
+    // TODO: More tests like these
+  ]
+
 [<Tests>]
 let tests =
   testList "All tests" [
@@ -1589,11 +1680,13 @@ let tests =
     // operationTests
     // vectorTests
     // nodeVecGenerationTests
-    regressionTests
+    // regressionTests
     // mergeTests
     // apiTests
 
     // longRunningTests
+
+    transientResidueTests
 
     // isolatedTest
 

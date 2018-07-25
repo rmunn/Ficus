@@ -34,6 +34,13 @@ module Array =
         newArr
 
     // NOTE: No bounds-checking on idx. It's caller's responsibility to set it properly.
+    let inline sliceAndSet idx newItem oldArr oldArrLen =
+        // TODO: Remove if not used
+        let newArr = oldArr |> Array.truncate oldArrLen
+        newArr.[idx] <- newItem
+        newArr
+
+    // NOTE: No bounds-checking on idx. It's caller's responsibility to set it properly.
     let copyAndRemoveAt idx oldArr =
         let newLen = Array.length oldArr - 1
         let newArr = Array.zeroCreate newLen
@@ -48,6 +55,16 @@ module Array =
     // Special case of the above for removing the last item
     let inline copyAndPop oldArr =
         Array.sub oldArr 0 (Array.length oldArr - 1)
+
+    // Slice oldArr from 0 to sliceLen-1 inclusive, THEN also remove the item at idx, in one operation with no intermediate arrays
+    let sliceAndRemoveAt idx oldArr sliceLen =
+        // TODO: We could turn all copyAndRemoveAt instances into calls to sliceAndRemoveAt idx oldArr oldArr.Length ... or more likely, node.NodeSize
+        // Consider whether that's worth it.
+        let newLen = sliceLen - 1
+        let newArr = Array.zeroCreate newLen
+        Array.blit oldArr 0 newArr 0 idx
+        Array.blit oldArr (idx + 1) newArr idx (newLen - idx)
+        newArr
 
     // Remove first item and push new item onto the end of the array, in one operation with no intermediate arrays
     let inline popFirstAndPush item oldArr =

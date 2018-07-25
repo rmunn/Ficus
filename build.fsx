@@ -103,13 +103,28 @@ Target "DotnetTest" (fun _ ->
     |> Seq.iter invoke
 )
 
+Target "DotnetTestFsCheckOnly" (fun _ ->
+    runTests (sprintf "%s --no-build") (sprintf "%s --fscheck-only")
+    |> Seq.iter invoke
+)
+
 Target "DotnetStressTest" (fun _ ->
-    runTests (sprintf "%s --no-build") (sprintf "%s --stress 30 --stress-timeout 5 --stress-memory-limit 1024")
+    runTests (sprintf "%s --no-build") (sprintf "%s --stress 15 --stress-timeout 30 --stress-memory-limit 1024")
     |> Seq.iter invoke
 )
 
 Target "DotnetTestDebug" (fun _ ->
     runTests (sprintf "%s --no-build") (sprintf "%s --debug")
+    |> Seq.iter invoke
+)
+
+Target "DotnetTestDebugFsCheckOnly" (fun _ ->
+    runTests (sprintf "%s --no-build") (sprintf "%s --debug --fscheck-only")
+    |> Seq.iter invoke
+)
+
+Target "DotnetStressTestDebug" (fun _ ->
+    runTests (sprintf "%s --no-build") (sprintf "%s --stress 15 --stress-timeout 30 --stress-memory-limit 1024 --debug")
     |> Seq.iter invoke
 )
 
@@ -234,6 +249,8 @@ Target "Release" (fun _ ->
   ==> "DotnetBuild"
   ==> "DotnetTest"
   <=> "DotnetTestDebug"
+  <=> "DotnetTestFsCheckOnly"
+  <=> "DotnetTestDebugFsCheckOnly"
   ==> "DotnetPack"
   ==> "Publish"
   ==> "Release"

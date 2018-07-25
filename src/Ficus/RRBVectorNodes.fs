@@ -176,6 +176,17 @@ type Node(thread, array : obj[]) =
     abstract member NodeSize : int
     default this.NodeSize = array.Length
 
+    // Get an array containing only the *valid* children of this node (subclasses like ExpandedNode might need to override).
+    // Use IterChildren instead if possible to avoid array creation.
+    abstract member Children : obj[]
+    default this.Children = array
+
+    abstract member IterChildren : unit -> seq<obj>
+    default this.IterChildren() = array |> Seq.ofArray
+
+    abstract member RevIterChildren : unit -> seq<obj>
+    default this.RevIterChildren() = seq { for i = this.NodeSize - 1 downto 0 do yield this.Array.[i] }
+
     abstract member TreeSize<'T> : int -> int
     default this.TreeSize<'T> shift =
         // A full node is allowed to have an incomplete rightmost entry, but all but its rightmost entry must be complete.
@@ -274,10 +285,14 @@ type ExpandedNode(thread, realLength : int, array : obj[]) =
     member this.SetThread t = thread := t
     member this.StringRepr = sprintf "%A" array
 
-    override this.Shrink() = Node(thread, Array.sub this.Array 0 this.NodeSize)
+    override this.Shrink() = Node(thread, this.Array |> Array.truncate this.NodeSize)
     override this.Expand mutator = this.EnsureEditable mutator
 
     override this.NodeSize = this.CurrentLength
+
+    override this.Children = if this.NodeSize = this.Array.Length then this.Array else this.Array |> Array.truncate this.NodeSize
+
+    override this.IterChildren() = this.Array |> Seq.ofArray |> Seq.truncate this.NodeSize
 
     override this.EnsureEditable mutator =
         if LanguagePrimitives.PhysicalEquality mutator thread && not (isNull !thread)  // Note that this is NOT "if mutator = thread"
@@ -524,7 +539,11 @@ type ExpandedRRBNode(thread : Thread ref, realLength : int, array : obj[], sizeT
 
     override this.NodeSize = this.CurrentLength
 
-    override this.Shrink() = RRBNode(thread, Array.sub this.Array 0 this.NodeSize, Array.sub this.SizeTable 0 this.NodeSize) :> Node
+    override this.Children = if this.NodeSize = this.Array.Length then this.Array else this.Array |> Array.truncate this.NodeSize
+
+    override this.IterChildren() = this.Array |> Seq.ofArray |> Seq.truncate this.NodeSize
+
+    override this.Shrink() = RRBNode(thread, this.Array |> Array.truncate this.NodeSize, this.SizeTable |> Array.truncate this.NodeSize) :> Node
     override this.Expand mutator = this.EnsureEditable mutator
 
     override this.EnsureEditable mutator =
