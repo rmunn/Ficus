@@ -313,11 +313,11 @@ module RRBHelpers =
         // Will only be called if we can guarantee that there is room to merge the tail's items into either a or b.
         // TODO: Remove the following line before putting into production
         if shift <> Literals.blockSizeShift then invalidArg "shift" <| sprintf "mergeWithTail should only be called at twig level (%d). It was instead called with shift=%d" Literals.blockSizeShift shift
-        if Array.isEmpty tail then mergeArrays<'T> thread shift a.Array b.Array else
+        if Array.isEmpty tail then mergeArrays<'T> thread shift a.Children b.Children else
         if rebalanceNeeded3 a tail b then
-            Array.append3' a.Array (box tail) b.Array |> rebalance<'T> thread Literals.blockSizeShift |> splitAtBlockSize
+            Array.append3' a.Children (box tail) b.Children |> rebalance<'T> thread Literals.blockSizeShift |> splitAtBlockSize
         else
-            Array.append3' a.Array (box tail) b.Array |> splitAtBlockSize
+            Array.append3' a.Children (box tail) b.Children |> splitAtBlockSize
 
     let inline isThereRoomToMergeTheTail<'T> (aTwig:Node) (bTwig:Node) tailLength =
         // aTwig should be the rightmost twig of vector A
@@ -345,18 +345,18 @@ module RRBHelpers =
             if aShift < bShift then
                 let aR, bL = mergeTree thread aShift a (down bShift) (b |> getChildNode 0) tail
                 let a' = if aR |> Array.isEmpty then [||] else [|NodeCreation.mkRRBNode<'T> thread (down bShift) aR |> box|]
-                let b' = b.Array |> setOrRemoveFirstChild<'T> thread bShift bL
+                let b' = b.Children |> setOrRemoveFirstChild<'T> thread bShift bL
                 mergeArrays<'T> thread bShift a' b'
             elif aShift > bShift then
                 let aR, bL = mergeTree thread (down aShift) (getLastChildNode a) bShift b tail
-                let a' = a.Array |> setOrRemoveLastChild<'T>  thread aShift aR
+                let a' = a.Children |> setOrRemoveLastChild<'T>  thread aShift aR
                 let b' = if bL |> Array.isEmpty then [||] else [|NodeCreation.mkRRBNode<'T> thread (down aShift) bL |> box|]
                 mergeArrays<'T> thread aShift a' b'
             else
                 let aR,  bL  = getLastChildNode a, b |> getChildNode 0
                 let aR', bL' = mergeTree thread (down aShift) aR (down bShift) bL tail
-                let a' = a.Array |> setOrRemoveLastChild<'T>  thread aShift aR'
-                let b' = b.Array |> setOrRemoveFirstChild<'T> thread bShift bL'
+                let a' = a.Children |> setOrRemoveLastChild<'T>  thread aShift aR'
+                let b' = b.Children |> setOrRemoveFirstChild<'T> thread bShift bL'
                 mergeArrays<'T> thread aShift a' b'
 
     // =========

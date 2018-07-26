@@ -1665,7 +1665,11 @@ let transientResidueTests =
     mkTest "skip" (RRBVector.skip (Literals.blockSize + 3))
     mkTest "choose" (RRBVector.choose (fun n -> if n % 2 = 0 then Some (n / 2) else None))
     mkTest "distinct" (RRBVector.distinct)
+    mkTest "mergeL" (RRBVector.append (RRBVecGen.treeReprStrToVec "M T28"))
+    mkTest "mergeR" (fun vec -> RRBVector.append vec (RRBVecGen.treeReprStrToVec "M T28"))
+    mkTest "merge with self" (fun vec -> RRBVector.append vec vec)
     // TODO: More tests like these
+    testProp "Command tests from constructed vector" <| fun _ -> (Command.toProperty (RRBVectorMoreCommands.specFromData startingVec))
   ]
 
 [<Tests>]

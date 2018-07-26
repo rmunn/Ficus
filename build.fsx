@@ -109,11 +109,16 @@ Target "DotnetTestFsCheckOnly" (fun _ ->
 )
 
 Target "DotnetStressTest" (fun _ ->
-    runTests (sprintf "%s --no-build") (sprintf "%s --stress 15 --stress-timeout 30 --stress-memory-limit 1024")
+    runTests (sprintf "%s --no-build") (sprintf "%s --stress 15 --stress-timeout 300 --stress-memory-limit 1024")
     |> Seq.iter invoke
 )
 
 Target "DotnetTestDebug" (fun _ ->
+    runTests (sprintf "%s --no-build") (sprintf "%s --debug")
+    |> Seq.iter invoke
+)
+
+Target "DotnetTestDebugNoBuild" (fun _ ->
     runTests (sprintf "%s --no-build") (sprintf "%s --debug")
     |> Seq.iter invoke
 )
@@ -124,7 +129,7 @@ Target "DotnetTestDebugFsCheckOnly" (fun _ ->
 )
 
 Target "DotnetStressTestDebug" (fun _ ->
-    runTests (sprintf "%s --no-build") (sprintf "%s --stress 15 --stress-timeout 30 --stress-memory-limit 1024 --debug")
+    runTests (sprintf "%s --no-build") (sprintf "%s --stress 15 --stress-timeout 300 --stress-memory-limit 1024 --debug")
     |> Seq.iter invoke
 )
 
