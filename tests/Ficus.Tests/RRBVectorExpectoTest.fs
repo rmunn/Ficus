@@ -1652,32 +1652,31 @@ T26
 
   ]
 
-let transientResidueTests =
-  let startingVec =
-    let mutable current = { 0..(Literals.blockSize * Literals.blockSize + Literals.blockSize) } |> RRBVector.ofSeq
-    for i = 0 to Literals.blockSize do
-      current <- current.Pop()
-    // We now have a vector of one ExpandedNode and a tail, and the ExpandedNode has a single null in its last array element.
-    current
-
-  let runTest name f =
+let mkTestSuite name startingVec =
+  let runTest testName f =
     let result = startingVec |> f
-    RRBVectorProps.checkProperties result name
+    RRBVectorProps.checkProperties result <| sprintf "Result of %s test in %A suite" testName name
 
-  let mkTest name f =
-    testCase name <| fun _ -> runTest name f
+  let mkTest testName f =
+    testCase (sprintf "%s: %s" name testName) <| fun _ -> runTest testName f
 
-  testList "Transient-residue tests" [
-    mkTest "remove" (RRBVector.remove (Literals.blockSize + 3))
-    mkTest "insert" (RRBVector.insert (Literals.blockSize + 3) -512)
-    mkTest "pop" (RRBVector.pop)
+  let pos = if RRBVector.length startingVec = 0 then 0 else (Literals.blockSize + 3) % (RRBVector.length startingVec)
+
+  testList name [
+    mkTest "remove" (if RRBVector.length startingVec = 0 then id else RRBVector.remove pos)
+    mkTest "insert" (RRBVector.insert pos -512)
+    mkTest "pop" (if RRBVector.length startingVec = 0 then id else RRBVector.pop)
     mkTest "push" (RRBVector.push -512)
-    mkTest "take" (RRBVector.take (Literals.blockSize + 3))
+    mkTest "push many" (fun vec -> { 0 .. Literals.blockSize } |> Seq.fold (fun v i -> v |> RRBVector.push i) vec)
+    mkTest "take" (RRBVector.take pos)
     mkTest "truncate" (RRBVector.truncate (Literals.blockSize + 3))
     mkTest "truncate more" (RRBVector.truncate (Literals.blockSize * Literals.blockSize + 3))
-    mkTest "skip" (RRBVector.skip (Literals.blockSize + 3))
+    mkTest "skip" (RRBVector.skip pos)
     mkTest "choose" (RRBVector.choose (fun n -> if n % 2 = 0 then Some (n / 2) else None))
     mkTest "distinct" (RRBVector.distinct)
+    mkTest "map id" (RRBVector.map id)
+    mkTest "scan (+)" (RRBVector.scan (+) 0)
+    mkTest "scanBack (+)" (RRBVector.scan (+) 0)
     mkTest "mergeL tail-only" (RRBVector.append (RRBVecGen.treeReprStrToVec "0 T28"))
     mkTest "mergeR tail-only" (fun vec -> RRBVector.append vec (RRBVecGen.treeReprStrToVec "0 T28"))
     mkTest "mergeL sapling" (RRBVector.append (RRBVecGen.treeReprStrToVec "M T28"))
@@ -1686,30 +1685,61 @@ let transientResidueTests =
     mkTest "mergeR small non-sapling" (fun vec -> RRBVector.append vec (RRBVecGen.treeReprStrToVec "M M T28"))
     mkTest "merge with self" (fun vec -> RRBVector.append vec vec)
     // TODO: More tests like these
-    testProp "Command tests from constructed vector" <| fun _ -> (Command.toProperty (RRBVectorMoreCommands.specFromData startingVec))
+    // testProp "Command tests from constructed vector" <| fun _ -> (Command.toProperty (RRBVectorMoreCommands.specFromData startingVec))
   ]
+
+let transientResidueTests =
+  let startingVec =
+    let mutable current = { 0..(Literals.blockSize * Literals.blockSize + Literals.blockSize) } |> RRBVector.ofSeq
+    for i = 0 to Literals.blockSize do
+      current <- current.Pop()
+    // We now have a vector of one ExpandedNode and a tail, and the ExpandedNode has a single null in its last array element.
+    current
+
+  mkTestSuite "Tests on transient-residue vectors" startingVec
+
+let emptyTests = mkTestSuite "Tests on empty vectors" RRBVector.empty
+let singletonTests = mkTestSuite "Tests on 1-item vectors" (RRBVector.singleton 0)
+let dualTests = mkTestSuite "Tests on 2-item vectors" (RRBVector.singleton 0 |> RRBVector.push 1)
+let halfFullTailTests = mkTestSuite "Tests on vectors with half-full tails" ({ 1 .. Literals.blockSize / 2} |> RRBVector.ofSeq)
+let fullTailTests = mkTestSuite "Tests on vectors with full tails" ({ 1 .. Literals.blockSize} |> RRBVector.ofSeq)
+let fullTailPlusOneTests = mkTestSuite "Tests on vectors with full tails plus one" ({ 0 .. Literals.blockSize} |> RRBVector.ofSeq)
+let fullSaplingMinusOneTests = mkTestSuite "Tests on full saplings minus one" ({ 2 .. Literals.blockSize * 2} |> RRBVector.ofSeq)
+let fullSaplingTests = mkTestSuite "Tests on full saplings" ({ 1 .. Literals.blockSize * 2} |> RRBVector.ofSeq)
+let fullSaplingPlusOneTests = mkTestSuite "Tests on full saplings plus one" ({ 0 .. Literals.blockSize * 2} |> RRBVector.ofSeq)
+let threeLevelVectorTests = mkTestSuite "Tests on three-level vector" (RRBVecGen.treeReprStrToVec "[[M*M]*M]*3 TM/2")
 
 [<Tests>]
 let tests =
   testList "All tests" [
     // arrayTests
-    // simpleVectorTests
-    // manualVectorTests
-    // constructedVectorSplitTests
-    // splitJoinTests
-    // insertTests
-    // operationTests
-    // vectorTests
-    // nodeVecGenerationTests
-    // regressionTests
-    // mergeTests
+    simpleVectorTests
+    manualVectorTests
+    constructedVectorSplitTests
+    splitJoinTests
+    insertTests
+    operationTests
+    vectorTests
+    nodeVecGenerationTests
+    regressionTests
+    mergeTests
     // apiTests
 
     // longRunningTests
 
-    // transientResidueTests
+    transientResidueTests
 
-    isolatedTest
+    // isolatedTest
+    emptyTests
+    singletonTests
+    dualTests
+    halfFullTailTests
+    fullTailTests
+    fullTailPlusOneTests
+    fullSaplingMinusOneTests
+    fullSaplingTests
+    fullSaplingPlusOneTests
+    threeLevelVectorTests
 
     // perfTests
   ]
