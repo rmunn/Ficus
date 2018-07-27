@@ -130,19 +130,35 @@ let treeReprStrToVec s =
 let strJoin (between:string) (parts:#seq<string>) =
     System.String.Join(between,parts)
 
+let sizeToTreeReprStr = function
+    | i when i >= Literals.blockSize -> "M"
+    | i when i  = Literals.blockSize - 1 -> "M-1"
+    // | i when i  = Literals.blockSize - 2 -> "M-2"
+    // | i when i  = Literals.blockSize - 3 -> "M-3"
+    | i -> i.ToString()
+
 let leafToTreeReprStr (leaf : 'T []) =
-    match leaf.Length with
-    | x when x >= Literals.blockSize -> "M"
-    | x when x  = Literals.blockSize - 1 -> "M-1"
-    // | x when x  = Literals.blockSize - 2 -> "M-2"
-    // | x when x  = Literals.blockSize - 3 -> "M-3"
-    | x -> x.ToString()
+    leaf.Length |> sizeToTreeReprStr
 
 let rec nodeToTreeReprStr<'T> level (node : obj []) =
     if level > 1 then
-        node |> Seq.filter (not << isNull) |> Seq.cast<Node> |> Seq.map (fun node -> nodeToTreeReprStr (level - 1) node.Array) |> strJoin " " |> sprintf "[%s]"
+        let children = node |> Seq.filter (not << isNull) |> Seq.cast<Node> |> Seq.map (fun node -> nodeToTreeReprStr (level - 1) node.Array) |> List.ofSeq
+        if children |> List.distinct |> List.length = 1 then
+            // All these children are the same
+            let mult = children |> List.length |> sizeToTreeReprStr
+            let childRepr = children |> List.head
+            sprintf "[%s*%s]" childRepr mult
+        else
+            children |> strJoin " " |> sprintf "[%s]"
     elif level = 1 then
-        node |> Seq.filter (not << isNull) |> Seq.cast<'T []> |> Seq.map leafToTreeReprStr |> strJoin " " |> sprintf "[%s]"
+        let leaves = node |> Seq.filter (not << isNull) |> Seq.cast<'T []> |> List.ofSeq
+        if leaves |> List.distinctBy Array.length |> List.length = 1 then
+            // All these leaves are the same
+            let mult = leaves |> List.length |> sizeToTreeReprStr
+            let leafSize = leaves |> List.head |> Array.length |> sizeToTreeReprStr
+            sprintf "[%s*%s]" leafSize mult
+        else
+            leaves |> Seq.map leafToTreeReprStr |> strJoin " " |> sprintf "[%s]"
     else
         leafToTreeReprStr node
 

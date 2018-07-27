@@ -1508,7 +1508,7 @@ let longRunningTests =
 open RRBVectorMoreCommands.ParameterizedVecCommands
 let isolatedTest =
   testList "Isolated test" [
-    // ftestProp (1380433896, 296477427) (*788968584, 296477381*) "More command tests from empty" (Command.toProperty (RRBVectorMoreCommands.specFromData RRBVector.empty))
+    testProp (*1380433896, 296477427*) (*788968584, 296477381*) "More command tests from empty" (Command.toProperty (RRBVectorMoreCommands.specFromData RRBVector.empty))
     // Failed case: [push 38; push 38; pop 58; push 66; mergeL "0 T19"; push 47; pop 54; pop 66; mergeL "0 T24"; push 8; pop 61]
     // Sizes: [38; 76; 18; 84; 103 (left node 19); 150 (left node still 19?); 96 (left node still 19?); 30 (left node still 19?); 54 (is it 24-19-11? or less?); 62; 1]
     // Also: ftestPropertyWithConfig (788968584, 296477381) "More command tests from empty"
@@ -1638,7 +1638,7 @@ T26
             logVec action current
             RRBVectorProps.checkProperties current <| sprintf "Vector after %s" (action.ToString())
 
-    ftestCase "Another large manual test" <| fun _ ->
+    testCase "Another large manual test" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "[M*M]*M TM-3"
         printfn "Starting with %s" (RRBVecGen.vecToTreeReprStr vec)
         let mutable current = vec
