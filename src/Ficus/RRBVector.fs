@@ -1229,7 +1229,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] TransientRRBTree<'T> internal (c
                 let lastChild = (curNode.Array.[lastIdx] :?> Node).Shrink()
                 curNode.Array.[lastIdx] <- box lastChild
                 curNode <- lastChild
-                curShift <- (RRBMath.down shift)
+                curShift <- (RRBMath.down curShift)
             RRBTree<'T>(count, shift, root, tail, tailOffset) :> RRBVector<'T>
 
     member this.GetItem idx =
