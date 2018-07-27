@@ -380,18 +380,13 @@ let debugSomethingElse2 () =
     printfn "All done, breakpoint here"
 
 let debugSomethingElse3() =
-    let mergeL = mergeL << RRBVecGen.treeReprStrToVec
-    let mergeR = mergeR << RRBVecGen.treeReprStrToVec
-    let scanf _ a = a + 1  // So that scans will produce increasing sequences
-    let mapf a = a  // So that map won't change the numbers
-    let actions = [mergeR "M T13"; push 166; scan scanf 8; pop 157; remove 51]
-    let start = { 0..848 } |> RRBVector.ofSeq
-    let mutable current = start
-    let logVec action vec = printfn "After %O, vec was %s" action (RRBVecGen.vecToTreeReprStr vec)
-    for action in actions do
-        current <- current |> action.RunActual
-        logVec action current
-        testProperties current <| sprintf "Vector after %O" action
+    let mutable current = RRBVecGen.treeReprStrToVec "[M*M]*M TM-3"
+    printfn "Starting with %s" (RRBVecGen.vecToTreeReprStr current)
+    for i = 1 to Literals.blockSize + 6 do
+      current <- current.Push(i)
+    printfn "After pushing, we have %s" (RRBVecGen.vecToTreeReprStr current)
+    current <- current |> RRBVector.rev
+    printfn "After rev(), we have %s" (RRBVecGen.vecToTreeReprStr current)
     printfn "All done, breakpoint here"
 
 [<EntryPoint>]

@@ -1512,7 +1512,7 @@ let isolatedTest =
     // Failed case: [push 38; push 38; pop 58; push 66; mergeL "0 T19"; push 47; pop 54; pop 66; mergeL "0 T24"; push 8; pop 61]
     // Sizes: [38; 76; 18; 84; 103 (left node 19); 150 (left node still 19?); 96 (left node still 19?); 30 (left node still 19?); 54 (is it 24-19-11? or less?); 62; 1]
     // Also: ftestPropertyWithConfig (788968584, 296477381) "More command tests from empty"
-    ftestProp (498335399, 296478517) (*2044959467, 296477380*) "Try command tests from data" <| fun (vec : RRBVector<int>) -> logger.info (eventX "Starting test with {vec}" >> setField "vec" (RRBVecGen.vecToTreeReprStr vec)); (Command.toProperty (RRBVectorMoreCommands.specFromData vec))
+    testProp (*498335399, 296478517*) (*2044959467, 296477380*) "Try command tests from data" <| fun (vec : RRBVector<int>) -> logger.info (eventX "Starting test with {vec}" >> setField "vec" (RRBVecGen.vecToTreeReprStr vec)); (Command.toProperty (RRBVectorMoreCommands.specFromData vec))
     // Failed case: Initial: "M T9", Actions: [pop 37; push 47; mergeR "0 T15"; mergeR "0 T11"; mergeL "0 T9"; mergeL "0 T10"; pop 48; pop 47]
     // Also: ftestPropertyWithConfig (2044959467, 296477380) "Try command tests from data"
     // Also  (498335399, 296478517) which is "[M*M]*M TM-3" with commands [push 38; rev]
@@ -1534,7 +1534,7 @@ let isolatedTest =
             logVec action current
             RRBVectorProps.checkProperties current <| sprintf "Vector after %s" (action.ToString())
 
-    ftestCase "Manual test of (1380433896, 296477427)" <| fun _ ->
+    testCase "Manual test of (1380433896, 296477427)" <| fun _ ->
         let scanf (x : int) a = a + 1  // So that scans will produce increasing sequences
         // let mergeR = mergeR << RRBVecGen.treeReprStrToVec
         // let actions = [mergeR "M T13"; push 166; scan scanf 8; pop 157; remove 51]
@@ -1638,6 +1638,18 @@ T26
             logVec action current
             RRBVectorProps.checkProperties current <| sprintf "Vector after %s" (action.ToString())
 
+    ftestCase "Another large manual test" <| fun _ ->
+        let vec = RRBVecGen.treeReprStrToVec "[M*M]*M TM-3"
+        printfn "Starting with %s" (RRBVecGen.vecToTreeReprStr vec)
+        let mutable current = vec
+        let actions = [push 38; rev()]
+        // let logVec action vec = logger.info (eventX "After {action}, vec was {vec}" >> setField "action" (action.ToString()) >> setField "vec" (RRBVecGen.vecToTreeReprStr vec))
+        let logVec action = ignore
+        for action in actions do
+            current <- current |> action.RunActual
+            logVec action current
+            RRBVectorProps.checkProperties current <| sprintf "Vector after %s" (action.ToString())
+
   ]
 
 let transientResidueTests =
@@ -1666,8 +1678,12 @@ let transientResidueTests =
     mkTest "skip" (RRBVector.skip (Literals.blockSize + 3))
     mkTest "choose" (RRBVector.choose (fun n -> if n % 2 = 0 then Some (n / 2) else None))
     mkTest "distinct" (RRBVector.distinct)
-    mkTest "mergeL" (RRBVector.append (RRBVecGen.treeReprStrToVec "M T28"))
-    mkTest "mergeR" (fun vec -> RRBVector.append vec (RRBVecGen.treeReprStrToVec "M T28"))
+    mkTest "mergeL tail-only" (RRBVector.append (RRBVecGen.treeReprStrToVec "0 T28"))
+    mkTest "mergeR tail-only" (fun vec -> RRBVector.append vec (RRBVecGen.treeReprStrToVec "0 T28"))
+    mkTest "mergeL sapling" (RRBVector.append (RRBVecGen.treeReprStrToVec "M T28"))
+    mkTest "mergeR sapling" (fun vec -> RRBVector.append vec (RRBVecGen.treeReprStrToVec "M T28"))
+    mkTest "mergeL small non-sapling" (RRBVector.append (RRBVecGen.treeReprStrToVec "M M T28"))
+    mkTest "mergeR small non-sapling" (fun vec -> RRBVector.append vec (RRBVecGen.treeReprStrToVec "M M T28"))
     mkTest "merge with self" (fun vec -> RRBVector.append vec vec)
     // TODO: More tests like these
     testProp "Command tests from constructed vector" <| fun _ -> (Command.toProperty (RRBVectorMoreCommands.specFromData startingVec))

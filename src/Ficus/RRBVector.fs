@@ -1265,6 +1265,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] TransientRRBTree<'T> internal (c
             tail <- Array.zeroCreate Literals.blockSize
             tail.[0] <- item
         else
+            // TODO: For transients, we need a special version of pushTailDown that creates an ExpandedNode as the new root, and shrinks the current node
             let root', shift' = RRBHelpers.pushTailDown this.Thread shift tail root  // This does all the work
             root <- root'
             shift <- shift'
