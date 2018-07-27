@@ -61,12 +61,15 @@ module RRBHelpers =
 
     let mkBoxedRRBNodeOrLeaf<'T> thread shift entries = if shift > 0 then NodeCreation.mkRRBNode<'T> thread shift entries |> box else entries |> box
 
+    // TODO: Move `newPath` into Node class so ExpandedNodes can create an ExpandedNode/ExpandedRRBNode at the far right
+    // TODO: Note that normally, mkRRBNode [|item|] ends up creating a SingletonNode. That's not what we want in the case of transients.
+    // TODO: Rule of thumb: if root is an ExpandedNode, we want to keep ExpandedNodes down the right-hand spine (but NOT in the middle of the tree).
     let newPath<'T> thread endShift node =
         let rec loop s node =
             if s >= endShift
             then node
             else let s' = (up s) in loop s' (NodeCreation.mkRRBNode<'T> thread s' [|node|])
-        loop Literals.blockSizeShift node  // TOCHECK: I'm pretty sure this is correct in the new "leaves are just 'T arrays" world, but let's double-check
+        loop Literals.blockSizeShift node
 
     // TOCONVERT: This also needs to go into the node, so that AppendChild can be called with the right(?) thread
     let rec appendLeafWithoutGrowingTree thread shift (newLeaf : 'T[]) leafLen (rootNode : Node) =
@@ -86,7 +89,7 @@ module RRBHelpers =
         | Some root' -> root', shift
         | None ->
             let left = root
-            let right = newPath<'T> thread shift (NodeCreation.mkNode thread [|box leaf|])   // TOCHECK: Make sure this is the right logic for the new "Leaves are just 'T arrays" world
+            let right = newPath<'T> thread shift (NodeCreation.mkNode thread [|box leaf|])
             let higherShift = up shift
             root.PushRootUp shift leafLen right, higherShift
 
@@ -1255,7 +1258,6 @@ and [<StructuredFormatDisplay("{StringRepr}")>] TransientRRBTree<'T> internal (c
     member this.Push (item : 'T) =
         let tailLen = count - tailOffset
         if tailLen < Literals.blockSize then
-            // printfn "Pushing %A into tail %A; count is %d and tailOffset is %d and tailLen is %d" item tail count tailOffset tailLen
             // Easy: just add new item in tail and we're done
             tail.[tailLen] <- item
         elif tailOffset = 0 then

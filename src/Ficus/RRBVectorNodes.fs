@@ -261,8 +261,8 @@ type Node(thread, array : obj[]) =
     // Used in appendLeafWithGrowth, which creates the new path and then calls us to create a new "root" node above us, with us as the left
     abstract member PushRootUp : int -> int -> Node -> Node
     default this.PushRootUp shift leafLen (newRight : Node) =
-        // Don't need shift or leafLen for ordinary nodesm only for RRBNodes
-        NodeCreation.mkNode thread [|box this; box newRight|]
+        // Don't need shift or leafLen for ordinary nodes, only for RRBNodes
+        NodeCreation.mkNode thread [|this.Shrink() |> box; newRight |> box|]
 
     abstract member TakeChildren : Thread ref -> int -> int -> Node
     default this.TakeChildren mutator shift n =
@@ -285,7 +285,11 @@ type ExpandedNode(thread, realLength : int, array : obj[]) =
     member this.SetThread t = thread := t
     member this.StringRepr = sprintf "%A" array
 
-    override this.Shrink() = Node(thread, this.Array |> Array.truncate this.NodeSize)
+    override this.Shrink() =
+        if this.NodeSize = Literals.blockSize then
+            Node(thread, this.Array)
+        else
+            Node(thread, this.Array |> Array.truncate this.NodeSize)
     override this.Expand mutator = this.EnsureEditable mutator
 
     override this.NodeSize = this.CurrentLength
@@ -334,10 +338,10 @@ type ExpandedNode(thread, realLength : int, array : obj[]) =
 
     // Assumes that the node does *not* yet have blockSize children; verifying that is the job of the caller function
     override this.AppendChild<'T> mutator shift newChild childSize =
-        // Full nodes are allowed to have their last item be non-full, so we have to check that
         let newNode = this.EnsureEditable mutator :?> ExpandedNode
         newNode.Array.[newNode.NodeSize] <- newChild
         newNode.CurrentLength <- newNode.CurrentLength + 1
+        // Full nodes are allowed to have their last item be non-full, so we have to check that
         if newNode.FullNodeIsTrulyFull<'T> shift then newNode :> Node else newNode.ToRRBIfNeeded<'T> shift
 
     override this.RemoveLastChild<'T> mutator shift =
@@ -353,11 +357,6 @@ type ExpandedNode(thread, realLength : int, array : obj[]) =
     //     // Only expanded nodes will actually do this in a transient way
     //     Array.append array otherNode.Array |> NodeCreation.mkRRBNode<'T> mutator shift
     //     // TODO: Put rebalancing logic in here as well; this will become the node equivalent of mergeArrays<'T>
-
-    // Used in appendLeafWithGrowth, which creates the new path and then calls us to create a new "root" node above us, with us as the left
-    override this.PushRootUp shift leafLen (newRight : Node) =
-        // Don't need shift or leafLen for ordinary nodes, only for RRBNodes
-        NodeCreation.mkNode thread [|box this; box newRight|]
 
     override this.TakeChildren mutator shift n =
 #if DEBUG
@@ -500,7 +499,7 @@ type RRBNode(thread, array, sizeTable : int[]) =
 
     override this.PushRootUp shift leafLen (newRight : Node) =
         let oldSize = Array.last sizeTable
-        NodeCreation.mkRRBNodeWithSizeTable thread (RRBMath.up shift) [|box this; box newRight|] [|oldSize; oldSize + leafLen|]
+        NodeCreation.mkRRBNodeWithSizeTable thread (RRBMath.up shift) [|this.Shrink() |> box; newRight |> box|] [|oldSize; oldSize + leafLen|]
 
     override this.TakeChildren mutator shift n =
 #if DEBUG
@@ -543,7 +542,11 @@ type ExpandedRRBNode(thread : Thread ref, realLength : int, array : obj[], sizeT
 
     override this.IterChildren() = this.Array |> Seq.ofArray |> Seq.truncate this.NodeSize
 
-    override this.Shrink() = RRBNode(thread, this.Array |> Array.truncate this.NodeSize, this.SizeTable |> Array.truncate this.NodeSize) :> Node
+    override this.Shrink() =
+        if this.NodeSize = Literals.blockSize then
+            RRBNode(thread, this.Array, this.SizeTable) :> Node
+        else
+            RRBNode(thread, this.Array |> Array.truncate this.NodeSize, this.SizeTable |> Array.truncate this.NodeSize) :> Node
     override this.Expand mutator = this.EnsureEditable mutator
 
     override this.EnsureEditable mutator =

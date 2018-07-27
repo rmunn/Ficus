@@ -719,7 +719,6 @@ let manualVectorTests =
         let vec2 = vec.Remove 0
         RRBVectorProps.checkProperties vec2 "Sapling with short root"
         let vec3 = vec2.Insert (vec2.Length - 2) 65
-        printfn "Result: %A" (RRBVecGen.vecToTreeReprStr vec3)
         RRBVectorProps.checkProperties vec3 "Sapling with formerly short root, after a tail insert, which should be a full sapling"
         match vec3 with
         | :? RRBSapling<int> as sapling ->
@@ -1698,6 +1697,12 @@ let transientResidueTests =
 
   mkTestSuite "Tests on transient-residue vectors" startingVec
 
+let moreTransientResidueTests =
+  { 0..(Literals.blockSize * (Literals.blockSize - 3)) }
+  |> RRBVector.ofSeq
+  |> mkTestSuite "Tests on some more transient-residue vectors"
+  // That produces an ExpandedNode with a few nulls at the end
+
 let emptyTests = mkTestSuite "Tests on empty vectors" RRBVector.empty
 let singletonTests = mkTestSuite "Tests on 1-item vectors" (RRBVector.singleton 0)
 let dualTests = mkTestSuite "Tests on 2-item vectors" (RRBVector.singleton 0 |> RRBVector.push 1)
@@ -1728,6 +1733,7 @@ let tests =
     // longRunningTests
 
     transientResidueTests
+    moreTransientResidueTests
 
     // isolatedTest
     emptyTests

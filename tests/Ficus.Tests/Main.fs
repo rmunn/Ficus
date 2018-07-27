@@ -384,9 +384,11 @@ let debugSomethingElse3() =
     printfn "Starting with %s" (RRBVecGen.vecToTreeReprStr current)
     for i = 1 to Literals.blockSize + 6 do
       current <- current.Push(i)
-    printfn "After pushing, we have %s" (RRBVecGen.vecToTreeReprStr current)
+      printfn "After pushing %d times, we have %s" i (RRBVecGen.vecToTreeReprStr current)
+      testProperties current <| sprintf "Vector after pushing %d times" i
     current <- current |> RRBVector.rev
     printfn "After rev(), we have %s" (RRBVecGen.vecToTreeReprStr current)
+    testProperties current <| sprintf "Vector after rev()"
     printfn "All done, breakpoint here"
 
 [<EntryPoint>]
