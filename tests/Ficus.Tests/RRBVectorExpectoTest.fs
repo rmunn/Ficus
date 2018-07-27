@@ -1512,9 +1512,10 @@ let isolatedTest =
     // Failed case: [push 38; push 38; pop 58; push 66; mergeL "0 T19"; push 47; pop 54; pop 66; mergeL "0 T24"; push 8; pop 61]
     // Sizes: [38; 76; 18; 84; 103 (left node 19); 150 (left node still 19?); 96 (left node still 19?); 30 (left node still 19?); 54 (is it 24-19-11? or less?); 62; 1]
     // Also: ftestPropertyWithConfig (788968584, 296477381) "More command tests from empty"
-    testProp (*2044959467, 296477380*) "Try command tests from data" <| fun (vec : RRBVector<int>) -> (Command.toProperty (RRBVectorMoreCommands.specFromData vec))
+    ftestProp (498335399, 296478517) (*2044959467, 296477380*) "Try command tests from data" <| fun (vec : RRBVector<int>) -> logger.info (eventX "Starting test with {vec}" >> setField "vec" (RRBVecGen.vecToTreeReprStr vec)); (Command.toProperty (RRBVectorMoreCommands.specFromData vec))
     // Failed case: Initial: "M T9", Actions: [pop 37; push 47; mergeR "0 T15"; mergeR "0 T11"; mergeL "0 T9"; mergeL "0 T10"; pop 48; pop 47]
     // Also: ftestPropertyWithConfig (2044959467, 296477380) "Try command tests from data"
+    // Also  (498335399, 296478517) which is "[M*M]*M TM-3" with commands [push 38; rev]
 
     testCase "Manual test from empty" <| fun _ ->
         let mergeL = mergeL << RRBVecGen.treeReprStrToVec
@@ -1690,9 +1691,9 @@ let tests =
 
     // longRunningTests
 
-    transientResidueTests
+    // transientResidueTests
 
-    // isolatedTest
+    isolatedTest
 
     // perfTests
   ]
