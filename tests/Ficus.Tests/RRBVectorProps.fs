@@ -42,6 +42,7 @@ let properties = [
         | :? RRBTree<'T> as tree ->
             if tree.Root |> isEmpty then true
             else check tree.Shift tree.Root
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "The total number of items in all leaf nodes combined, plus the tail, should equal the vector length", fun (vec : RRBVector<'T>) ->
         match vec with
@@ -49,6 +50,7 @@ let properties = [
             Array.length sapling.Root + Array.length sapling.Tail = sapling.Length
         | :? RRBTree<'T> as tree ->
             itemCount<'T> tree.Root + Array.length tree.Tail = tree.Length
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "Unless the vector is empty, the tail should never be empty", fun (vec : RRBVector<'T>) ->
         match vec with
@@ -56,6 +58,7 @@ let properties = [
             (sapling.Length = 0) = (sapling.Tail.Length = 0)
         | :? RRBTree<'T> as tree ->
             (tree.Length = 0) = (tree.Tail.Length = 0)
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "The vector's length, shift, and tail offset must not be negative", fun (vec : RRBVector<'T>) ->
         match vec with
@@ -63,6 +66,7 @@ let properties = [
             sapling.Length >= 0 && sapling.Shift >= 0 && sapling.TailOffset >= 0
         | :? RRBTree<'T> as tree ->
             tree.Length >= 0 && tree.Shift >= 0 && tree.TailOffset >= 0
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "The number of items in each node should be <= the branching factor (Literals.blockSize)", fun (vec : RRBVector<'T>) ->
         let rec check shift (node : Node) =
@@ -77,6 +81,7 @@ let properties = [
             sapling.Root.Length <= Literals.blockSize
         | :? RRBTree<'T> as tree ->
             check tree.Shift tree.Root
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "The number of items in the tail should be <= the branching factor (Literals.blockSize)", fun (vec : RRBVector<'T>) ->
         match vec with
@@ -84,6 +89,7 @@ let properties = [
             sapling.Tail.Length <= Literals.blockSize
         | :? RRBTree<'T> as tree ->
             tree.Tail.Length <= Literals.blockSize
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "The size table of any tree node should match the number of items its descendent leaves contain", fun (vec : RRBVector<'T>) ->
         let rec check shift (node : Node) =
@@ -100,6 +106,7 @@ let properties = [
         | :? RRBSapling<'T> as sapling -> true // Sapling roots are leaves, which don't have a size table
         | :? RRBTree<'T> as tree ->
             check tree.Shift tree.Root
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "The size table of any tree node should have as many entries as its # of direct child nodes", fun (vec : RRBVector<'T>) ->
         let rec check (node : Node) =
@@ -110,6 +117,7 @@ let properties = [
         | :? RRBSapling<'T> as sapling -> true // Sapling roots are leaves, which don't have a size table
         | :? RRBTree<'T> as tree ->
             check tree.Root
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "A full node should never contain less-than-full children except as its last child", fun (vec : RRBVector<'T>) ->
         let rec check shift seenFullParent isLastChild (node : Node) =
@@ -146,6 +154,7 @@ let properties = [
         | :? RRBSapling<'T> as sapling -> true // Not applicable to saplings
         | :? RRBTree<'T> as tree ->
             check tree.Shift false true tree.Root
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "The rightmost leaf node of the vector should always be full if its parent is full", fun (vec : RRBVector<'T>) ->
         // Except under certain conditions, that is... and I want to find out when this property turns out to be false
@@ -169,6 +178,7 @@ let properties = [
             match twig with
             | :? RRBNode -> true // No need for this invariant if last twig has size table
             | _ -> check tree.Root // TODO: Can rewrite this check to be simpler
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "The tail offset should equal (vector length - tail length) at all times, even when the vector is empty", fun (vec : RRBVector<'T>) ->
         match vec with
@@ -176,6 +186,7 @@ let properties = [
             sapling.Length - sapling.Tail.Length = sapling.TailOffset
         | :? RRBTree<'T> as tree ->
             tree.Length - tree.Tail.Length = tree.TailOffset
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "If the vector shift is > Literals.blockSizeShift, then the root node's length should be at least 2", fun (vec : RRBVector<'T>) -> // TODO: Move to "sometimesProperties" list
         // Except under certain conditions, that is... and I want to find out when this property turns out to be false
@@ -183,6 +194,7 @@ let properties = [
         | :? RRBSapling<'T> as sapling -> true // Not applicable to saplings
         | :? RRBTree<'T> as tree ->
             tree.Shift <= Literals.blockSizeShift || tree.Root.NodeSize >= 2
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "Leaf nodes' arrays should all contain items of type 'T, and all other nodes' arrays should contain nodes", fun (vec : RRBVector<'T>) ->
         match vec with
@@ -196,6 +208,7 @@ let properties = [
                     node.Array.[0 .. node.NodeSize - 1] |> Array.forall isNode &&
                     node.Array.[0 .. node.NodeSize - 1] |> Array.forall (fun n -> n :?> Node |> check (level - Literals.blockSizeShift))
             check tree.Shift tree.Root  // No need to check the tail since it's defined as 'T []
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "Internal nodes that are at shift > Literals.blockSizeShift should never be twigs", fun (vec : RRBVector<'T>) ->
         let rec check shift node =
@@ -205,6 +218,7 @@ let properties = [
         | :? RRBSapling<'T> as sapling -> true // Not applicable to saplings
         | :? RRBTree<'T> as tree ->
             if tree.Root |> isEmpty then true else check tree.Shift tree.Root
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "The root node should be empty if (and only if) the tail offset is 0 (i.e., it's a tail-only node)", fun (vec : RRBVector<'T>) ->
         match vec with
@@ -212,23 +226,27 @@ let properties = [
             (sapling.Root.Length = 0) = (sapling.TailOffset = 0)
         | :? RRBTree<'T> as tree ->
             (tree.Root.NodeSize = 0) = (tree.TailOffset = 0)
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "If vector height > 0, the root node should not be empty", fun (vec : RRBVector<'T>) ->
         match vec with
         | :? RRBSapling<'T> as sapling -> true // Not applicable to saplings
         | :? RRBTree<'T> as tree ->
             tree.Shift > 0 && tree.Root |> (not << isEmpty)
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "Iff vector height = 0, the tree should be a sapling", fun (vec : RRBVector<'T>) ->
         match vec with
         | :? RRBSapling<'T> as sapling -> sapling.Shift = 0
         | :? RRBTree<'T> as tree -> tree.Shift > 0
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "If vector height = 0, the tree should have no more than blockSize * 2 total items in it", fun (vec : RRBVector<'T>) ->
         match vec with
         | :? RRBSapling<'T> as sapling ->
             sapling.Length <= Literals.blockSize * 2
         | :? RRBTree<'T> as tree -> true // Not applicable to taller trees
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "If vector height > 0, the tree should not contain any empty nodes", fun (vec : RRBVector<'T>) ->
         match vec with
@@ -238,6 +256,7 @@ let properties = [
                 if shift <= Literals.blockSizeShift then node |> (not << isEmpty)
                 else node |> (not << isEmpty) && node.Array.[0 .. node.NodeSize - 1] |> Array.forall (fun n -> n :?> Node |> check (down shift))
             check tree.Shift tree.Root
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     // TODO: Think about disabling this property, because in some rare circumstances, it is possible for this to happen.
     // For example, if we remove from the head of [M M] T1 twice, then inserting into the second leaf once, we'd get a [M] TM vector (height non-0).
@@ -246,11 +265,13 @@ let properties = [
         match vec with
         | :? RRBSapling<'T> as sapling -> true
         | :? RRBTree<'T> as tree -> tree.Root.NodeSize > 1
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "If vector length <= (Literals.blockSize * 2), the root node should contain more than one node", fun (vec : RRBVector<'T>) ->
         match vec with
         | :? RRBSapling<'T> as sapling -> sapling.Length <= Literals.blockSize * 2
         | :? RRBTree<'T> as tree -> tree.Length <= Literals.blockSize * 2 || tree.Root.NodeSize > 1
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "No RRBNode should contain a \"full\" size table. If the size table was full, it should have been turned into a FullNode.", fun (vec : RRBVector<'T>) ->
         let rec check shift (node : Node) =
@@ -270,12 +291,14 @@ let properties = [
         | :? RRBSapling<'T> as sapling -> true // Not applicable to saplings
         | :? RRBTree<'T> as tree ->
             check tree.Shift tree.Root
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "If the root node is empty, the shift is 0", fun (vec : RRBVector<'T>) ->
         // Note that the converse is *NOT* true: if shift is 0, it could be a root+tail vector
         match vec with
         | :? RRBSapling<'T> as sapling -> true
         | :? RRBTree<'T> as tree -> not (tree.Root |> isEmpty)
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "The shift of a vector should always be a multiple of Literals.blockSizeShift", fun (vec : RRBVector<'T>) ->
         match vec with
@@ -283,6 +306,7 @@ let properties = [
             sapling.Shift % Literals.blockSizeShift = 0
         | :? RRBTree<'T> as tree ->
             tree.Shift % Literals.blockSizeShift = 0
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 
     "The shift of a vector should always be the height from the root to the leaves, multiplied by Literals.blockSizeShift", fun (vec : RRBVector<'T>) ->
         match vec with
@@ -294,6 +318,7 @@ let properties = [
                 true // We test this condition in the "If the root node is empty ..." check above, not here.
             else // Non-empty root, so we can meaningfully check the height of the tree
                 (height 1 tree.Root) * Literals.blockSizeShift = tree.Shift
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 ]
 
 // Other properties to add at some point:
@@ -319,8 +344,6 @@ let checkProperty name pred vec =
 
 let combine r1 r2 = (r1 @ r2)
 
-open RRBVecGen
-
 let getPropertyResults vec =
     properties |> List.map (fun (name,pred) -> checkProperty name pred vec) |> List.fold combine []
 
@@ -328,6 +351,6 @@ let checkProperties vec label =
     let result = getPropertyResults vec
     match result with
     | [] -> ()
-    | errors -> Expecto.Tests.failtestf "%s %A\nRepr: %s\nfailed the following RRBVector invariants:\n%A" label vec (vecToTreeReprStr vec) errors
+    | errors -> Expecto.Tests.failtestf "%s %A\nRepr: %s\nfailed the following RRBVector invariants:\n%A" label vec (RRBVecGen.vecToTreeReprStr vec) errors
 
 let checkPropertiesSimple vec = checkProperties vec "Vector"

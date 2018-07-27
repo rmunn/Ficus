@@ -342,23 +342,18 @@ let regressionTests =
     testCase "Shifting into tail can continue recursively" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "[[M*M-1 5]] [[5 5]] T1"
         RRBVectorProps.checkProperties vec "Original vector"
-        // printfn "Original vector: %s" (RRBVecGen.vecToTreeReprStr vec)
         let vec' = vec |> RRBVector.pop
         RRBVectorProps.checkProperties vec' "Popped vector"
-        // printfn "Popped vector: %s" (RRBVecGen.vecToTreeReprStr vec')
 
     testCase "Slicing near tail can shift into tail" <| fun _ ->
         // This test proves that we need .adjustTree() instead of .shortenTree() in the final (main) branch of RRBVector.Skip()
         let vec = RRBVecGen.treeReprStrToVec "[[M*M-1 5]] [[5 5]] T1"
         RRBVectorProps.checkProperties vec "Original vector"
-        // printfn "Original vector: %s = %A" (RRBVecGen.vecToTreeReprStr vec) vec
         // TODO: Write this test in such a way that the original vector *passes* properties, so that it's a fair test.
         let mutable vec' = vec.Skip (Literals.blockSize * (Literals.blockSize - 1) + 10)
         RRBVectorProps.checkProperties vec' "Popped vector"
-        // printfn "Sliced vector: %s = %A" (RRBVecGen.vecToTreeReprStr vec') vec'
         for n = 1 to Literals.blockSize + 1 do
             vec' <- vec' |> RRBVector.push n
-            // printfn "Vector after %d pushes: %s = %A" n (RRBVecGen.vecToTreeReprStr vec') vec'
             RRBVectorProps.checkProperties vec' <| sprintf "Right half after %d pushes" n
 
 (* Disabling this test since we no longer apply this invariant, and instead we allow saplings to have a mix of non-full root and tail
@@ -374,6 +369,7 @@ let regressionTests =
         | :? RRBTree<int> as tree -> // Or perhaps just: failwithf "Vector after slice should be sapling, instead is %A" tree
             Expect.equal tree.TailOffset (Literals.blockSize) "Wrong tail offset"
             Expect.equal tree.Tail.Length (Literals.blockSize - 1) "Wrong tail length"
+        | _ -> failwith "Unknown RRBVector subclass: this test needs to be taught about this variant"
 *)
     testCase "Merging specific scenarios" <| fun _ ->
         // A ends with [M*20] TM.
@@ -452,11 +448,13 @@ let regressionTests =
         | :? RRBSapling<int> as sapling ->
             Expect.equal sapling.Root.Length 0 "Root node of A should be empty"
             Expect.equal sapling.TailOffset 0 "Tail offset of A should be zero"
+        | _ -> failwith "Unknown RRBVector subclass: this test needs to be taught about this variant"
         match b with
         | :? RRBTree<int> as treeR -> failwithf "Right tree after split should be sapling, instead is %A" treeR
         | :? RRBSapling<int> as sapling ->
             Expect.equal sapling.Root.Length 0 "Root node of B should be empty"
             Expect.equal sapling.TailOffset 0 "Tail offset of B should be zero"
+        | _ -> failwith "Unknown RRBVector subclass: this test needs to be taught about this variant"
 *)
     testCase "Splitting root+tail vector to one tail-only vector and one root+tail vector has empty root on only one vector" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "M M TM/2"
@@ -472,11 +470,13 @@ let regressionTests =
         | :? RRBSapling<int> as sapling ->
             Expect.equal sapling.Root.Length 0 "Root node of A should be empty"
             Expect.equal sapling.TailOffset 0 "Tail offset of A should be zero"
+        | _ -> failwith "Unknown RRBVector subclass: this test needs to be taught about this variant"
         match b with
         | :? RRBSapling<int> as sapling -> failwithf "Right tree after split should be tree, instead is %A" sapling
         | :? RRBTree<int> as tree ->
             Expect.equal tree.Root.Array.Length 2 "Root node of B should be size 2"
             Expect.isGreaterThan tree.TailOffset 0 "Tail offset of B should be non-zero"
+        | _ -> failwith "Unknown RRBVector subclass: this test needs to be taught about this variant"
 
     testCase "Joining two vectors that push up a new root should produce the right root length, shift, and tail offset" <| fun _ ->
         let a = RRBVecGen.treeReprStrToVec "M M T1"
@@ -485,6 +485,7 @@ let regressionTests =
             match b with
             | :? RRBSapling<int> -> 0
             | :? RRBTree<int> as tree -> tree.Shift
+            | _ -> failwith "Unknown RRBVector subclass: this test needs to be taught about this variant"
         let joined = RRBVector.append a b
         RRBVectorProps.checkProperties joined "Joined"
         match joined with
@@ -494,6 +495,7 @@ let regressionTests =
             Expect.equal tree.Shift (bShift + Literals.blockSizeShift) "Joined vector should have pushed up a new root"
             Expect.equal tree.Root.Array.Length 2 "Joined vector should have pushed up a new root of size 2"
             Expect.equal tree.TailOffset (joined.Length - 1) "Joined vector should have just one item in its tail"
+        | _ -> failwith "Unknown RRBVector subclass: this test needs to be taught about this variant"
 
     testCase "Removing an item from the last leaf maintains the invariant" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "M M T2"
@@ -503,6 +505,7 @@ let regressionTests =
         | :? RRBSapling<int> as sapling -> failwithf "Tree after removing item from last leaf should be tree, instead is %A" sapling
         | :? RRBTree<int> as tree ->
             Expect.equal tree.Tail.Length 1 "Vector adjustment should have removed one item from the tail to maintain the invariant"
+        | _ -> failwith "Unknown RRBVector subclass: this test needs to be taught about this variant"
 
     testCase "Removing an item from the last leaf can promote new leaf to maintain the invariant" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "M M T1"
@@ -510,6 +513,7 @@ let regressionTests =
             match vec with
             | :? RRBSapling<int> -> 0
             | :? RRBTree<int> as tree -> tree.Shift
+            | _ -> failwith "Unknown RRBVector subclass: this test needs to be taught about this variant"
         let vec' = vec.Remove (Literals.blockSize + 1)
         RRBVectorProps.checkProperties vec' "Vector after removal from last leaf"
         match vec' with
@@ -517,6 +521,7 @@ let regressionTests =
             Expect.equal sapling.Tail.Length Literals.blockSize "Vector adjustment should have promoted new leaf"
             Expect.equal sapling.Shift (oldShift - Literals.blockSizeShift) "Vector adjustment should have shortened tree"
         | :? RRBTree<int> as tree -> failwithf "Tree after removing item from last leaf should be sapling, instead is %A" tree
+        | _ -> failwith "Unknown RRBVector subclass: this test needs to be taught about this variant"
 
     testCase "Inserting into last leaf can still maintain invariant when height is not affected" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "M/2-1 M T2"
@@ -884,12 +889,14 @@ let splitJoinTests =
         let vecShift = match vec with
                        | :? RRBSapling<int> as sapling -> failwith "Vector at start of test should not be a sapling"
                        | :? RRBTree<int> as tree -> tree.Shift
+                       | _ -> failwith "Unknown RRBVector subclass: this test needs to be taught about this variant"
         Expect.equal vecShift (Literals.blockSizeShift * 2) "Original vector should have height of 2"
         let vec' = vec |> RRBVector.remove 0
         RRBVectorProps.checkProperties vec' "Vector after one item removed at idx 0"
         let vec'Shift, vec'Root = match vec' with
                                   | :? RRBSapling<int> as sapling -> failwith "Vector after removal should still not be a sapling"
                                   | :? RRBTree<int> as tree -> tree.Shift, tree.Root
+                                  | _ -> failwith "Unknown RRBVector subclass: this test needs to be taught about this variant"
         Expect.equal vec'Shift Literals.blockSizeShift "After removal, vector should have height of 1"
         Expect.equal vec'Root.Array.Length 2 "Removal should not rebalance this tree"
 
@@ -898,6 +905,7 @@ let splitJoinTests =
         let vecShift = match vec with
                        | :? RRBSapling<int> as sapling -> failwith "Vector at start of test should not be a sapling"
                        | :? RRBTree<int> as tree -> tree.Shift
+                       | _ -> failwith "Unknown RRBVector subclass: this test needs to be taught about this variant"
         RRBVectorProps.checkProperties vec "Original vector"
         Expect.equal vecShift (Literals.blockSizeShift * 2) "Original vector should have height of 2"
         let vec' = vec |> RRBVector.pop
@@ -905,6 +913,7 @@ let splitJoinTests =
         let vec'Shift, vec'Tail = match vec' with
                                   | :? RRBSapling<int> as sapling -> failwith "Vector after removal should still not be a sapling"
                                   | :? RRBTree<int> as tree -> tree.Shift, tree.Tail
+                                  | _ -> failwith "Unknown RRBVector subclass: this test needs to be taught about this variant"
         Expect.equal vec'Tail.Length (Literals.blockSize - 1) "After pop, 1 item should have been slid back into the vector"
         Expect.equal vec'Shift (Literals.blockSizeShift) "After pop, vector should have height of 1"
 
@@ -913,12 +922,14 @@ let splitJoinTests =
         let vecShift = match vec with
                        | :? RRBSapling<int> as sapling -> failwith "Vector at start of test should not be a sapling"
                        | :? RRBTree<int> as tree -> tree.Shift
+                       | _ -> failwith "Unknown RRBVector subclass: this test needs to be taught about this variant"
         RRBVectorProps.checkProperties vec "Original vector"
         Expect.equal vecShift (Literals.blockSizeShift) "Original vector should have height of 1"
         let vec' = vec |> RRBVector.remove 0
         let vec'Shift, vec'Root = match vec' with
                                   | :? RRBSapling<int> as sapling -> failwith "Vector after removal should still not be a sapling"
                                   | :? RRBTree<int> as tree -> tree.Shift, tree.Root
+                                  | _ -> failwith "Unknown RRBVector subclass: this test needs to be taught about this variant"
         RRBVectorProps.checkProperties vec' "Vector after one item removed at idx 0"
         Expect.equal vec'Shift Literals.blockSizeShift "After first removal, vector should have height of 1"
         Expect.equal vec'Root.Array.Length 4 "First removal should not rebalance this tree"
@@ -926,6 +937,7 @@ let splitJoinTests =
         let vec''Shift, vec''Root = match vec'' with
                                     | :? RRBSapling<int> as sapling -> failwith "Vector after removal should still not be a sapling"
                                     | :? RRBTree<int> as tree -> tree.Shift, tree.Root
+                                    | _ -> failwith "Unknown RRBVector subclass: this test needs to be taught about this variant"
         RRBVectorProps.checkProperties vec'' "Vector after second item removed at idx 0"
         Expect.equal vec''Shift Literals.blockSizeShift "After second removal, vector should have height of 1"
         Expect.equal vec''Root.Array.Length 3 "Second removal should rebalance this tree"
@@ -936,11 +948,13 @@ let splitJoinTests =
         let vecAsTree = match vec with
                        | :? RRBSapling<int> as sapling -> failwith "Vector at start of test should not be a sapling"
                        | :? RRBTree<int> as tree -> tree
+                       | _ -> failwith "Unknown RRBVector subclass: this test needs to be taught about this variant"
         Expect.equal vecAsTree.Shift (Literals.blockSizeShift) "Original vector should have height of 1"
         let vec' = (vecAsTree :> IRRBInternal<int>).RemoveWithoutRebalance 0
         let vec'AsTree = match vec' with
                         | :? RRBSapling<int> as sapling -> failwith "Vector after removal should still not be a sapling"
                         | :? RRBTree<int> as tree -> tree
+                        | _ -> failwith "Unknown RRBVector subclass: this test needs to be taught about this variant"
         RRBVectorProps.checkProperties vec' "Vector after one item removed at idx 0"
         Expect.equal vec'AsTree.Shift Literals.blockSizeShift "After first removal, vector should have height of 1"
         Expect.equal vec'AsTree.Root.Array.Length 4 "First removal should not rebalance this tree"
@@ -948,6 +962,7 @@ let splitJoinTests =
         let vec''Shift, vec''Root = match vec'' with
                                     | :? RRBSapling<int> as sapling -> failwith "Vector after removal should still not be a sapling"
                                     | :? RRBTree<int> as tree -> tree.Shift, tree.Root
+                                    | _ -> failwith "Unknown RRBVector subclass: this test needs to be taught about this variant"
         RRBVectorProps.checkProperties vec'' "Vector after second item removed at idx 0"
         Expect.equal vec''Shift Literals.blockSizeShift "After second removal, vector should have height of 1"
         Expect.equal vec''Root.Array.Length 4 "Second removal should not rebalance this tree"
@@ -1104,13 +1119,10 @@ let operationTests =
     testCase "Removing from the root of a root+tail vector maintains the invariant" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "M T5"
         RRBVectorProps.checkProperties vec "Original vector"
-        // printfn "Step 0: %A" vec
         let step1 = vec.Insert 3 -512
         RRBVectorProps.checkProperties step1 "Vector after one insert"
-        // printfn "Step 1: %A" step1
         let step2 = step1.Remove 0
         RRBVectorProps.checkProperties step2 "Vector after one insert and one remove"
-        // printfn "Step 2: %A" step2
         // Wait... this does *not*, in fact, maintain the invariant! And yet my property checks are skipping it, and
         // it's not causing trouble with the push function! There are just two possible reasons and solutions:
         // 1. This is a bug that my property checks aren't catching, and I have to fix my property checks to catch it so this test fails, or
@@ -1121,7 +1133,6 @@ let operationTests =
         for i = 1 to Literals.blockSize * 3 do
             v <- v |> RRBVector.push 42
             RRBVectorProps.checkProperties v <| sprintf "After %d pushes" i
-            // printfn "After %d pushes: %A" i v
 
     testCase "fixed property"     <| fixedSpecTest RRBVectorFsCheckCommands.fixedSpec
     testCase "x-small property"   <| fixedSpecTest RRBVectorFsCheckCommands.xsSpec
@@ -1540,8 +1551,8 @@ let isolatedTest =
         // TODO: Check if starting with the `scan` results, then doing 157 pops, is enough here
         let vec = { 0..848 } |> RRBVector.ofSeq
         let mutable current = vec
-        // let logVec action = ignore
-        let logVec action vec = printfn "After %O, vec was %s" action (RRBVecGen.vecToTreeReprStr vec)
+        let logVec action = ignore
+        // let logVec action vec = printfn "After %O, vec was %s" action (RRBVecGen.vecToTreeReprStr vec)
         // for action in actions do
         //     current <- current |> action.RunActual
         //     logVec action current
@@ -1639,7 +1650,7 @@ T26
 
     testCase "Another large manual test" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "[M*M]*M TM-3"
-        printfn "Starting with %s" (RRBVecGen.vecToTreeReprStr vec)
+        // printfn "Starting with %s" (RRBVecGen.vecToTreeReprStr vec)
         let mutable current = vec
         let actions = [push 38; rev()]
         // let logVec action vec = logger.info (eventX "After {action}, vec was {vec}" >> setField "action" (action.ToString()) >> setField "vec" (RRBVecGen.vecToTreeReprStr vec))

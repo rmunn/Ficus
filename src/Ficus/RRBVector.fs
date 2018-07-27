@@ -233,7 +233,6 @@ module RRBHelpers =
     // Rebalance a set of nodes of level `shift` (whose children therefore live at `shift - Literals.blockSizeShift`)
 
     let findStartIdxForRebalance<'T> shift (combined:obj[]) =
-        // printfn "Finding start index at shift %d of combined array %A and typeof<'T> is %A" shift combined typeof<'T>
         let nodeOrTwigSize = if shift <= Literals.blockSizeShift then (fun (x : obj) -> (x :?> 'T[]).Length) else nodeSize
         let idx = combined |> Array.tryFindIndex (fun node -> nodeOrTwigSize node < Literals.blockSizeMin)
         defaultArg idx -1
@@ -618,7 +617,7 @@ type RRBSapling<'T> internal (count, shift : int, root : 'T [], tail : 'T [], ta
     static member internal OfRootAndTail (root : 'T[]) (tail : 'T[]) = RRBSapling<'T>(root.Length + tail.Length, 0, root, tail, root.Length)
 
     override this.GetHashCode() =
-        // This MUST follow the same algorithm as the GetHashCode() method from PersistentVector so that the Equals() logic will be valid
+        // This MUST follow the same algorithm as the GetHashCode() method from PersistentVector so that our shortcut in the Equals() logic will be valid
         match !hashCode with
         | None ->
             let mutable hash = 1
@@ -634,6 +633,10 @@ type RRBSapling<'T> internal (count, shift : int, root : 'T [], tail : 'T [], ta
             if this.Length <> other.Length then false else
             if this.GetHashCode() <> other.GetHashCode() then false else
             Seq.forall2 (Unchecked.equals) (this.IterItems()) (other.IterItems())
+        // | :? PersistentVector<'T> as other ->  // TODO: Once this is merged into FSharpx.Collections, uncomment this block so we can get efficient comparison
+        //     if this.Length <> other.Length then false else
+        //     if this.GetHashCode() <> other.GetHashCode() then false else
+        //     Seq.forall2 (Unchecked.equals) (this.IterItems()) (other.IterItems())
         | _ -> false
 
     override this.ToString() =
@@ -870,7 +873,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
         RRBTree<'T>(vecLen, shift, root, tail, vecLen - tailLen)
 
     override this.GetHashCode() =
-        // This MUST follow the same algorithm as the GetHashCode() method from PersistentVector so that the Equals() logic will be valid
+        // This MUST follow the same algorithm as the GetHashCode() method from PersistentVector so that we can have a shortcut in the Equals() logic will be valid
         match !hashCode with
         | None ->
             let mutable hash = 1
@@ -886,6 +889,10 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
             if this.Length <> other.Length then false else
             if this.GetHashCode() <> other.GetHashCode() then false else
             Seq.forall2 (Unchecked.equals) this other
+        // | :? PersistentVector<'T> as other ->
+        //     if this.Length <> other.Length then false else
+        //     if this.GetHashCode() <> other.GetHashCode() then false else
+        //     Seq.forall2 (Unchecked.equals) this other
         | _ -> false
 
     override this.ToString() =
