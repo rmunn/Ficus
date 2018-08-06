@@ -175,6 +175,13 @@ let debugJoinTest () =
         let joined = RRBVector.append vL vR
         testProperties joined <| sprintf "Joined vector"
 
+let debugPushTailDown () =
+    let mutable vec = RRBVecGen.treeReprStrToVec "17 16 M M M M M M M M M M M M M M M M M M 17 16 M 17 16 M M M M M M M T32"   // A nearly-full vector containing a few insertion splits
+    for i = 1 to 33 do
+        vec <- vec.Push i
+    testProperties vec "Vector after pushing"
+
+
 
 open RRBVectorMoreCommands.ParameterizedVecCommands
 open Ficus.RRBVector
@@ -401,7 +408,7 @@ let main argv =
         let githash  = AssemblyInfo.getGitHash assembly
         printfn "%s - %A - %s - %s" name.Name version releaseDate githash
     if argv |> Array.contains "--debug-vscode" then
-        debugSomethingElse3()
+        debugPushTailDown()
         0
     elif argv |> Array.contains "--stress" || argv |> Array.contains "--fscheck-only" then
         printfn "Running only FsCheck tests%s" (if argv |> Array.contains "--stress" then " for stress testing" else "")

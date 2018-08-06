@@ -1075,23 +1075,27 @@ let insertTests =
 // that the model continues to be in sync with the real object through all
 // sequences of operations. This will help find cases where order of operations
 // matters (i.e., a bug only happens if you do A,B,A,A in that specific order).
-let fixedSpecTest (spec : RRBVectorFsCheckCommands.Cmd list) () =
+
+let fixedSpecTestFromData (spec : RRBVectorFsCheckCommands.Cmd list) (data : RRBVector<int>) () =
     // A test I wrote to focus on one specific test scenario that was causing a property failure.
     // If you want to uncomment the printfn statements here, first focus this test so it runs alone.
-    let mutable vec = RRBVector.empty<int>
+    let mutable vec = data
     for cmd in spec do
-        // logger.debug (
-        //     eventX "Before {cmd}, vec was {vec}"
-        //     >> setField "cmd" (sprintf "%A" cmd)
-        //     >> setField "vec" (RRBVecGen.vecToTreeReprStr vec)
-        // )
+        logger.debug (
+            eventX "Before {cmd}, vec was {vec}"
+            >> setField "cmd" (sprintf "%A" cmd)
+            >> setField "vec" (RRBVecGen.vecToTreeReprStr vec)
+        )
         vec <- cmd.RunActual vec
-        // logger.debug (
-        //     eventX "After  {cmd}, vec was {vec}"
-        //     >> setField "cmd" (sprintf "%A" cmd)
-        //     >> setField "vec" (RRBVecGen.vecToTreeReprStr vec)
-        // )
+        logger.debug (
+            eventX "After  {cmd}, vec was {vec}"
+            >> setField "cmd" (sprintf "%A" cmd)
+            >> setField "vec" (RRBVecGen.vecToTreeReprStr vec)
+        )
         RRBVectorProps.checkPropertiesSimple vec
+
+let fixedSpecTest (spec : RRBVectorFsCheckCommands.Cmd list) =
+    fixedSpecTestFromData spec RRBVector.empty<int>
 
 let operationTests =
   testList "Operational transform tests" [
@@ -1106,6 +1110,12 @@ let operationTests =
     testProp "Medium lists from almost-full sapling" (Command.toProperty RRBVectorFsCheckCommands.specMediumFromAlmostFullSapling)
     testProp "Large lists from almost-full sapling" (Command.toProperty RRBVectorFsCheckCommands.specLargeFromAlmostFullSapling)
     testProp "Extra-large lists from almost-full sapling" (Command.toProperty RRBVectorFsCheckCommands.specExtraLargeFromAlmostFullSapling)
+
+    testCase "SingletonNodes in right spine don't cause problems while pushing" <| fun _ ->
+        let mutable vec = RRBVecGen.treeReprStrToVec "17 16 M M M M M M M M M M M M M M M M M M 17 16 M 17 16 M M M M M M M T32"   // A nearly-full vector containing a few insertion splits
+        for i = 1 to 33 do
+            vec <- vec.Push i
+        RRBVectorProps.checkPropertiesSimple vec
 
     testCase "Inserting into a full tail with empty root will not cause an invariant break" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "TM"

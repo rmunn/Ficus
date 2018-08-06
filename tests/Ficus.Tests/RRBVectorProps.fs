@@ -319,6 +319,48 @@ let properties = [
             else // Non-empty root, so we can meaningfully check the height of the tree
                 (height 1 tree.Root) * Literals.blockSizeShift = tree.Shift
         | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
+
+    // TODO: Decide whether these two properties are going to be true invariants applying everywhere (e.g., some splits and merges might affect these)
+    "ExpandedNodes (and ExpandedRRBNodes) should not appear in a tree whose root is not an expanded node variant", fun (vec : RRBVector<'T>) ->
+        let rec check shift (node : Node) =
+            match node with
+            | :? ExpandedNode -> false
+            | :? ExpandedRRBNode -> false
+            | _ ->
+                if shift <= Literals.blockSizeShift then true
+                else node.IterChildren() |> Seq.cast<Node> |> Seq.forall (check (RRBMath.down shift))
+        match vec with
+        | :? RRBSapling<'T> -> true
+        | :? RRBTree<'T> as tree -> check tree.Shift tree.Root
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
+
+    "If a tree's root is an expanded Node variant, its right spine should contain expanded nodes but nothing else should", fun (vec : RRBVector<'T>) ->
+        let isExpanded (child : Node) = (child :? ExpandedNode) || (child :? ExpandedRRBNode)
+
+        let rec check shift expandedDescendantsAllowed (node : Node) =
+            match node with
+            | :? ExpandedNode
+            | :? ExpandedRRBNode ->
+                let children = node.Children
+                if shift <= Literals.blockSizeShift then
+                    expandedDescendantsAllowed
+                else
+                    expandedDescendantsAllowed &&
+                    children  |> Seq.take (node.NodeSize - 1) |> Seq.cast<Node> |> Seq.forall (not << isExpanded) &&
+                    (children |> Array.last) :?> Node |> isExpanded &&
+                    (children |> Array.last) :?> Node |> check (RRBMath.down shift) expandedDescendantsAllowed
+            | _ ->
+                if shift <= Literals.blockSizeShift then true
+                else
+                    node.IterChildren()
+                    |> Seq.cast<Node>
+                    |> Seq.forall (fun child ->
+                        not (isExpanded child) &&
+                        check (RRBMath.down shift) false child)
+        match vec with
+        | :? RRBSapling<'T> -> true
+        | :? RRBTree<'T> as tree -> check tree.Shift true tree.Root
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
 ]
 
 // Other properties to add at some point:

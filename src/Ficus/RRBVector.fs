@@ -72,6 +72,7 @@ module RRBHelpers =
         loop Literals.blockSizeShift node
 
     // TOCONVERT: This also needs to go into the node, so that AppendChild can be called with the right(?) thread
+    // TODO: And also so that Array.copyAndSetLast doesn't need to be used: we can use this.UpdatedNewSize instead
     let rec appendLeafWithoutGrowingTree thread shift (newLeaf : 'T[]) leafLen (rootNode : Node) =
         if shift <= Literals.blockSizeShift then
             if nodeSize rootNode >= Literals.blockSize then None else rootNode.AppendChild<'T> thread shift (box newLeaf) leafLen |> Some
@@ -934,7 +935,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
             // Easy: just add new item in tail and we're done
             RRBTree<'T>(count + 1, shift, root, tail |> Array.copyAndAppend item) :> RRBVector<'T>
         else
-            let root', shift' = RRBHelpers.pushTailDown thread shift tail root  // This does all the work
+            let root', shift' = root.PushTailDown thread shift tail  // This does all the work
             RRBTree<'T>(count + 1, shift', root', [|item|]) :> RRBVector<'T>
 
     override this.Peek() =
@@ -1275,7 +1276,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] TransientRRBTree<'T> internal (c
             tail.[0] <- item
         else
             // TODO: For transients, we need a special version of pushTailDown that creates an ExpandedNode as the new root, and shrinks the current node
-            let root', shift' = RRBHelpers.pushTailDown this.Thread shift tail root  // This does all the work
+            let root', shift' = root.PushTailDown this.Thread shift tail  // This does all the work
             root <- root'
             shift <- shift'
             tailOffset <- tailOffset + Literals.blockSize
