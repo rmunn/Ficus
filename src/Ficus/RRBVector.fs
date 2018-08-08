@@ -1004,14 +1004,14 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
                         RRBTree<'T>(count + b.Length, shift, root, Array.append tail b.Tail, tailOffset) :> RRBVector<'T>
                     else
                         let newLeaf, newTail = Array.appendAndSplitAt Literals.blockSize tail b.Tail
-                        let newRoot, newShift = RRBHelpers.pushTailDown thread shift newLeaf root
+                        let newRoot, newShift = root.PushTailDown thread shift newLeaf
                         RRBTree<'T>(count + b.Length, newShift, newRoot, newTail) :> RRBVector<'T>
                 else
                     let lastTwig = RRBHelpers.getRightmostTwig shift root
                     let tLen = tail.Length
                     if b.Root.Length = Literals.blockSize && ((lastTwig :? RRBNode && lastTwig.NodeSize < Literals.blockSize) || tLen = Literals.blockSize) then
                         // Can safely push tail without messing up the invariant
-                        let tempRoot, tempShift = root |> RRBHelpers.pushTailDown thread shift tail
+                        let tempRoot, tempShift = root.PushTailDown thread shift tail
                         let newRoot, newShift = tempRoot |> RRBHelpers.appendLeafWithGrowth thread tempShift b.Root
                         RRBTree<'T>(count + b.Length, newShift, newRoot, b.Tail) :> RRBVector<'T>
                     else
@@ -1022,13 +1022,13 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
                             RRBTree<'T>(count + b.Length, shift, root, items, tailOffset) :> RRBVector<'T>
                         elif len <= Literals.blockSize * 2 then
                             let newLeaf, newTail = items |> Array.splitAt Literals.blockSize
-                            let newRoot, newShift = root |> RRBHelpers.pushTailDown thread shift newLeaf
+                            let newRoot, newShift = root.PushTailDown thread shift newLeaf
                             RRBTree<'T>(count + b.Length, newShift, newRoot, newTail) :> RRBVector<'T>
                         else
                             let newLeaf1, rest = items |> Array.splitAt Literals.blockSize
                             let newLeaf2, newTail = rest |> Array.splitAt Literals.blockSize
-                            let tempRoot, tempShift = root |> RRBHelpers.pushTailDown thread shift newLeaf1
-                            let newRoot, newShift = tempRoot |> RRBHelpers.pushTailDown thread tempShift newLeaf2
+                            let tempRoot, tempShift = root.PushTailDown thread shift newLeaf1
+                            let newRoot, newShift = tempRoot.PushTailDown thread tempShift newLeaf2
                             RRBTree<'T>(count + b.Length, newShift, newRoot, newTail) :> RRBVector<'T>
             | :? RRBTree<'T> as b ->
                 let aRoot, aShift = root, shift
@@ -1039,7 +1039,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
                         root, shift, tail
                     else
                         // Push a's tail down, then merge the resulting tree
-                        let thisRootAfterPush, shift' = RRBHelpers.pushTailDown thread shift tail root
+                        let thisRootAfterPush, shift' = root.PushTailDown thread shift tail
                         thisRootAfterPush, shift', [||]
                 let higherShift = max aShift b.Shift
                 // Occasionally, we can end up with a vector that needs adjusting (e.g., because the tail that was pushed down was short, so the invariant is no longer true).
@@ -1142,7 +1142,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBTree<'T> internal (count, shi
                     tail
                     |> Array.copyAndInsertAt tailIdx item
                     |> Array.splitAt Literals.blockSize
-                let root', shift' = RRBHelpers.pushTailDown thread shift tailItemsToPush root  // This does all the work
+                let root', shift' = root.PushTailDown thread shift tailItemsToPush  // This does all the work
                 RRBTree<'T>(count + 1, shift', root', remaining) :> RRBVector<'T>
 
         member this.RemoveFromTailAtTailIdx idx =
