@@ -132,10 +132,12 @@ let properties = [
             else
                 match node with
                 | :? RRBNode ->
-                    if shift <= Literals.blockSizeShift then
-                        isLastChild || not seenFullParent // RRBNode twigs satisfy the property without need for further checking, since their children are leaves... as long as no parent was full, or as long as they were the last child
+                    if seenFullParent && not isLastChild then
+                        false
+                    elif shift <= Literals.blockSizeShift then
+                        true // RRBNode twigs satisfy the property without need for further checking, since their children are leaves... as long as no parent was full, or as long as they were the last child
                     else
-                        node.Array.[0 .. node.NodeSize - 1] |> Seq.indexed |> Seq.forall (fun (i,n) -> check (down shift) seenFullParent (i = node.NodeSize - 1) (n :?> Node))
+                        node.Children |> Seq.indexed |> Seq.forall (fun (i,n) -> check (down shift) false (i = node.NodeSize - 1) (n :?> Node))
                 | _ ->
                     let fullCheck (n : Node) =
                         if shift <= Literals.blockSizeShift then
@@ -145,11 +147,11 @@ let properties = [
                     if node.NodeSize = 0 then
                         true
                     elif node.NodeSize = 1 then
-                        check (down shift) seenFullParent true (node.Array.[0] :?> Node)  // If a FullNode has just one element, it doesn't matter if it has an RRB child, but its children still need to be checked.
+                        check (down shift) true true (node.Array.[0] :?> Node)
                     else
                         node.Array.[..node.NodeSize - 2] |> Array.forall (fun n ->
-                            fullCheck (n :?> Node) && check (down shift) true true (n :?> Node)
-                        ) && check (down shift) true true ((Array.last node.Array) :?> Node)
+                            fullCheck (n :?> Node) && check (down shift) true false (n :?> Node)
+                        ) && check (down shift) true true ((node.Array.[node.NodeSize - 1]) :?> Node)
         match vec with
         | :? RRBSapling<'T> as sapling -> true // Not applicable to saplings
         | :? RRBTree<'T> as tree ->
