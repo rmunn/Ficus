@@ -120,7 +120,7 @@ T23"""
 let testProperties (vec : RRBVector<'T>) name =
     let propertyFailures = RRBVectorProps.getPropertyResults vec
     if propertyFailures.Length > 0 then
-        printfn "Vector %A (called \"%s\" and with repr %s) had some property failures" vec (RRBVecGen.vecToTreeReprStr vec) name
+        printfn "Vector %A (called \"%s\" and with repr %s) had some property failures" vec name (RRBVecGen.vecToTreeReprStr vec)
         printfn "Failed properties: %A" propertyFailures
     else
         printfn "Looks good"
@@ -238,6 +238,60 @@ T26
 
 // TODO: All those debugBigTest functions need to be turned into specific Expecto tests
 
+let isEmpty (node : Node) = node.NodeSize <= 0
+// Note: do NOT call isNotTwig or isTwig on empty nodes!
+let isNotTwig (node : Node) = node.Array.[0] :? Node
+let isTwig (node : Node) = not (isNotTwig node)
+let isRRB  (node : Node) = node :? RRBNode
+let isFull (node : Node) = not (isRRB node)
+let items (node : Node) = if isTwig node then node.Array else [||]
+let children (node : Node) = if isNotTwig node then node.Array else [||]
+
+let rec itemCount<'T> (node : Node) =
+    if isEmpty node then 0
+    elif node |> isTwig then node.Array.[0..node.NodeSize-1] |> Array.sumBy (fun leaf -> (leaf :?> 'T[]).Length)
+    else node.Array.[0..node.NodeSize-1] |> Array.sumBy (fun n -> n :?> Node |> itemCount<'T>)
+
+let inline down shift = shift - Literals.blockSizeShift
+
+let localCheck (vec : RRBVector<'T>) =
+        let rec check shift seenFullParent isLastChild (node : Node) =
+            if shift <= 0 then true else
+            if shift <= Literals.blockSizeShift then
+                match node with
+                | :? RRBNode -> isLastChild || not seenFullParent // RRBNode twigs satisfy the property without need for further checking, since their children are leaves... as long as no parent was full, or as long as they were the last child
+                | _ ->
+                    if node.NodeSize <= 1 then true else
+                    node.Array.[..node.NodeSize - 2] |> Array.forall (fun n ->
+                        (n :?> 'T[]).Length = Literals.blockSize)
+            else
+                match node with
+                | :? RRBNode ->
+                    if shift <= Literals.blockSizeShift then
+                        isLastChild || not seenFullParent // RRBNode twigs satisfy the property without need for further checking, since their children are leaves... as long as no parent was full, or as long as they were the last child
+                    else
+                        node.Array.[0 .. node.NodeSize - 1] |> Seq.indexed |> Seq.forall (fun (i,n) -> check (down shift) seenFullParent (i = node.NodeSize - 1) (n :?> Node))
+                | _ ->
+                    let fullCheck (n : Node) =
+                        if shift <= Literals.blockSizeShift then
+                            isFull n && n.NodeSize = Literals.blockSize
+                        else
+                            isFull n
+                    if node.NodeSize = 0 then
+                        true
+                    elif node.NodeSize = 1 then
+                        check (down shift) seenFullParent true (node.Array.[0] :?> Node)  // If a FullNode has just one element, it doesn't matter if it has an RRB child, but its children still need to be checked.
+                    else
+                        node.Array.[..node.NodeSize - 2] |> Array.forall (fun n ->
+                            fullCheck (n :?> Node) && check (down shift) true true (n :?> Node)
+                        ) && check (down shift) true true ((Array.last node.Array) :?> Node)
+        match vec with
+        | :? RRBSapling<'T> as sapling -> true // Not applicable to saplings
+        | :? RRBTree<'T> as tree ->
+            check tree.Shift false true tree.Root
+        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
+
+
 
 let doJoinTest v1 v2 =
     testProperties v1 "v1 in join test"
@@ -246,10 +300,23 @@ let doJoinTest v1 v2 =
     let s2 = RRBVector.toSeq v2
     let joined = RRBVector.append v1 v2
     let joined' = RRBVector.append v2 v1
+    localCheck joined
     testProperties joined "Joined vector"
+    localCheck joined'
     testProperties joined' "Opposite-joined vector"
     Expect.sequenceEqual (RRBVector.toSeq joined) (Seq.append s1 s2) "Joined vectors did not sequenceEqual equivalent appended seqs"
     Expect.sequenceEqual (RRBVector.toSeq joined') (Seq.append s2 s1) "Opposite-joined vectors did not sequenceEqual equivalent appended seqs"
+
+let debugBigJoinTest1 () =
+    // This one already is in Expecto, but it's failing and I'm trying to hunt down the failure
+    let bigNum = 5 <<< (Literals.blockSizeShift * 3)
+    let v1 = seq {0..bigNum+6} |> RRBVector.ofSeq  // Top level has 5 completely full FullNodes, tail has 7 items
+    let v2 = RRBVecGen.treeReprStrToVec "[M 2 M/2*M-6 M-1 M-2 M-1 M/2-1] [M*M-6 M-1 M-3 M M M-3 M] [M-2 M-3 M-2 M-2 M-1 M-2*M-6 M] TM"
+
+    let massiveVector = RRBVecGen.treeReprStrToVec "[[M*M]*M] [[M*M]*M] [[M*M]*M] [[M*M]*M] [[M*M]*M] [[M 9 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 M-1 30 M-1 15] [M M M M M M M M M M M M M M M M M M M M M M M M M M M-1 29 M M 29 M] [30 29 30 30 M-1 30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 M]] T32"
+    testProperties massiveVector "Massive vector"
+
+    doJoinTest v1 v2
 
 let doSplitTest vec i =
     let repr = RRBVecGen.vecToTreeReprStr vec
@@ -408,7 +475,8 @@ let main argv =
         let githash  = AssemblyInfo.getGitHash assembly
         printfn "%s - %A - %s - %s" name.Name version releaseDate githash
     if argv |> Array.contains "--debug-vscode" then
-        debugPushTailDown()
+        printfn "Debugging"
+        debugBigJoinTest1()
         0
     elif argv |> Array.contains "--stress" || argv |> Array.contains "--fscheck-only" then
         printfn "Running only FsCheck tests%s" (if argv |> Array.contains "--stress" then " for stress testing" else "")

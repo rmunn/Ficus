@@ -1378,7 +1378,7 @@ let longRunningTests =
         Expect.vecEqualArr joined' (Array.append a2 a1) "Opposite-joined vectors did not sequenceEqual equivalent appended arrays"
 
     // joining two unrelated vectors is equivalent to list-appending their list equivalents passed in 00:02:44.0550000
-    testProp "joining two unrelated vectors is equivalent to list-appending their list equivalents" <| fun (v1 : RRBVector<int>) (v2 : RRBVector<int>) ->
+    ftestProp (796556019, 296483453) "joining two unrelated vectors is equivalent to list-appending their list equivalents" <| fun (v1 : RRBVector<int>) (v2 : RRBVector<int>) ->
         let l1 = RRBVector.toList v1
         let l2 = RRBVector.toList v2
         let joined = RRBVector.append v1 v2
@@ -1391,7 +1391,7 @@ let longRunningTests =
         Expect.sequenceEqual (joined') (List.append l2 l1) "Opposite-joined vectors did not sequenceEqual equivalent appended lists"
 
     // joining two unrelated vectors is equivalent to seq-appending their seq equivalents passed in 00:04:09.4570000
-    testProp "joining two unrelated vectors is equivalent to seq-appending their seq equivalents" <| fun (v1 : RRBVector<int>) (v2 : RRBVector<int>) ->
+    ftestProp (812315557, 296483453) "joining two unrelated vectors is equivalent to seq-appending their seq equivalents" <| fun (v1 : RRBVector<int>) (v2 : RRBVector<int>) ->
         let s1 = RRBVector.toSeq v1
         let s2 = RRBVector.toSeq v2
         let joined = RRBVector.append v1 v2
@@ -1424,7 +1424,7 @@ let longRunningTests =
         Expect.vecEqual vec' (RRBVector.rev vec) "Vector halves after split+reverse, when put back together, did not equal reversed vector"
 
     // big join, test 1 passed in 00:03:27.6860000
-    testCase "big join, test 1" <| fun _ ->
+    ftestCase "big join, test 1" <| fun _ ->
         let bigNum = 5 <<< (Literals.blockSizeShift * 3)
         let v1 = seq {0..bigNum+6} |> RRBVector.ofSeq  // Top level has 5 completely full FullNodes, tail has 7 items
         let v2 = RRBVecGen.treeReprStrToVec "[M 2 M/2*M-6 M-1 M-2 M-1 M/2-1] [M*M-6 M-1 M-3 M M M-3 M] [M-2 M-3 M-2 M-2 M-1 M-2*M-6 M] TM"
@@ -1751,7 +1751,7 @@ let tests =
     mergeTests
     // apiTests
 
-    // longRunningTests
+    longRunningTests
 
     transientResidueTests
     moreTransientResidueTests
