@@ -53,33 +53,77 @@ module RRBMath =
     let inline copyAndSubtractNFromSizeTable decIdx n oldST =
         copyAndAddNToSizeTable decIdx (-n) oldST
 
+open RRBMath
+
 [<AbstractClass>]
-type Node<'T>(thread : Thread ref) =  // TODO: Rename this to RRBNode once I won't be confused by it
+type RRBNode<'T>(thread : Thread ref) =
     let thread = thread
     member this.Thread : Thread ref = thread
     member this.SetThread (t : Thread) : unit = thread := t
 
-    abstract member Shrink : unit -> Node<'T>
-    abstract member Expand : Thread ref -> Node<'T>
+    abstract member Shrink : unit -> RRBNode<'T>
+    abstract member Expand : Thread ref -> RRBNode<'T>
+
+    abstract member NodeSize : int          // How many children does this single node have?
+    abstract member TreeSize : int -> int   // How many total items are found in this node's entire descendant tree?
+
+    static member CreateSizeTable (shift : int) (array:RRBNode<'T>[]) : int[] =
+        let sizeTable = Array.zeroCreate array.Length
+        let mutable total = 0
+        for i = 0 to array.Length - 1 do
+            total <- total + (array.[i]).TreeSize (down shift)
+            sizeTable.[i] <- total
+        sizeTable
 
     // Example of how the node-construction code can work
-    static member MkLeaf (items : 'T[]) = items
-    static member MkNode (children : Node<'T>[]) =
+    static member MkLeaf (thread : Thread ref) (items : 'T[]) = RRBLeafNode<'T>(thread, items)
+    static member MkNodeWithSizeTable (thread : Thread ref) (shift : int) (children : RRBNode<'T>[]) (sizeTable : int[]) =
+        // if children.Length = 1 then SingletonNode<'T>(thread, entries) :> Node<'T> else  // TODO: Do we want an RRBSingletonNode class as well?
+        if isSizeTableFullAtShift shift sizeTable then RRBFullNode<'T>.Create(thread, children)
+        else RRBRelaxedNode<'T>(thread, children, sizeTable) :> RRBNode<'T>
+
+    static member MkNode (thread : Thread ref) (shift : int) (children : RRBNode<'T>[]) =
         if children.Length = Literals.blockSize then
-            RRBFullNode<'T>.Create(children)
+            RRBFullNode<'T>.Create(thread, children)
         else
-            RRBRelaxedNode<'T>.Create(children)
+            RRBRelaxedNode<'T>.Create(thread, shift, children)
 
-and RRBFullNode<'T>(thread : Thread ref) =
-    inherit Node<'T>(thread)
-    static member Create(children : Node<'T>[]) = 5
+and RRBFullNode<'T>(thread : Thread ref, children : RRBNode<'T>[]) =
+    inherit RRBNode<'T>(thread)
+    static member Create (thread : Thread ref, children : RRBNode<'T>[]) = RRBFullNode<'T>(thread, children) :> RRBNode<'T>
 
-    override this.Shrink() = this :> Node<'T>
-    override this.Expand _ = this :> Node<'T>
+    member this.Children = children
 
-and RRBRelaxedNode<'T>(thread : Thread ref) =
-    inherit Node<'T>(thread)
-    static member Create(children : Node<'T>[]) = 42
+    override this.NodeSize = children.Length
+    override this.TreeSize shift =
+        // A full node is allowed to have an incomplete rightmost entry, but all but its rightmost entry must be complete.
+        // Therefore, we can shortcut this calculation for most of the nodes, but we do need to calculate the rightmost node.
+        ((this.NodeSize - 1) <<< shift) + (children.[this.NodeSize - 1]).TreeSize (down shift)
 
-    override this.Shrink() = this :> Node<'T>
-    override this.Expand _ = this :> Node<'T>
+    override this.Shrink() = this :> RRBNode<'T>
+    override this.Expand _ = this :> RRBNode<'T>
+
+and RRBRelaxedNode<'T>(thread : Thread ref, children : RRBNode<'T>[], sizeTable : int[]) =
+    inherit RRBFullNode<'T>(thread, children)
+
+    static member Create (thread : Thread ref, shift : int, children : RRBNode<'T>[]) =
+        let sizeTbl = RRBNode<'T>.CreateSizeTable shift children
+        RRBRelaxedNode<'T>.CreateWithSizeTable(thread, shift, children, sizeTbl)
+
+    static member CreateWithSizeTable (thread : Thread ref, shift : int, children : RRBNode<'T>[], sizeTbl : int[]) =
+        if isSizeTableFullAtShift shift sizeTbl then
+            RRBFullNode<'T>(thread, children) :> RRBNode<'T>
+        else
+            RRBRelaxedNode<'T>(thread, children, sizeTbl) :> RRBNode<'T>
+
+    override this.NodeSize = children.Length
+    override this.TreeSize _ = children.Length
+
+and RRBLeafNode<'T>(thread : Thread ref, items : 'T[]) =
+    inherit RRBNode<'T>(thread)
+
+    override this.NodeSize = items.Length
+    override this.TreeSize _ = items.Length
+
+    override this.Shrink() = this :> RRBNode<'T>
+    override this.Expand _ = this :> RRBNode<'T>
