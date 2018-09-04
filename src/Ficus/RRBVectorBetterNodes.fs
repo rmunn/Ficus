@@ -43,13 +43,14 @@ module RRBMath =
         let checkIdx = len - 2
         sizeTbl.[checkIdx] = ((checkIdx + 1) <<< shift)
 
-    /// Used in replacing leaf nodes
+    // Used in replacing leaf nodes
     let copyAndAddNToSizeTable incIdx n oldST =
         let newST = Array.copy oldST
         for i = incIdx to oldST.Length - 1 do
             newST.[i] <- newST.[i] + n
         newST
 
+    // TODO: Is this actually used? If not, get rid of it
     let inline copyAndSubtractNFromSizeTable decIdx n oldST =
         copyAndAddNToSizeTable decIdx (-n) oldST
 
@@ -67,6 +68,12 @@ type RRBNode<'T>(thread : Thread ref) =
     abstract member NodeSize : int          // How many children does this single node have?
     abstract member TreeSize : int -> int   // How many total items are found in this node's entire descendant tree?
 
+    abstract member GetEditableNode : Thread ref -> RRBNode<'T>
+
+    member this.IsEditableBy (mutator : Thread ref) =
+        LanguagePrimitives.PhysicalEquality mutator thread && not (isNull !thread)
+        // Note that this test is NOT "if mutator = thread".
+
     static member CreateSizeTable (shift : int) (array:RRBNode<'T>[]) : int[] =
         let sizeTable = Array.zeroCreate array.Length
         let mutable total = 0
@@ -75,18 +82,16 @@ type RRBNode<'T>(thread : Thread ref) =
             sizeTable.[i] <- total
         sizeTable
 
-    // Example of how the node-construction code can work
     static member MkLeaf (thread : Thread ref) (items : 'T[]) = RRBLeafNode<'T>(thread, items)
-    static member MkNodeWithSizeTable (thread : Thread ref) (shift : int) (children : RRBNode<'T>[]) (sizeTable : int[]) =
-        // if children.Length = 1 then SingletonNode<'T>(thread, entries) :> Node<'T> else  // TODO: Do we want an RRBSingletonNode class as well?
-        if isSizeTableFullAtShift shift sizeTable then RRBFullNode<'T>.Create(thread, children)
-        else RRBRelaxedNode<'T>(thread, children, sizeTable) :> RRBNode<'T>
-
     static member MkNode (thread : Thread ref) (shift : int) (children : RRBNode<'T>[]) =
-        if children.Length = Literals.blockSize then
-            RRBFullNode<'T>.Create(thread, children)
-        else
-            RRBRelaxedNode<'T>.Create(thread, shift, children)
+        RRBRelaxedNode<'T>.Create(thread, shift, children)
+    static member MkNodeKnownSize (thread : Thread ref) (shift : int) (children : RRBNode<'T>[]) (sizeTable : int[]) =
+        RRBRelaxedNode<'T>.CreateWithSizeTable(thread, shift, children, sizeTable) :> RRBNode<'T>
+    static member MkFullNode (thread : Thread ref) (children : RRBNode<'T>[]) =
+        // if children.Length = 1 then SingletonNode<'T>(thread, entries) :> Node<'T> else  // TODO: Do we want an RRBSingletonNode class as well?
+        RRBFullNode<'T>.Create(thread, children)
+
+    abstract member UpdatedTree : Thread ref -> int -> int -> 'T -> RRBNode<'T>
 
 and RRBFullNode<'T>(thread : Thread ref, children : RRBNode<'T>[]) =
     inherit RRBNode<'T>(thread)
@@ -100,8 +105,40 @@ and RRBFullNode<'T>(thread : Thread ref, children : RRBNode<'T>[]) =
         // Therefore, we can shortcut this calculation for most of the nodes, but we do need to calculate the rightmost node.
         ((this.NodeSize - 1) <<< shift) + (children.[this.NodeSize - 1]).TreeSize (down shift)
 
+    // TODO: Should GetEditableNode return the base class? Or should it return the derived class, and therefore be non-inherited?
+    override this.GetEditableNode mutator =
+        if this.IsEditableBy mutator
+        then this :> RRBNode<'T>
+        else RRBFullNode<'T>(mutator, Array.copy children) :> RRBNode<'T>
+
     override this.Shrink() = this :> RRBNode<'T>
     override this.Expand _ = this :> RRBNode<'T>
+
+    member this.ToRRBIfNeeded shift =
+        if shift <= 0 then this :> RRBNode<'T> else
+            let sizeTable = RRBNode<'T>.CreateSizeTable shift children
+            if RRBMath.isSizeTableFullAtShift shift sizeTable
+            then this :> RRBNode<'T>
+            else RRBRelaxedNode<'T>(thread, children, sizeTable) :> RRBNode<'T>
+
+    member this.IndexesAndChild shift treeIdx =
+        let localIdx = radixIndex shift treeIdx
+        let child = children.[localIdx]
+        let antimask = ~~~(Literals.blockIndexMask <<< shift)
+        let nextTreeIdx = treeIdx &&& antimask
+        localIdx, child, nextTreeIdx
+
+    member this.UpdatedChildSameSize mutator localIdx newChild =
+        // TODO: If we need to override this in any child class, make it virtual (e.g. "abstract Foo" and then "default this.Foo")
+        let node = this.GetEditableNode mutator :?> RRBFullNode<'T>
+        node.Children.[localIdx] <- newChild
+        node :> RRBNode<'T>
+
+    override this.UpdatedTree mutator shift treeIdx newItem =
+        // TODO: Implement
+        let localIdx, child, nextIdx = this.IndexesAndChild shift treeIdx
+        let newNode = child.UpdatedTree mutator (down shift) nextIdx newItem
+        this.UpdatedChildSameSize mutator localIdx newNode
 
 and RRBRelaxedNode<'T>(thread : Thread ref, children : RRBNode<'T>[], sizeTable : int[]) =
     inherit RRBFullNode<'T>(thread, children)
@@ -116,14 +153,36 @@ and RRBRelaxedNode<'T>(thread : Thread ref, children : RRBNode<'T>[], sizeTable 
         else
             RRBRelaxedNode<'T>(thread, children, sizeTbl) :> RRBNode<'T>
 
+    member this.SizeTable = sizeTable
+
     override this.NodeSize = children.Length
-    override this.TreeSize _ = children.Length
+    override this.TreeSize _ = sizeTable.[this.NodeSize - 1]
+
+    override this.GetEditableNode mutator =
+        if this.IsEditableBy mutator
+        then this :> RRBNode<'T>
+        else RRBRelaxedNode<'T>(mutator, Array.copy children, Array.copy sizeTable) :> RRBNode<'T>
 
 and RRBLeafNode<'T>(thread : Thread ref, items : 'T[]) =
     inherit RRBNode<'T>(thread)
+
+    member this.Items = items
 
     override this.NodeSize = items.Length
     override this.TreeSize _ = items.Length
 
     override this.Shrink() = this :> RRBNode<'T>
     override this.Expand _ = this :> RRBNode<'T>
+
+    override this.GetEditableNode mutator =
+        if this.IsEditableBy mutator
+        then this :> RRBNode<'T>
+        else RRBLeafNode<'T>(mutator, Array.copy items) :> RRBNode<'T>
+
+    member this.UpdatedItem mutator localIdx newItem =
+        let node = this.GetEditableNode mutator :?> RRBLeafNode<'T>
+        node.Items.[localIdx] <- newItem
+        node :> RRBNode<'T>
+
+    override this.UpdatedTree mutator shift treeIdx newItem =
+        this.UpdatedItem mutator treeIdx newItem
