@@ -57,10 +57,12 @@ module RRBMath =
 open RRBMath
 
 // Used in insertion logic. TODO: Once I nail down the method name, add it here
+// TODO: Might want to remove the slidItemCount part of SlidItems(Left|Right), since I don't seem to be actually using it.
+// TODO: But first, wait until I've written the RelaxedNode implementation. Then decide about the slidItemCount.
 type SlideResult<'a> =
     | SimpleInsertion of newCurrent : 'a
-    | SlidItemsLeft of newLeft : 'a * newCurrent : 'a
-    | SlidItemsRight of newCurrent : 'a * newRight : 'a
+    | SlidItemsLeft of slidItemCount : int * newLeft : 'a * newCurrent : 'a
+    | SlidItemsRight of slidItemCount : int * newCurrent : 'a * newRight : 'a
     | SplitNode of newCurrent : 'a * newRight : 'a
 
 [<AbstractClass>]
@@ -97,7 +99,7 @@ type RRBNode<'T>(thread : Thread ref) =
     static member MkNode (thread : Thread ref) (shift : int) (children : RRBNode<'T>[]) =
         RRBRelaxedNode<'T>.Create(thread, shift, children)
     static member MkNodeKnownSize (thread : Thread ref) (shift : int) (children : RRBNode<'T>[]) (sizeTable : int[]) =
-        RRBRelaxedNode<'T>.CreateWithSizeTable(thread, shift, children, sizeTable) :> RRBNode<'T>
+        RRBRelaxedNode<'T>.CreateWithSizeTable(thread, shift, children, sizeTable)
     static member MkFullNode (thread : Thread ref) (children : RRBNode<'T>[]) =
         // if children.Length = 1 then SingletonNode<'T>(thread, entries) :> Node<'T> else  // TODO: Do we want an RRBSingletonNode class as well?
         RRBFullNode<'T>.Create(thread, children)
@@ -108,7 +110,7 @@ type RRBNode<'T>(thread : Thread ref) =
 and RRBFullNode<'T>(thread : Thread ref, children : RRBNode<'T>[]) =
     inherit RRBNode<'T>(thread)
 
-    static member Create (thread : Thread ref, children : RRBNode<'T>[]) = RRBFullNode<'T>(thread, children) :> RRBNode<'T>
+    static member Create (thread : Thread ref, children : RRBNode<'T>[]) = RRBFullNode<'T>(thread, children)
 
     member this.Children = children
 
@@ -165,14 +167,14 @@ and RRBFullNode<'T>(thread : Thread ref, children : RRBNode<'T>[]) =
         // TODO: If we need to override this in any child class, make it virtual (e.g. "abstract Foo" and then "default this.Foo")
         let node = this.GetEditableNode mutator :?> RRBFullNode<'T>
         node.Children.[localIdx] <- newChild
-        node :> RRBNode<'T>
+        node
 
-    abstract member UpdatedChildDifferentSize : Thread ref -> int -> RRBNode<'T> -> int -> RRBNode<'T>
+    abstract member UpdatedChildDifferentSize : Thread ref -> int -> RRBNode<'T> -> int -> RRBFullNode<'T>
     default this.UpdatedChildDifferentSize mutator localIdx newChild sizeDiff =
         this.UpdatedChildSameSize mutator localIdx newChild
         // TODO: Actually, need to convert this to RRBRelaxedNode because child size has changed
 
-    abstract member UpdatedChildSpecificChildSize : Thread ref -> int -> RRBNode<'T> -> int -> RRBNode<'T>
+    abstract member UpdatedChildSpecificChildSize : Thread ref -> int -> RRBNode<'T> -> int -> RRBFullNode<'T>
     default this.UpdatedChildSpecificChildSize mutator localIdx newChild childSize =
         this.UpdatedChildSameSize mutator localIdx newChild
         // TODO: Actually, need to convert this to RRBRelaxedNode because child size has changed
@@ -180,6 +182,23 @@ and RRBFullNode<'T>(thread : Thread ref, children : RRBNode<'T>[]) =
     // TODO: Write a variant of UpdatedChildDifferentSize that can handle "sliding" items left or right, because RRBRelaxedNode will want to also "slide" the size table entries appropriately
     // And it will be useful in implementing the rebalance feature as well, where we'll be combining multiple nodes, often by "sliding" items around.
     // Perhaps we'll implement it by keeping track of the individual sizes of each item (by subtraction from the previous size table entry), and then adding each individual size as we go
+
+    member this.BuildSizeTable shift count lastIdx =
+        let fullSize = 1 <<< shift
+        Array.init count (fun idx -> if idx = lastIdx then fullSize * idx + this.Children.[idx].TreeSize (down shift) else fullSize * (idx + 1))
+
+    abstract member SplitNodeIntoArrays : Thread ref -> int -> int -> (RRBNode<'T> [] * int []) * (RRBNode<'T> [] * int [])  // Params: mutator shift splitIdx, and return: (left items, left sizes), (right items, right sizes)
+    default this.SplitNodeIntoArrays mutator shift splitIdx =
+        // TODO: Expanded nodes *must* rewrite this so that the right children will be handled correctly (not filled with nulls, since we won't always *want* the right child to end up expanded)
+        let fullSize = 1 <<< shift
+        let rightLen = this.NodeSize - splitIdx
+        let leftChildren, rightChildren = this.Children |> Array.splitAt splitIdx
+        let leftSizes = Array.init splitIdx (fun idx -> fullSize * (idx+1))
+        if rightChildren |> Array.isEmpty && splitIdx > 0 then
+            // Usually the last child's size goes into rightSizes, but in this one case it needs to go into leftSizes instead
+            leftSizes.[splitIdx - 1] <- (splitIdx - 1) * fullSize + (Array.last leftChildren).TreeSize (down shift)
+        let rightSizes = Array.init rightLen (fun idx -> if idx = rightLen - 1 then fullSize * idx + this.Children.[idx].TreeSize (down shift) else fullSize * (idx+1))
+        (leftChildren, leftSizes), (rightChildren, rightSizes)
 
     abstract member RemoveLeftmostChildren : Thread ref -> int -> int -> (RRBNode<'T> * int) seq * RRBNode<'T>  // Params: mutator shift itemCount, and return: (removed items, sizes of removed items, new node)
     default this.RemoveLeftmostChildren mutator shift itemCount =
@@ -201,50 +220,83 @@ and RRBFullNode<'T>(thread : Thread ref, children : RRBNode<'T>[]) =
 
     // TODO: Test the RemoveLeftmostChildren variants with a wide variety of node types
 
+    abstract member InsertAndSlideChildrenLeft : Thread ref -> int -> int -> RRBNode<'T> -> RRBFullNode<'T> -> RRBFullNode<'T> * RRBFullNode<'T>
+    default this.InsertAndSlideChildrenLeft mutator shift localIdx newChild leftSibling =
+        // if localIdx <= itemCount then
+        //     printfn "DEBUG: Inserted item will end up in left sibling (left-hand side of slide left)"
+        // else
+        //     printfn "DEBUG: Inserted item will end up in this node (right-hand side of slide left)"
+        let newLeftItems, newRightItems = Array.appendAndInsertAndSplitEvenly (localIdx + leftSibling.NodeSize) newChild leftSibling.Children this.Children
+        // TODO: Might be able to be clever with an "append new items" thing in the left sibling, but this will do since it's simple
+        // TODO: Optimize LATER, once we're sure that this works. Don't prematurely optimize.
+        let newLeft  = RRBNode<'T>.MkNode mutator shift newLeftItems
+        let newRight = RRBNode<'T>.MkNode mutator shift newRightItems
+        newLeft, newRight
+
+    abstract member InsertAndSlideChildrenRight : Thread ref -> int -> int -> RRBNode<'T> -> RRBFullNode<'T> -> RRBFullNode<'T> * RRBFullNode<'T>
+    default this.InsertAndSlideChildrenRight mutator shift localIdx newChild rightSibling =
+        let newLeftItems, newRightItems = Array.appendAndInsertAndSplitEvenly localIdx newChild this.Children rightSibling.Children
+        // TODO: Might be able to be clever with an "insert new items at left side" thing in the right sibling, but this will do since it's simple
+        // TODO: Optimize LATER, once we're sure that this works. Don't prematurely optimize.
+        let newLeft  = RRBNode<'T>.MkNode mutator shift newLeftItems
+        let newRight = RRBNode<'T>.MkNode mutator shift newRightItems
+        newLeft, newRight
+
     override this.UpdatedTree mutator shift treeIdx newItem =
         let localIdx, child, nextIdx = this.IndexesAndChild shift treeIdx
         let newNode = child.UpdatedTree mutator (down shift) nextIdx newItem
-        this.UpdatedChildSameSize mutator localIdx newNode
+        this.UpdatedChildSameSize mutator localIdx newNode :> RRBNode<'T>
 
     override this.InsertedTree mutator shift treeIdx item parentOpt idxOfNodeInParent =
         let localIdx, child, nextLvlIdx = this.IndexesAndChild shift treeIdx
         let insertResult = child.InsertedTree mutator (down shift) nextLvlIdx item (Some this) localIdx
         match insertResult with
         | SimpleInsertion newChild ->
-            SimpleInsertion (this.UpdatedChildDifferentSize mutator localIdx newChild 1)
-        | SlidItemsLeft (newLeft, newChild) ->
-            let newNode = this.GetEditableNode mutator  // TODO: Write a variant of UpdatedChildDifferentSize that can handle "sliding" items left or right, because RRBRelaxedNode will want to also "slide" the size table entries appropriately
-            // TODO: Until RRBRelaxedNode has that specialized version, we need to remember that this will *not*
+            SimpleInsertion (this.UpdatedChildDifferentSize mutator localIdx newChild 1 :> RRBNode<'T>)
+        | SlidItemsLeft (slidItemCount, newLeft, newChild) ->
+            // Always update the *right* child first, then the left: that way the size table adjustments will be correct
+            let newNode = this.UpdatedChildSpecificChildSize mutator localIdx newChild (newChild.TreeSize (down shift))
+            SimpleInsertion (newNode.UpdatedChildSpecificChildSize mutator (localIdx - 1) newLeft (newLeft.TreeSize (down shift)) :> RRBNode<'T>)
+            // TODO: Do I need an "Update two child items at once" function? What about the size table? We should be able to manage the size table
+        | SlidItemsRight (slidItemCount, newChild, newRight) ->
+            let newNode = this.UpdatedChildSpecificChildSize mutator (localIdx - 1) newChild (newChild.TreeSize (down shift))
+            SimpleInsertion (newNode.UpdatedChildSpecificChildSize mutator (localIdx + 1) newRight (newChild.TreeSize (down shift)) :> RRBNode<'T>)
+            // TODO: Do I need an "Update two child items at once" function? What about the size table? We should be able to manage the size table
+        | SplitNode (newChild, newRight) ->
+            if this.NodeSize < Literals.blockSize then
+                let newNode = this.InsertedChild mutator shift (localIdx + 1) newRight (newRight.TreeSize (down shift))
+                SimpleInsertion (newNode.UpdatedChildSpecificChildSize mutator localIdx newChild (newChild.TreeSize (down shift)) :> RRBNode<'T>)
+            else
+                let localIdx, _, _ = this.IndexesAndChild shift treeIdx
+                match (parentOpt, idxOfNodeInParent) with
+                | Some parent, idx when idx > 0 && parent.Children.[idx - 1].NodeSize < Literals.blockSize ->
+                    // Room in the left sibling
+                    let leftSib = parent.Children.[idx - 1] :?> RRBFullNode<'T>
+                    let newNode = this.UpdatedChildSpecificChildSize mutator localIdx newChild (newChild.TreeSize (down shift))
+                    let newLeft, newRight = newNode.InsertAndSlideChildrenLeft mutator shift (localIdx + 1) newRight leftSib
+                    SlidItemsLeft (0, newLeft :> RRBNode<'T>, newRight :> RRBNode<'T>)
+                    // TODO: Determine whether the order of update and insert matters here for the sake of calculating size tables
+                    // TODO: Calculate the actual number of items rather than just using 0
+                    // ... Or decide that the slid item count isn't interesting at all and get rid of it from the DU
+                | Some parent, idx when idx < (parent.NodeSize - 1) && parent.Children.[idx + 1].NodeSize < Literals.blockSize ->
+                    // Room in the right sibling
+                    let rightSib = parent.Children.[idx + 1] :?> RRBFullNode<'T>
+                    let newNode = this.UpdatedChildSpecificChildSize mutator localIdx newChild (newChild.TreeSize (down shift))
+                    let newLeft, newRight = newNode.InsertAndSlideChildrenRight mutator shift (localIdx + 1) newRight rightSib
+                    SlidItemsRight (0, newLeft :> RRBNode<'T>, newRight :> RRBNode<'T>)
+                    // TODO: Determine whether the order of update and insert matters here for the sake of calculating size tables
+                    // TODO: Calculate the actual number of items rather than just using 0
+                    // ... Or decide that the slid item count isn't interesting at all and get rid of it from the DU
+                | _ ->
+                    // No room left or right, so split
+                    // TODO: Move this one, too, to its own abstract method that can be overridden in relaxed nodes
+                    let newNode = this.UpdatedChildSpecificChildSize mutator localIdx newChild (newChild.TreeSize (down shift))
+                    let newLeftItems, newRightItems = Array.insertAndSplitEvenly (localIdx + 1) newRight newNode.Children
+                    let newLeft  = RRBNode<'T>.MkNode mutator shift newLeftItems
+                    let newRight = RRBNode<'T>.MkNode mutator shift newRightItems
+                    SplitNode (newLeft :> RRBNode<'T>, newRight :> RRBNode<'T>)
 
-        if this.NodeSize < Literals.blockSize then
-            SimpleInsertion (this.InsertedItem mutator treeIdx item :> RRBNode<'T>)
-        else
-            let localIdx = treeIdx
-            match (parentOpt, idxOfNodeInParent) with
-            | Some parent, idx when idx > 0 && parent.Children.[idx - 1].NodeSize < Literals.blockSize ->
-                let leftSib = parent.Children.[idx - 1] :?> RRBLeafNode<'T>
-                let newLeftItems, newRightItems = Array.appendAndInsertAndSplitEvenly (localIdx + leftSib.NodeSize) item leftSib.Items this.Items
-                let newLeft = leftSib.GetEditableEmptyNodeOfLengthN mutator newLeftItems.Length :?> RRBLeafNode<'T>
-                newLeftItems.CopyTo(newLeft.Items, 0)
-                let newRight = this.GetEditableEmptyNodeOfLengthN mutator newRightItems.Length :?> RRBLeafNode<'T>
-                newRightItems.CopyTo(newRight.Items, 0)
-                SlidItemsLeft (newLeft :> RRBNode<'T>, newRight :> RRBNode<'T>)
-            | Some parent, idx when idx < (parent.NodeSize - 1) && parent.Children.[idx + 1].NodeSize < Literals.blockSize ->
-                let rightSib = parent.Children.[idx + 1] :?> RRBLeafNode<'T>
-                let newLeftItems, newRightItems = Array.appendAndInsertAndSplitEvenly localIdx item this.Items rightSib.Items
-                let newLeft = this.GetEditableEmptyNodeOfLengthN mutator newLeftItems.Length :?> RRBLeafNode<'T>
-                newLeftItems.CopyTo(newLeft.Items, 0)
-                let newRight = rightSib.GetEditableEmptyNodeOfLengthN mutator newRightItems.Length :?> RRBLeafNode<'T>
-                newRightItems.CopyTo(newRight.Items, 0)
-                SlidItemsRight (newLeft :> RRBNode<'T>, newRight :> RRBNode<'T>)
-            | _ ->
-                let newLeftItems, newRightItems = Array.insertAndSplitEvenly localIdx item this.Items
-                let newLeft = this.GetEditableEmptyNodeOfLengthN mutator newLeftItems.Length :?> RRBLeafNode<'T>
-                newLeftItems.CopyTo(newLeft.Items, 0)
-                let newRight = this.LeafNodeWithItems mutator newRightItems
-                SplitNode (newLeft :> RRBNode<'T>, newRight :> RRBNode<'T>)
-
-    abstract member AppendChild : Thread ref -> int -> RRBNode<'T> -> int -> RRBNode<'T>
+    abstract member AppendChild : Thread ref -> int -> RRBNode<'T> -> int -> RRBFullNode<'T>
     default this.AppendChild mutator shift newChild childSize =
         let newChildren = this.Children |> Array.copyAndAppend newChild
         // Full nodes are allowed to have their last item be non-full, so we have to check that
@@ -254,7 +306,27 @@ and RRBFullNode<'T>(thread : Thread ref, children : RRBNode<'T>[]) =
             // Last item wasn't full, so this is going to become a relaxed node
             RRBNode<'T>.MkNode mutator shift newChildren
 
-    abstract member RemoveLastChild<'T> : Thread ref -> int -> RRBNode<'T>
+    abstract member InsertedChild : Thread ref -> int -> int -> RRBNode<'T> -> int -> RRBFullNode<'T>
+    default this.InsertedChild mutator shift localIdx newChild childSize =
+        if localIdx = this.NodeSize then
+            this.AppendChild mutator shift newChild childSize
+        else
+            let fullSize = 1 <<< shift
+            let newChildren = this.Children |> Array.copyAndInsertAt localIdx newChild
+            if childSize = fullSize then
+                // Only way this could be wrong is if we were inserting at the end, i.e. appending, and that's taken care of by "if localIdx = this.NodeSize" above
+                RRBNode<'T>.MkFullNode mutator newChildren
+            else
+                // Full node means that all but last child were max size, so we only have to call TreeSize once
+                let sizeTable = Array.zeroCreate (this.NodeSize + 1)
+                let mutable cumulativeSize = 0
+                for i = 0 to this.NodeSize - 1 do
+                    cumulativeSize <- cumulativeSize + (if i = localIdx then childSize else fullSize)
+                    sizeTable.[i] <- cumulativeSize
+                sizeTable.[this.NodeSize] <- cumulativeSize + this.LastChild.TreeSize (down shift)
+                RRBNode<'T>.MkNodeKnownSize mutator shift newChildren sizeTable
+
+    abstract member RemoveLastChild<'T> : Thread ref -> int -> RRBFullNode<'T>
     default this.RemoveLastChild<'T> mutator shift =
         // Expanded nodes can do this in a transient way, but "normal" nodes can't
         // TODO: When I implement expanded nodes, copy the TODO below into the expanded node implementation, then remove it here
@@ -271,9 +343,9 @@ and RRBRelaxedNode<'T>(thread : Thread ref, children : RRBNode<'T>[], sizeTable 
 
     static member CreateWithSizeTable (thread : Thread ref, shift : int, children : RRBNode<'T>[], sizeTbl : int[]) =
         if isSizeTableFullAtShift shift sizeTbl then
-            RRBFullNode<'T>(thread, children) :> RRBNode<'T>
+            RRBFullNode<'T>(thread, children)
         else
-            RRBRelaxedNode<'T>(thread, children, sizeTbl) :> RRBNode<'T>
+            RRBRelaxedNode<'T>(thread, children, sizeTbl) :> RRBFullNode<'T>
 
     member this.SizeTable = sizeTable
 
@@ -298,11 +370,22 @@ and RRBRelaxedNode<'T>(thread : Thread ref, children : RRBNode<'T>[], sizeTable 
         newNode.Children.[localIdx] <- newChild
         for i = localIdx to this.NodeSize - 1 do
             newNode.SizeTable.[i] <- this.SizeTable.[i] + sizeDiff
-        newNode :> RRBNode<'T>
+        newNode :> RRBFullNode<'T>
 
     override this.UpdatedChildSpecificChildSize mutator localIdx newChild childSize =
         let oldChildSize = this.SizeTable.[localIdx]
         this.UpdatedChildDifferentSize mutator localIdx newChild (childSize - oldChildSize)
+
+    override this.SplitNodeIntoArrays mutator shift splitIdx =
+        // TODO: Expanded nodes *must* rewrite this so that the right children will be handled correctly (not filled with nulls, since we won't always *want* the right child to end up expanded)
+        let leftChildren, rightChildren = this.Children |> Array.splitAt splitIdx
+        let leftSizes, rightSizes = this.SizeTable |> Array.splitAt splitIdx
+        if splitIdx > 0 then
+            let lastLeftSize = Array.last leftSizes
+            let lastRightIdx = rightSizes.Length - 1
+            for i = 0 to lastRightIdx do
+                rightSizes.[i] <- rightSizes.[i] - lastLeftSize
+        (leftChildren, leftSizes), (rightChildren, rightSizes)
 
     override this.RemoveLeftmostChildren mutator shift itemCount =
         // TODO: Document that itemCount of 0 should never happen, and/or make sure it does. This should be an internal function anyway. OR... decide that it's okay, and verify that it's okay.
@@ -395,42 +478,26 @@ and RRBLeafNode<'T>(thread : Thread ref, items : 'T[]) =
             match (parentOpt, idxOfNodeInParent) with
             | Some parent, idx when idx > 0 && parent.Children.[idx - 1].NodeSize < Literals.blockSize ->
                 let leftSib = parent.Children.[idx - 1] :?> RRBLeafNode<'T>
-                let newLeftItems, newRightItems = Array.appendAndInsertAndSplitEvenly (localIdx + leftSib.NodeSize) item leftSib.Items this.Items
-                let newLeft = leftSib.GetEditableEmptyNodeOfLengthN mutator newLeftItems.Length :?> RRBLeafNode<'T>
-                newLeftItems.CopyTo(newLeft.Items, 0)
-                let newRight = this.GetEditableEmptyNodeOfLengthN mutator newRightItems.Length :?> RRBLeafNode<'T>
-                newRightItems.CopyTo(newRight.Items, 0)
-                SlidItemsLeft (newLeft :> RRBNode<'T>, newRight :> RRBNode<'T>)
+                let oldLeftLength = leftSib.NodeSize
+                let newLeftItems, newRightItems = Array.appendAndInsertAndSplitEvenly (localIdx + oldLeftLength) item leftSib.Items this.Items
+                let slidItemCount = newLeftItems.Length - oldLeftLength
+                let newLeft  = RRBNode<'T>.MkLeaf mutator newLeftItems :> RRBNode<'T>
+                let newRight = RRBNode<'T>.MkLeaf mutator newRightItems :> RRBNode<'T>
+                SlidItemsLeft (slidItemCount, newLeft, newRight)
             | Some parent, idx when idx < (parent.NodeSize - 1) && parent.Children.[idx + 1].NodeSize < Literals.blockSize ->
                 let rightSib = parent.Children.[idx + 1] :?> RRBLeafNode<'T>
+                let oldRightLength = rightSib.NodeSize
                 let newLeftItems, newRightItems = Array.appendAndInsertAndSplitEvenly localIdx item this.Items rightSib.Items
-                let newLeft = this.GetEditableEmptyNodeOfLengthN mutator newLeftItems.Length :?> RRBLeafNode<'T>
-                newLeftItems.CopyTo(newLeft.Items, 0)
-                let newRight = rightSib.GetEditableEmptyNodeOfLengthN mutator newRightItems.Length :?> RRBLeafNode<'T>
-                newRightItems.CopyTo(newRight.Items, 0)
-                SlidItemsRight (newLeft :> RRBNode<'T>, newRight :> RRBNode<'T>)
+                let slidItemCount = newRightItems.Length - oldRightLength
+                let newLeft  = RRBNode<'T>.MkLeaf mutator newLeftItems :> RRBNode<'T>
+                let newRight = RRBNode<'T>.MkLeaf mutator newRightItems :> RRBNode<'T>
+                SlidItemsRight (slidItemCount, newLeft, newRight)
             | _ ->
+                // Don't need to get fancy with SplitNode here, though expanded leaf nodes will want to do something slightly more clever (ensuring that the new right-hand node is still expanded)
                 let newLeftItems, newRightItems = Array.insertAndSplitEvenly localIdx item this.Items
-                let newLeft = this.GetEditableEmptyNodeOfLengthN mutator newLeftItems.Length :?> RRBLeafNode<'T>
-                newLeftItems.CopyTo(newLeft.Items, 0)
-                let newRight = this.LeafNodeWithItems mutator newRightItems
-                SplitNode (newLeft :> RRBNode<'T>, newRight :> RRBNode<'T>)
-
-    // Delete this once we've copied it into InsertedTree
-    member this.trySlideAndInsertTwig localIdx (itemToInsert : 'T) (parentOpt : RRBFullNode<'T> option) idxOfNodeInParent (array : 'T[]) =
-        if array.Length < Literals.blockSize then
-            SimpleInsertion (array |> Array.copyAndInsertAt localIdx itemToInsert)
-        else
-            let  (|LeftSiblingNode |_|) (parentOpt : RRBFullNode<'T> option, idx) = if idx <= 0 then None else parentOpt |> Option.map (fun p -> p.Children.[idx-1])
-            let (|RightSiblingNode |_|) (parentOpt : RRBFullNode<'T> option, idx) = parentOpt |> Option.bind (fun p -> if idx >= p.NodeSize - 1 then None else p.Children.[idx+1] |> Some)
-
-            match (parentOpt, idxOfNodeInParent) with
-            | LeftSiblingNode sib when (sib.NodeSize < Literals.blockSize) ->
-                SlidItemsLeft (Array.appendAndInsertAndSplitEvenly (localIdx + sib.NodeSize) itemToInsert ((sib :?> RRBLeafNode<'T>).Items) array)
-            | RightSiblingNode sib when (sib.NodeSize < Literals.blockSize) ->
-                SlidItemsRight (Array.appendAndInsertAndSplitEvenly localIdx itemToInsert array ((sib :?> RRBLeafNode<'T>).Items))
-            | _ ->
-                SplitNode (array |> Array.insertAndSplitEvenly localIdx itemToInsert)
+                let newLeft  = RRBNode<'T>.MkLeaf mutator newLeftItems :> RRBNode<'T>
+                let newRight = RRBNode<'T>.MkLeaf mutator newRightItems :> RRBNode<'T>
+                SplitNode (newLeft, newRight)
 
     // TODO: Flesh out the insertion logic; it should split evenly between leaf and node classes and be much more reasonable-looking
 
