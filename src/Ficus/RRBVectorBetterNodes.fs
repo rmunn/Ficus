@@ -76,6 +76,18 @@ let nullOwner : OwnerToken = ref null
 
 let mkOwnerToken() = ref ""
 
+// Summary of type hierarchy of nodes
+//
+// type RRBNode<'T> =
+//     | RRBFullNode of children : Node<'T>[]
+//         with subclass RRBExpandedFullNode of Node<'T>[] * realSize : int
+//     | RRBRelaxedNode of children : Node<'T>[] * sizeTable : int[]
+//         with subclass RRBExpandedRelaxedNode of Node<'T>[] * sizeTable : int[] * realSize : int
+//     | RRBLeafNode of items : 'T[]
+//         with subclass RRBExpandedLeafNode of items : 'T[] * realSize : int
+//
+// The file is organized with the "compact" nodes together, and the "expanded" nodes together in a lower section.
+
 [<AbstractClass>]
 type RRBNode<'T>(ownerToken : OwnerToken) =
     member val Owner = ownerToken with get, set
@@ -114,6 +126,8 @@ type RRBNode<'T>(ownerToken : OwnerToken) =
 
     abstract member UpdatedTree : OwnerToken -> int -> int -> 'T -> RRBNode<'T>  // Params: owner shift treeIdx newItem
     abstract member InsertedTree : OwnerToken -> int -> int -> 'T -> RRBFullNode<'T> option -> int -> SlideResult<RRBNode<'T>>  // Params: owner shift treeIdx (item : 'T) (parentOpt : Node option) idxOfNodeInParent
+
+
 
 and RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
     inherit RRBNode<'T>(ownerToken)
@@ -345,6 +359,8 @@ and RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
         // [push 1063; rev(); pop 118] --> after the rev(), we're a transient node that has become persistent so our owner is now null -- but we failed to check that.
         this.Children |> Array.copyAndPop |> RRBNode<'T>.MkFullNode owner
 
+
+
 and RRBRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], sizeTable : int[]) =
     inherit RRBFullNode<'T>(ownerToken, children)
 
@@ -441,6 +457,8 @@ and RRBRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], sizeTa
         let sizeTable' = this.SizeTable |> Array.copyAndPop
         RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
 
+
+
 and RRBLeafNode<'T>(ownerToken : OwnerToken, items : 'T[]) =
     inherit RRBNode<'T>(ownerToken)
 
@@ -532,6 +550,8 @@ and RRBLeafNode<'T>(ownerToken : OwnerToken, items : 'T[]) =
                 let newRight = this.LeafNodeWithItems owner newRightItems :> RRBNode<'T>
                 SplitNode (newLeft, newRight)
 
+
+
 // === EXPANDED NODES ===
 
 // Expanded nodes are used in transient trees. Their arrays are always Literals.blockSize in size, so an int field
@@ -553,11 +573,15 @@ and RRBExpandedFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], ?
     // override this.InsertAndSplitNode owner shift localIdx newChild =
     //     failwith "Not implemented"
 
+
+
 and RRBExpandedRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], sizeTable : int[], ?realSize : int) =
     inherit RRBRelaxedNode<'T>(ownerToken, Array.expandToBlockSize children, Array.expandToBlockSize sizeTable)
 
     member val CurrentLength : int = defaultArg realSize (Array.length children) with get, set
     override this.NodeSize = this.CurrentLength
+
+
 
 and RRBExpandedLeafNode<'T>(ownerToken : OwnerToken, items : 'T[], ?realSize : int) =
     inherit RRBLeafNode<'T>(ownerToken, Array.expandToBlockSize items)
