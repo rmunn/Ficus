@@ -36,8 +36,8 @@ module RRBMath =
     let inline down shift = shift - Literals.blockSizeShift
     let inline up shift = shift + Literals.blockSizeShift
 
-    let isSizeTableFullAtShift shift (sizeTbl : int[]) =
-        let len = Array.length sizeTbl
+    // This takes a `len` parameter that should be the size of the size table, so that it can handle expanded nodes
+    let isSizeTableFullAtShift shift (sizeTbl : int[]) len =
         if len <= 1 then true else
         let checkIdx = len - 2
         sizeTbl.[checkIdx] = ((checkIdx + 1) <<< shift)
@@ -88,7 +88,7 @@ let mkOwnerToken() = ref ""
 //
 // The file is organized with the "compact" nodes together, and the "expanded" nodes together in a lower section.
 
-[<AbstractClass>]
+[<AbstractClass; AllowNullLiteral>]
 type RRBNode<'T>(ownerToken : OwnerToken) =
     member val Owner = ownerToken with get, set
 
@@ -174,7 +174,7 @@ and RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
     member this.ToRRBIfNeeded shift =
         if shift <= 0 then this :> RRBNode<'T> else
             let sizeTable = RRBNode<'T>.CreateSizeTable shift children
-            if RRBMath.isSizeTableFullAtShift shift sizeTable
+            if RRBMath.isSizeTableFullAtShift shift sizeTable sizeTable.Length
             then this :> RRBNode<'T>
             else RRBRelaxedNode<'T>(ownerToken, children, sizeTable) :> RRBNode<'T>
             // TODO: Check if expanded nodes need to override this
@@ -351,13 +351,33 @@ and RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
                 sizeTable.[this.NodeSize] <- cumulativeSize + this.LastChild.TreeSize (down shift)
                 RRBNode<'T>.MkNodeKnownSize owner shift newChildren sizeTable
 
-    abstract member RemoveLastChild<'T> : OwnerToken -> int -> RRBFullNode<'T>
-    default this.RemoveLastChild<'T> owner shift =
+    abstract member RemoveLastChild : OwnerToken -> int -> RRBFullNode<'T>
+    default this.RemoveLastChild owner shift =
         // Expanded nodes can do this in a transient way, but "normal" nodes can't
-        // TODO: When I implement expanded nodes, copy the TODO below into the expanded node implementation, then remove it here
-        // TODO: First make sure that "owner" isn't null at this point, because that's causing a failure in one of my tests
-        // [push 1063; rev(); pop 118] --> after the rev(), we're a transient node that has become persistent so our owner is now null -- but we failed to check that.
         this.Children |> Array.copyAndPop |> RRBNode<'T>.MkFullNode owner
+
+    member this.RemoveLastLeaf owner shift =
+        // EXPAND: This needs an implementation in expanded nodes, where we expand the new last child after shrinking the child we return
+        if shift <= Literals.blockSizeShift then
+            // Children are leaves
+            if this.NodeSize = 0 then
+#if DEBUG
+                failwith <| sprintf "RemoveLastLeaf was called on an empty node at shift %d" shift
+#else
+                RRBLeafNode(owner, Array.empty), this  // TODO: Should be able to eliminate this branch, I hope
+#endif
+            else
+                let leaf = this.LastChild :?> RRBLeafNode<'T>
+                let newNode = this.RemoveLastChild owner shift // Popping the last entry from a FullNode can't ever turn it into an RRBNode.
+                leaf, newNode
+        else
+            // Children are nodes
+            let leaf, newLastChild = (this.LastChild :?> RRBFullNode<'T>).RemoveLastLeaf owner (down shift)
+            let newNode =
+                if newLastChild.NodeSize = 0
+                then this.RemoveLastChild owner shift  // Child had just one child of its own and is now empty, so remove it
+                else this.UpdatedChildSpecificChildSize owner (this.NodeSize - 1) newLastChild (newLastChild.TreeSize (down shift))
+            leaf, newNode
 
 
 
@@ -369,7 +389,7 @@ and RRBRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], sizeTa
         RRBRelaxedNode<'T>.CreateWithSizeTable(owner, shift, children, sizeTbl)
 
     static member CreateWithSizeTable (owner : OwnerToken, shift : int, children : RRBNode<'T>[], sizeTbl : int[]) =
-        if isSizeTableFullAtShift shift sizeTbl then
+        if isSizeTableFullAtShift shift sizeTbl sizeTbl.Length then
             RRBFullNode<'T>(owner, children)
         else
             RRBRelaxedNode<'T>(owner, children, sizeTbl) :> RRBFullNode<'T>
@@ -550,6 +570,10 @@ and RRBLeafNode<'T>(ownerToken : OwnerToken, items : 'T[]) =
                 let newRight = this.LeafNodeWithItems owner newRightItems :> RRBNode<'T>
                 SplitNode (newLeft, newRight)
 
+    abstract member RemoveLastItem : OwnerToken -> RRBLeafNode<'T>
+    override this.RemoveLastItem owner =
+        this.Items |> Array.copyAndPop |> RRBNode<'T>.MkLeaf owner
+
 
 
 // === EXPANDED NODES ===
@@ -564,6 +588,23 @@ and RRBExpandedFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], ?
     member val CurrentLength : int = defaultArg realSize (Array.length children) with get, set
     override this.NodeSize = this.CurrentLength
 
+    override this.Shrink owner =
+        let len = this.NodeSize
+        let children' =
+            if len = Literals.blockSize
+            then Array.copy this.Children
+            else this.Children |> Array.truncate len
+        RRBFullNode<'T>(owner, children') :> RRBNode<'T>
+
+    override this.Expand owner =
+        if this.IsEditableBy owner then this :> RRBNode<'T> else RRBExpandedFullNode<'T>(owner, Array.copy this.Children) :> RRBNode<'T>
+        // TODO: That's the same logic as GetEditableNode. Does it make sense to combine them? I.e., have `override this.Expand owner = this.GetEditableNode owner`?
+
+    override this.GetEditableNode owner =
+        if this.IsEditableBy owner
+        then this :> RRBNode<'T>
+        else RRBExpandedFullNode<'T>(owner, Array.copy this.Children) :> RRBNode<'T>
+
     // override this.InsertAndSlideChildrenLeft owner shift localIdx newChild leftSibling =
     //     failwith "Not implemented"
 
@@ -573,6 +614,16 @@ and RRBExpandedFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], ?
     // override this.InsertAndSplitNode owner shift localIdx newChild =
     //     failwith "Not implemented"
 
+    override this.RemoveLastChild owner shift =
+        // TODO: First make sure that "owner" isn't null at this point, because that's causing a failure in one of my tests
+        // [push 1063; rev(); pop 118] --> after the rev(), we're a transient node that has become persistent so our owner is now null -- but we failed to check that.
+        // ... I think that's been fixed, but let's make sure we test this scenario.
+        let newNode = this.GetEditableNode owner :?> RRBExpandedFullNode<'T>
+        let idx = this.NodeSize - 1
+        newNode.Children.[idx] <- null
+        newNode.CurrentLength <- idx
+        newNode :> RRBFullNode<'T>
+
 
 
 and RRBExpandedRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], sizeTable : int[], ?realSize : int) =
@@ -580,6 +631,42 @@ and RRBExpandedRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]
 
     member val CurrentLength : int = defaultArg realSize (Array.length children) with get, set
     override this.NodeSize = this.CurrentLength
+
+    override this.Shrink owner =
+        let len = this.NodeSize
+        let children' =
+            if len = Literals.blockSize
+            then Array.copy this.Children
+            else this.Children |> Array.truncate len
+        let sizeTable' =
+            if len = Literals.blockSize
+            then Array.copy this.SizeTable
+            else this.SizeTable |> Array.truncate len
+        RRBRelaxedNode<'T>(owner, children', sizeTable') :> RRBNode<'T>
+
+    override this.Expand owner =
+        if this.IsEditableBy owner then this :> RRBNode<'T> else RRBExpandedFullNode<'T>(owner, Array.copy this.Children) :> RRBNode<'T>
+        // TODO: That's the same logic as GetEditableNode. Does it make sense to combine them? I.e., have `override this.Expand owner = this.GetEditableNode owner`?
+
+    override this.GetEditableNode owner =
+        if this.IsEditableBy owner
+        then this :> RRBNode<'T>
+        else RRBExpandedFullNode<'T>(owner, Array.copy this.Children) :> RRBNode<'T>
+
+    override this.RemoveLastChild owner shift =
+        // TODO: First make sure that "owner" isn't null at this point, because that's causing a failure in one of my tests
+        // [push 1063; rev(); pop 118] --> after the rev(), we're a transient node that has become persistent so our owner is now null -- but we failed to check that.
+        // ... I think that's been fixed, but let's make sure we test this scenario.
+        let newNode = this.GetEditableNode owner :?> RRBExpandedRelaxedNode<'T>
+        let idx = this.NodeSize - 1
+        newNode.Children.[idx] <- null
+        newNode.SizeTable.[idx] <- 0
+        newNode.CurrentLength <- idx
+        if isSizeTableFullAtShift shift newNode.SizeTable idx then
+            // Can convert back to full node, so let's do it for future efficiency's sake
+            RRBExpandedFullNode(owner, newNode.Children) :> RRBFullNode<'T>
+        else
+            newNode :> RRBFullNode<'T>
 
 
 
@@ -595,10 +682,10 @@ and RRBExpandedLeafNode<'T>(ownerToken : OwnerToken, items : 'T[], ?realSize : i
             if len = Literals.blockSize
             then Array.copy items
             else items |> Array.truncate len
-        RRBNode<'T>.MkLeaf owner items' :> RRBNode<'T>
+        RRBLeafNode<'T>(owner, items') :> RRBNode<'T>
 
     override this.Expand owner =
-        if this.IsEditableBy owner then this :> RRBNode<'T> else RRBExpandedLeafNode<'T>(owner, this.Items) :> RRBNode<'T>
+        if this.IsEditableBy owner then this :> RRBNode<'T> else RRBExpandedLeafNode<'T>(owner, Array.copy this.Items) :> RRBNode<'T>
 
     override this.GetEditableNode owner =
         if this.IsEditableBy owner
@@ -630,3 +717,10 @@ and RRBExpandedLeafNode<'T>(ownerToken : OwnerToken, items : 'T[], ?realSize : i
             newNode.Items.[i] <- Unchecked.defaultof<'T>
         newNode.CurrentLength <- newNodeLength
         newNode :> RRBLeafNode<'T>
+
+    override this.RemoveLastItem owner =
+        let newLeaf = this.GetEditableNode owner :?> RRBExpandedLeafNode<'T>
+        let idx = this.NodeSize - 1
+        newLeaf.Items.[idx] <- Unchecked.defaultof<'T>
+        newLeaf.CurrentLength <- idx
+        newLeaf :> RRBLeafNode<'T>
