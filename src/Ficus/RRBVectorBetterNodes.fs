@@ -724,3 +724,38 @@ and RRBExpandedLeafNode<'T>(ownerToken : OwnerToken, items : 'T[], ?realSize : i
         newLeaf.Items.[idx] <- Unchecked.defaultof<'T>
         newLeaf.CurrentLength <- idx
         newLeaf :> RRBLeafNode<'T>
+
+(*
+Idea for a rebalance algorithm:
+
+First, look through the node in order from i=0 to i=31 for the first
+child with child.NodeSize < Literals.blockSizeMin (that is, < 31).
+Now mark that as the left point, and sweep forward (keeping track of
+a running length) looking at child.NodeSize for subsequent children.
+Once you've found a series of adjacent children whose NodeSize properties
+add up to at least 32 less than (length * 32), that's a point where you can
+reduce the current node's size by 1 with a rebalance. E.g.,
+
+16 17 32 32 ...   <- 16+17 = 33, which is >  (length-1)*32, so rebalance not useful
+15 17 32 32 ...   <- 15+17 = 32, which is <= (length-1)*32, so [15; 17] is a rebalance candidate of length 2. Start index 0, length 2.
+16 17 31 32 ...   <- 16+17 = 33, > 32, not a candidate. But 16+17+31 = 64, <= 64, so that's a length-3 run that reduces down to 2.
+16 17 32 31 ...
+
+... and the key insight that I want to record is this: once you find a run of length N that reduces by 1, look at at least N more items to see if there's a better candidate.
+To do so:
+
+1. While sweeping the first run, keep track of the minimum number found during that sweep, and its index. Use that index (and length N at most) as another possible run candidate; if a shorter-than-N run is found, great.
+2. Take the final item of the first run, and the *next* item after that one. The smaller of the two becomes the next candidate, and we sweep at most N items to find another run candidate that's shorter than N.
+
+So there are two places where a length of N will be swept after finding the first candidate:
+  a) From the smallest child (if it's not the first), and
+  b) From the smaller of the last or post-last item of the first run. (That is, indices i+N-1 and i+N will be compared).
+
+It's possible that a) will fail because the first was the smallest, and that b) will fail because i+N+N goes past the end of the current node's NodeSize. In which case we go only to the end of the current node and no farther.
+Either way, if a) or b) fails, then it's ignored. The other one (if it's valid) will be checked, and overall, the one with the SMALLEST run length wins. (I.e., it must be LESS than N).
+
+... And one more possibility: once we've found a run of length N, we continue looking at one more child as long as there's still room in the combined node we've built so far.
+E.g., in 4 5 6 7 8 9, running total is 4; 9; 15; 22; 30; 39. 39 goes over the length of the combined node, so we'd grab [4; 5; 6; 7; 8] and turn then into a node of 30, resulting in [30; 9] at the end.
+And in 8 7 6 5 4 3 2 1 2 3 4 5 6 7 8, we'd find [8; 7; 6; 5; 4] but then we'd look at [4; 3; 2; 1; 2] and [3; 2; 1; 2; 3] and each of those could be extended by N to [4; 3; 2; 1; 2; 3; 4; 5; 6; 7] = [30; 7], or [3; 2; 1; 2; 3; 4; 5; 6; 7] = [26; 7]
+So there, the [4 3 2 1 2 3 4 5 6] would be selected as the final rebalance to be run.
+*)
