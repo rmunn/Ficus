@@ -754,4 +754,94 @@ Either way, if a) or b) fails, then it's ignored. The other one (if it's valid) 
 E.g., in 4 5 6 7 8 9, running total is 4; 9; 15; 22; 30; 39. 39 goes over the length of the combined node, so we'd grab [4; 5; 6; 7; 8] and turn then into a node of 30, resulting in [30; 9] at the end.
 And in 8 7 6 5 4 3 2 1 2 3 4 5 6 7 8, we'd find [8; 7; 6; 5; 4] but then we'd look at [4; 3; 2; 1; 2] and [3; 2; 1; 2; 3] and each of those could be extended by N to [4; 3; 2; 1; 2; 3; 4; 5; 6; 7] = [30; 7], or [3; 2; 1; 2; 3; 4; 5; 6; 7] = [26; 7]
 So there, the [4 3 2 1 2 3 4 5 6] would be selected as the final rebalance to be run.
+
+
+Another way to think about it. Consider an ideally-filled subtree. The children are length [M; M; M], etc.
+Now consider that any M-1 children have one "gap", any M-2 children have 2 "gaps", and so on.
+As we look at sub-arrays, we have a length and we keep a running sum of the items in the sub-array.
+Formulas:
+  idealSlotCount = length * M (or length <<< blockSizeShift)
+  gaps = idealSlotCount - sum
+  reductions = gaps / M (or gaps >>> blockSizeShift)
+
+The score is the # of reductions, and between two items with the same reductions, the smaller length wins.
+So the score is (reductions, -length) and then you compare those tuples with normal comparison; the greater score wins.
 *)
+
+let findMergeCandidates (sizeSeq : #seq<int>) len =
+    let sizes = Array.zeroCreate<byte> len
+    let e = sizeSeq.GetEnumerator()
+    let mutable i = 0
+    let mutable smallestSize = Literals.blockSize
+    let mutable smallestIdx = 0
+    let mutable runLength = 0
+    let mutable continue_ = true
+    while continue_ && i < len && e.MoveNext() do
+        let size = e.Current
+        sizes.[i] <- byte size
+        if size < smallestSize then
+            smallestSize <- size
+            smallestIdx <- i
+        if runLength = 0 then
+            ()  // Start a run if size < Literals.blockSizeMin
+        else
+            let targetItemCount = (runLength - 1) <<< Literals.blockSizeShift  // If we have this many or fewer, we've reduced the child count by one
+            ()  // We've already started a run; add one more to the run length and then decide whether to continue or not
+    if continue_ then
+        ()  // We ended up running off the end of the size sequence, so there's no need to check any further
+
+
+// Or, from https://stackoverflow.com/questions/13023188/smallest-subset-of-array-whose-sum-is-no-less-than-key
+
+let smallestRunGreaterThan n arr =
+    let mutable acc = 0uy
+    let mutable p = 0
+    let mutable q = 0
+    let arrLen = Array.length arr
+    let mutable bestIdx = 0
+    let mutable bestLen = arrLen
+    while q < arrLen do
+        // Expand candidate run until its total is at least N
+        while acc < n && q < arrLen do
+            acc <- acc + arr.[q]
+            q <- q + 1
+        while acc - arr.[p] >= n && p < arrLen do
+            acc <- acc - arr.[p]
+            p <- p + 1
+        printfn "Looking at idx [%d,%d) with total %d" p q acc
+        if acc >= n then
+            let candidateLen = q - p
+            printfn "Candidate length %d, best length so far has been %d" candidateLen bestLen
+            if candidateLen < bestLen then
+                bestLen <- candidateLen
+                bestIdx <- p
+        acc <- acc - arr.[p]
+        p <- p + 1
+    bestIdx, bestLen
+// [0; 1; 2; 3; 4; 5; 6; 7; 8; 9] |> List.map byte |> Array.ofList |> smallestRunGreaterThan 32uy
+// Note: when the second inner while loop above is commented out, it isn't finding the actual best, which is [5..9] = 35, length of 5. Instead it's finding [3..8] = 33, length of 6.
+// Reason is because once q bumps into the end, p is only advanced once.
+// TODO: Write a unit test or two for this implementation, and make sure that [0..9] is among the tests we use.
+// Also, random tests that compare this implementation to a brute-force O(N^2) search and make sure that it finds something of minimal length. Bonus if it finds the leftmost possible solution.
+
+let nSquaredSmallestRunGT n (arr' : byte[]) =
+    let arr = arr' |> Array.map int
+    let arrLen = Array.length arr
+    let mutable bestIdx = 0
+    let mutable bestLen = arrLen
+    for i = 0 to arrLen - 1 do
+        for j = i+1 to arrLen do
+            let len = j - i
+            let sum = Seq.sum (arr |> Seq.skip i |> Seq.take len)
+            printfn "Starting at %d with length %d has sum %d" i len sum
+            if sum >= n && len < bestLen then
+                bestIdx <- i
+                bestLen <- len
+                printfn "New best starting at %d with length %d and sum %d" i len sum
+    printfn "Final best starting at %d with length %d" bestIdx bestLen
+    bestIdx, bestLen
+
+// [0; 1; 2; 3; 4; 5; 6; 7; 8; 9] |> List.map byte |> Array.ofList |> nSquaredSmallestRunGT 32
+
+// [0..25] |> List.map byte |> Array.ofList |> nSquaredSmallestRunGT 32
+// [0..25] |> List.map byte |> Array.ofList |> smallestRunGreaterThan 32uy
