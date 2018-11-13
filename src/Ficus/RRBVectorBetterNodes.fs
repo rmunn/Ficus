@@ -287,11 +287,11 @@ and RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
             // Always update the *right* child first, then the left: that way the size table adjustments will be correct
             let newNode = this.UpdatedChildSpecificChildSize owner localIdx newChild (newChild.TreeSize (down shift))
             SimpleInsertion (newNode.UpdatedChildSpecificChildSize owner (localIdx - 1) newLeft (newLeft.TreeSize (down shift)) :> RRBNode<'T>)
-            // TODO: Do I need an "Update two child items at once" function? What about the size table? We should be able to manage the size table
+            // TODO: Do I need an "Update two child items at once" function? What about the size table? We should be able to manage the size table more cleverly in RelaxedNodes.
         | SlidItemsRight (newChild, newRight) ->
-            let newNode = this.UpdatedChildSpecificChildSize owner (localIdx - 1) newChild (newChild.TreeSize (down shift))
-            SimpleInsertion (newNode.UpdatedChildSpecificChildSize owner (localIdx + 1) newRight (newChild.TreeSize (down shift)) :> RRBNode<'T>)
-            // TODO: Do I need an "Update two child items at once" function? What about the size table? We should be able to manage the size table
+            let newNode = this.UpdatedChildSpecificChildSize owner localIdx newChild (newChild.TreeSize (down shift))
+            SimpleInsertion (newNode.UpdatedChildSpecificChildSize owner (localIdx + 1) newRight (newRight.TreeSize (down shift)) :> RRBNode<'T>)
+            // TODO: Comments from SlidItemsLeft re size table apply here too.
         | SplitNode (newChild, newRight) ->
             if this.NodeSize < Literals.blockSize then
                 let newNode = this.InsertedChild owner shift (localIdx + 1) newRight (newRight.TreeSize (down shift))
@@ -305,16 +305,12 @@ and RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
                     let newNode = this.UpdatedChildSpecificChildSize owner localIdx newChild (newChild.TreeSize (down shift))
                     let newLeft, newRight = newNode.InsertAndSlideChildrenLeft owner shift (localIdx + 1) newRight leftSib
                     SlidItemsLeft (newLeft :> RRBNode<'T>, newRight :> RRBNode<'T>)
-                    // TODO: Calculate the actual number of items rather than just using 0
-                    // ... Or decide that the slid item count isn't interesting at all and get rid of it from the DU
                 | Some parent, idx when idx < (parent.NodeSize - 1) && parent.Children.[idx + 1].NodeSize < Literals.blockSize ->
                     // Room in the right sibling
                     let rightSib = parent.Children.[idx + 1] :?> RRBFullNode<'T>
                     let newNode = this.UpdatedChildSpecificChildSize owner localIdx newChild (newChild.TreeSize (down shift))
                     let newLeft, newRight = newNode.InsertAndSlideChildrenRight owner shift (localIdx + 1) newRight rightSib
                     SlidItemsRight (newLeft :> RRBNode<'T>, newRight :> RRBNode<'T>)
-                    // TODO: Calculate the actual number of items rather than just using 0
-                    // ... Or decide that the slid item count isn't interesting at all and get rid of it from the DU
                 | _ ->
                     // No room left or right, so split
                     let newNode = this.UpdatedChildSpecificChildSize owner localIdx newChild (newChild.TreeSize (down shift))
