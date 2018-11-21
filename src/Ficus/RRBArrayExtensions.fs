@@ -40,6 +40,15 @@ module Array =
         newArr.[idx] <- newItem
         newArr
 
+    let expandToBlockSize (arr : 'T[]) =
+        let len = Array.length arr
+        if len = Literals.blockSize then arr
+        elif len > Literals.blockSize then arr |> Array.truncate Literals.blockSize
+        else
+            let arr' = Array.zeroCreate Literals.blockSize
+            arr.CopyTo(arr', 0)
+            arr'
+
     // NOTE: No bounds-checking on idx. It's caller's responsibility to set it properly.
     let copyAndRemoveAt idx oldArr =
         let newLen = Array.length oldArr - 1
@@ -236,3 +245,30 @@ module Array =
             resultR.[idxInR] <- item
             Array.blit a2 (idx - len1) resultR (idxInR + 1) (lenResultR - idxInR - 1)
             resultL, resultR
+
+    // Basic algorithm found at https://stackoverflow.com/questions/13023188/smallest-subset-of-array-whose-sum-is-no-less-than-key
+    let smallestRunGreaterThan (n : byte) (arr : byte[]) =
+        let mutable acc = 0uy
+        let mutable p = 0
+        let mutable q = 0
+        let arrLen = Array.length arr
+        let mutable bestIdx = 0
+        let mutable bestLen = arrLen
+        while q < arrLen do
+            // Expand candidate run until its total is at least N
+            while acc < n && q < arrLen do
+                acc <- acc + arr.[q]
+                q <- q + 1
+            while acc - arr.[p] >= n && p < arrLen do
+                acc <- acc - arr.[p]
+                p <- p + 1
+            if acc >= n then
+                let candidateLen = q - p
+                if candidateLen < bestLen then
+                    bestLen <- candidateLen
+                    bestIdx <- p
+            acc <- acc - arr.[p]
+            p <- p + 1
+        bestIdx, bestLen
+    // TODO: Write a unit test or two for this implementation, and make sure that [0..9] is among the tests we use.
+    // Also, random tests that compare this implementation to a brute-force O(N^2) search and make sure that it finds something of minimal length. Bonus if it finds the leftmost possible solution.

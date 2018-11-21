@@ -53,6 +53,24 @@ module RRBMath =
     let inline copyAndSubtractNFromSizeTable decIdx n oldST =
         copyAndAddNToSizeTable decIdx (-n) oldST
 
+    let findMergeCandidates (sizeSeq : #seq<int>) len =
+        use e = sizeSeq.GetEnumerator()
+        let sizes = Array.init len (fun _ -> byte (if e.MoveNext() then Literals.blockSize - e.Current else 0))
+        sizes |> Array.smallestRunGreaterThan (byte Literals.blockSize)
+
+    // TODO: At some point, uncomment this version and test whether it is more efficient
+    // let findMergeCandidatesTwoPasses (sizeSeq : #seq<int>) len =
+    //     use e = sizeSeq.GetEnumerator()
+    //     let sizes = Array.init len (fun _ -> byte (if e.MoveNext() then Literals.blockSize - e.Current else 0))
+    //     let idx1, len1 = sizes |> smallestRunGreaterThan (byte Literals.blockSize)
+    //     let idx2, len2 = sizes |> smallestRunGreaterThan (byte (Literals.blockSize <<< 1))
+    //     // Drop two slots if we can do so in less than twice the work needed to drop a single slot
+    //     if len2 < (len1 * 2) then
+    //         idx2, len2, 2
+    //     else
+    //         idx1, len1, 1
+
+
 open RRBMath
 open Ficus
 
@@ -99,6 +117,8 @@ type RRBNode<'T>(ownerToken : OwnerToken) =
     abstract member TreeSize : int -> int   // How many total items are found in this node's entire descendant tree?
     abstract member SlotCount : int         // Used in rebalancing; the "slot count" is the total of the node sizes of this node's children
     abstract member TwigSlotCount : int     // Like SlotCount, but used when we *know* this node is a twig and its children are leaves, which allows some optimizations
+
+    abstract member SetNodeSize : int -> unit
 
     abstract member GetEditableNode : OwnerToken -> RRBNode<'T>
     abstract member GetEditableEmptyNodeOfLengthN : OwnerToken -> int -> RRBNode<'T>
@@ -153,6 +173,8 @@ and RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
     override this.TwigSlotCount =
         // Just as with TreeSize, we can skip calculating all but the rightmost node
         if this.NodeSize = 0 then 0 else ((this.NodeSize - 1) <<< Literals.blockSizeShift) + this.LastChild.NodeSize
+
+    override this.SetNodeSize _ = ()  // No-op; only used in expanded nodes
 
     member this.FullNodeIsTrulyFull shift =
         this.NodeSize = 0 || this.LastChild.TreeSize (down shift) >= (1 <<< shift)
@@ -375,6 +397,47 @@ and RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
                 else this.UpdatedChildSpecificChildSize owner (this.NodeSize - 1) newLastChild (newLastChild.TreeSize (down shift))
             leaf, newNode
 
+    // --- REBALANCING ---
+
+    member this.Rebalance (owner : OwnerToken) (shift : int) =
+        let items = this.Children |> Seq.ofArray
+        let sizes = items |> Seq.map (fun node -> node.NodeSize)
+        let len = this.NodeSize
+        let idx, somethingLen = findMergeCandidates sizes len // TODO: Better name than somethingLen
+        let sizeReduction = 1  // When we start using findMergeCandidatesTwoPasses, this will be part of the above line as a 3-tuple, not a 2-tuple
+        let newLen = len - sizeReduction
+        let newNode = this.GetEditableEmptyNodeOfLengthN owner newLen :?> RRBFullNode<'T>
+        if not (LanguagePrimitives.PhysicalEquality newNode this) then
+            Array.blit this.Children 0 newNode.Children 0 idx
+        if shift <= Literals.blockSizeShift then
+            // Children are leaves
+            let children = this.Children |> Seq.cast<RRBLeafNode<'T>>
+            let arraysToMerge = children |> Seq.skip idx |> Seq.truncate somethingLen |> Seq.map (fun leaf -> leaf.Items)
+            let combined = Array.concat arraysToMerge
+            let split = combined |> Array.chunkBySize Literals.blockSize
+            let leaves = split |> Array.map (fun items -> RRBNode<'T>.MkLeaf owner items :> RRBNode<'T>)
+#if DEBUG
+            if Array.length leaves <> somethingLen then
+                failwith <| sprintf "Expected a length of %d in the rebalanced section of leaves, but found a length of %d instead. Whole array was %A" somethingLen (Array.length leaves) this.Children
+#endif
+            leaves.CopyTo(newNode.Children, idx)
+        else
+            // Children are nodes
+            let children = this.Children |> Seq.cast<RRBFullNode<'T>>
+            let arraysToMerge = children |> Seq.skip idx |> Seq.truncate somethingLen |> Seq.map (fun leaf -> leaf.Children)
+            let combined = Array.concat arraysToMerge
+            let split = combined |> Array.chunkBySize Literals.blockSize
+            let downshift = down shift
+            let newChildren = split |> Array.map (fun items -> RRBNode<'T>.MkNode owner downshift items :> RRBNode<'T>)
+#if DEBUG
+            if Array.length newChildren <> somethingLen then
+                failwith <| sprintf "Expected a length of %d in the rebalanced section of new children, but found a length of %d instead. Whole array was %A" somethingLen (Array.length newChildren) this.Children
+#endif
+            newChildren.CopyTo(newNode.Children, idx)
+        // Remnant
+        Array.blit this.Children (idx + somethingLen) newNode.Children (idx + somethingLen - sizeReduction) (len - idx)
+        this.SetNodeSize newLen  // This allows expanded nodes to zero out the appropriate parts, so that garbage collection can happen on anything that was shifted
+        newNode
 
 
 and RRBRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], sizeTable : int[]) =
@@ -489,6 +552,8 @@ and RRBLeafNode<'T>(ownerToken : OwnerToken, items : 'T[]) =
         failwith "Twig slot count called on a leaf node"  // TODO: Remove this before going into production, and make it return this.NodeSize
         this.NodeSize
 
+    override this.SetNodeSize _ = ()
+
     override this.Shrink _ = this :> RRBNode<'T>
     override this.Expand owner =
         // If anyone else might possibly have a reference to this node, we need to copy the item array
@@ -601,6 +666,19 @@ and RRBExpandedFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], ?
         then this :> RRBNode<'T>
         else RRBExpandedFullNode<'T>(owner, Array.copy this.Children) :> RRBNode<'T>
 
+    override this.SetNodeSize newSize =
+        // This should only be called when the node is already editable
+        let curSize = this.NodeSize
+        if curSize = newSize then
+            ()
+        elif curSize > newSize then
+            // Node expanded, so no need to zero anything out
+            this.CurrentLength <- newSize
+        else
+            // Node shrank, so zero out the children between newSize and oldSize
+            for i = newSize to curSize - 1 do
+                this.Children.[i] <- null
+
     // override this.InsertAndSlideChildrenLeft owner shift localIdx newChild leftSibling =
     //     failwith "Not implemented"
 
@@ -649,6 +727,19 @@ and RRBExpandedRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]
         then this :> RRBNode<'T>
         else RRBExpandedFullNode<'T>(owner, Array.copy this.Children) :> RRBNode<'T>
 
+    override this.SetNodeSize newSize =
+        // This should only be called when the node is already editable
+        let curSize = this.NodeSize
+        if curSize = newSize then
+            ()
+        elif curSize > newSize then
+            // Node expanded, so no need to zero anything out
+            this.CurrentLength <- newSize
+        else
+            // Node shrank, so zero out the children between newSize and oldSize
+            for i = newSize to curSize - 1 do
+                this.Children.[i] <- null
+
     override this.RemoveLastChild owner shift =
         // TODO: First make sure that "owner" isn't null at this point, because that's causing a failure in one of my tests
         // [push 1063; rev(); pop 118] --> after the rev(), we're a transient node that has become persistent so our owner is now null -- but we failed to check that.
@@ -687,6 +778,19 @@ and RRBExpandedLeafNode<'T>(ownerToken : OwnerToken, items : 'T[], ?realSize : i
         if this.IsEditableBy owner
         then this :> RRBNode<'T>
         else RRBExpandedLeafNode<'T>(owner, Array.copy this.Items) :> RRBNode<'T>
+
+    override this.SetNodeSize newSize =
+        // This should only be called when the node is already editable
+        let curSize = this.NodeSize
+        if curSize = newSize then
+            ()
+        elif curSize > newSize then
+            // Node expanded, so no need to zero anything out
+            this.CurrentLength <- newSize
+        else
+            // Node shrank, so zero out the children between newSize and oldSize
+            for i = newSize to curSize - 1 do
+                this.Items.[i] <- Unchecked.defaultof<'T>
 
     override this.InsertedItem owner localIdx item =
         // No bounds-checking: that's the job of the caller
@@ -768,46 +872,5 @@ The score is the # of reductions, and between two items with the same reductions
 So the score is (reductions, -length) and then you compare those tuples with normal comparison; the greater score wins.
 *)
 
-// Basic algorithm found at https://stackoverflow.com/questions/13023188/smallest-subset-of-array-whose-sum-is-no-less-than-key
-let smallestRunGreaterThan n arr =
-    let mutable acc = 0uy
-    let mutable p = 0
-    let mutable q = 0
-    let arrLen = Array.length arr
-    let mutable bestIdx = 0
-    let mutable bestLen = arrLen
-    while q < arrLen do
-        // Expand candidate run until its total is at least N
-        while acc < n && q < arrLen do
-            acc <- acc + arr.[q]
-            q <- q + 1
-        while acc - arr.[p] >= n && p < arrLen do
-            acc <- acc - arr.[p]
-            p <- p + 1
-        if acc >= n then
-            let candidateLen = q - p
-            if candidateLen < bestLen then
-                bestLen <- candidateLen
-                bestIdx <- p
-        acc <- acc - arr.[p]
-        p <- p + 1
-    bestIdx, bestLen
-// TODO: Write a unit test or two for this implementation, and make sure that [0..9] is among the tests we use.
-// Also, random tests that compare this implementation to a brute-force O(N^2) search and make sure that it finds something of minimal length. Bonus if it finds the leftmost possible solution.
-
-let findMergeCandidates (sizeSeq : #seq<int>) len =
-    use e = sizeSeq.GetEnumerator()
-    let sizes = Array.init len (fun _ -> byte (if e.MoveNext() then Literals.blockSize - e.Current else 0))
-    sizes |> smallestRunGreaterThan (byte Literals.blockSize)
-
-// TODO: At some point, uncomment this version and test whether it is more efficient
-// let findMergeCandidatesTwoPasses (sizeSeq : #seq<int>) len =
-//     use e = sizeSeq.GetEnumerator()
-//     let sizes = Array.init len (fun _ -> byte (if e.MoveNext() then Literals.blockSize - e.Current else 0))
-//     let idx1, len1 = sizes |> smallestRunGreaterThan (byte Literals.blockSize)
-//     let idx2, len2 = sizes |> smallestRunGreaterThan (byte (Literals.blockSize <<< 1))
-//     // Drop two slots if we can do so in less than twice the work needed to drop a single slot
-//     if len2 < (len1 * 2) then
-//         idx2, len2
-//     else
-//         idx1, len1
+// TODO: At some point, see if it's worth implementing the idea above, as opposed to the simple idea that I've used
+// (that is, make a seq of "gaps", take smallest sub-seq of 32 or more, and also smallest sub-seq of 64 or more if that results in a more efficient reduction)
