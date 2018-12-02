@@ -403,7 +403,7 @@ and RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
         let items = this.Children |> Seq.ofArray
         let sizes = items |> Seq.map (fun node -> node.NodeSize)
         let len = this.NodeSize
-        let idx, somethingLen = findMergeCandidates sizes len // TODO: Better name than somethingLen
+        let idx, mergeLen = findMergeCandidates sizes len
         let sizeReduction = 1  // When we start using findMergeCandidatesTwoPasses, this will be part of the above line as a 3-tuple, not a 2-tuple
         let newLen = len - sizeReduction
         let newNode = this.GetEditableEmptyNodeOfLengthN owner newLen :?> RRBFullNode<'T>
@@ -411,36 +411,36 @@ and RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
         if not (LanguagePrimitives.PhysicalEquality newNode this) then
             Array.blit this.Children 0 newNode.Children 0 idx
         // Consolidated section
-        this.ConsolidateChildren owner shift idx somethingLen newNode.Children
+        this.ConsolidateChildren owner shift idx mergeLen newNode.Children
         // Remnant
-        Array.blit this.Children (idx + somethingLen) newNode.Children (idx + somethingLen - sizeReduction) (len - idx)
+        Array.blit this.Children (idx + mergeLen) newNode.Children (idx + mergeLen - sizeReduction) (len - idx)
         this.SetNodeSize newLen  // This allows expanded nodes to zero out the appropriate parts, so that garbage collection can happen on anything that was shifted
         newNode
 
-    member this.ConsolidateChildren (owner : OwnerToken) (shift : int) (idx : int) (somethingLen : int) (destChildren : RRBNode<'T>[]) =
+    member this.ConsolidateChildren (owner : OwnerToken) (shift : int) (idx : int) (mergeLen : int) (destChildren : RRBNode<'T>[]) =
         if shift <= Literals.blockSizeShift then
             // Children are leaves
             let children = this.Children |> Seq.cast<RRBLeafNode<'T>>
-            let arraysToMerge = children |> Seq.skip idx |> Seq.truncate somethingLen |> Seq.map (fun leaf -> leaf.Items)
+            let arraysToMerge = children |> Seq.skip idx |> Seq.truncate mergeLen |> Seq.map (fun leaf -> leaf.Items)
             let combined = Array.concat arraysToMerge
             let split = combined |> Array.chunkBySize Literals.blockSize
             let leaves = split |> Array.map (fun items -> RRBNode<'T>.MkLeaf owner items :> RRBNode<'T>)
 #if DEBUG
-            if Array.length leaves <> somethingLen then
-                failwith <| sprintf "Expected a length of %d in the rebalanced section of leaves, but found a length of %d instead. Whole array was %A" somethingLen (Array.length leaves) this.Children
+            if Array.length leaves <> mergeLen then
+                failwith <| sprintf "Expected a length of %d in the rebalanced section of leaves, but found a length of %d instead. Whole array was %A" mergeLen (Array.length leaves) this.Children
 #endif
             leaves.CopyTo(destChildren, idx)
         else
             // Children are nodes
             let children = this.Children |> Seq.cast<RRBFullNode<'T>>
-            let arraysToMerge = children |> Seq.skip idx |> Seq.truncate somethingLen |> Seq.map (fun leaf -> leaf.Children)
+            let arraysToMerge = children |> Seq.skip idx |> Seq.truncate mergeLen |> Seq.map (fun leaf -> leaf.Children)
             let combined = Array.concat arraysToMerge
             let split = combined |> Array.chunkBySize Literals.blockSize
             let downshift = down shift
             let newChildren = split |> Array.map (fun items -> RRBNode<'T>.MkNode owner downshift items :> RRBNode<'T>)
 #if DEBUG
-            if Array.length newChildren <> somethingLen then
-                failwith <| sprintf "Expected a length of %d in the rebalanced section of new children, but found a length of %d instead. Whole array was %A" somethingLen (Array.length newChildren) this.Children
+            if Array.length newChildren <> mergeLen then
+                failwith <| sprintf "Expected a length of %d in the rebalanced section of new children, but found a length of %d instead. Whole array was %A" mergeLen (Array.length newChildren) this.Children
 #endif
             newChildren.CopyTo(destChildren, idx)
 
