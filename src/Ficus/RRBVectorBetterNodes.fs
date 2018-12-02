@@ -407,8 +407,17 @@ and RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
         let sizeReduction = 1  // When we start using findMergeCandidatesTwoPasses, this will be part of the above line as a 3-tuple, not a 2-tuple
         let newLen = len - sizeReduction
         let newNode = this.GetEditableEmptyNodeOfLengthN owner newLen :?> RRBFullNode<'T>
+        // Prefix
         if not (LanguagePrimitives.PhysicalEquality newNode this) then
             Array.blit this.Children 0 newNode.Children 0 idx
+        // Consolidated section
+        this.ConsolidateChildren owner shift idx somethingLen newNode.Children
+        // Remnant
+        Array.blit this.Children (idx + somethingLen) newNode.Children (idx + somethingLen - sizeReduction) (len - idx)
+        this.SetNodeSize newLen  // This allows expanded nodes to zero out the appropriate parts, so that garbage collection can happen on anything that was shifted
+        newNode
+
+    member this.ConsolidateChildren (owner : OwnerToken) (shift : int) (idx : int) (somethingLen : int) (destChildren : RRBNode<'T>[]) =
         if shift <= Literals.blockSizeShift then
             // Children are leaves
             let children = this.Children |> Seq.cast<RRBLeafNode<'T>>
@@ -420,7 +429,7 @@ and RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
             if Array.length leaves <> somethingLen then
                 failwith <| sprintf "Expected a length of %d in the rebalanced section of leaves, but found a length of %d instead. Whole array was %A" somethingLen (Array.length leaves) this.Children
 #endif
-            leaves.CopyTo(newNode.Children, idx)
+            leaves.CopyTo(destChildren, idx)
         else
             // Children are nodes
             let children = this.Children |> Seq.cast<RRBFullNode<'T>>
@@ -433,11 +442,7 @@ and RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
             if Array.length newChildren <> somethingLen then
                 failwith <| sprintf "Expected a length of %d in the rebalanced section of new children, but found a length of %d instead. Whole array was %A" somethingLen (Array.length newChildren) this.Children
 #endif
-            newChildren.CopyTo(newNode.Children, idx)
-        // Remnant
-        Array.blit this.Children (idx + somethingLen) newNode.Children (idx + somethingLen - sizeReduction) (len - idx)
-        this.SetNodeSize newLen  // This allows expanded nodes to zero out the appropriate parts, so that garbage collection can happen on anything that was shifted
-        newNode
+            newChildren.CopyTo(destChildren, idx)
 
 
 and RRBRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], sizeTable : int[]) =
@@ -824,53 +829,3 @@ and RRBExpandedLeafNode<'T>(ownerToken : OwnerToken, items : 'T[], ?realSize : i
         newLeaf.Items.[idx] <- Unchecked.defaultof<'T>
         newLeaf.CurrentLength <- idx
         newLeaf :> RRBLeafNode<'T>
-
-(*
-Idea for a rebalance algorithm:
-
-First, look through the node in order from i=0 to i=31 for the first
-child with child.NodeSize < Literals.blockSizeMin (that is, < 31).
-Now mark that as the left point, and sweep forward (keeping track of
-a running length) looking at child.NodeSize for subsequent children.
-Once you've found a series of adjacent children whose NodeSize properties
-add up to at least 32 less than (length * 32), that's a point where you can
-reduce the current node's size by 1 with a rebalance. E.g.,
-
-16 17 32 32 ...   <- 16+17 = 33, which is >  (length-1)*32, so rebalance not useful
-15 17 32 32 ...   <- 15+17 = 32, which is <= (length-1)*32, so [15; 17] is a rebalance candidate of length 2. Start index 0, length 2.
-16 17 31 32 ...   <- 16+17 = 33, > 32, not a candidate. But 16+17+31 = 64, <= 64, so that's a length-3 run that reduces down to 2.
-16 17 32 31 ...
-
-... and the key insight that I want to record is this: once you find a run of length N that reduces by 1, look at at least N more items to see if there's a better candidate.
-To do so:
-
-1. While sweeping the first run, keep track of the minimum number found during that sweep, and its index. Use that index (and length N at most) as another possible run candidate; if a shorter-than-N run is found, great.
-2. Take the final item of the first run, and the *next* item after that one. The smaller of the two becomes the next candidate, and we sweep at most N items to find another run candidate that's shorter than N.
-
-So there are two places where a length of N will be swept after finding the first candidate:
-  a) From the smallest child (if it's not the first), and
-  b) From the smaller of the last or post-last item of the first run. (That is, indices i+N-1 and i+N will be compared).
-
-It's possible that a) will fail because the first was the smallest, and that b) will fail because i+N+N goes past the end of the current node's NodeSize. In which case we go only to the end of the current node and no farther.
-Either way, if a) or b) fails, then it's ignored. The other one (if it's valid) will be checked, and overall, the one with the SMALLEST run length wins. (I.e., it must be LESS than N).
-
-... And one more possibility: once we've found a run of length N, we continue looking at one more child as long as there's still room in the combined node we've built so far.
-E.g., in 4 5 6 7 8 9, running total is 4; 9; 15; 22; 30; 39. 39 goes over the length of the combined node, so we'd grab [4; 5; 6; 7; 8] and turn then into a node of 30, resulting in [30; 9] at the end.
-And in 8 7 6 5 4 3 2 1 2 3 4 5 6 7 8, we'd find [8; 7; 6; 5; 4] but then we'd look at [4; 3; 2; 1; 2] and [3; 2; 1; 2; 3] and each of those could be extended by N to [4; 3; 2; 1; 2; 3; 4; 5; 6; 7] = [30; 7], or [3; 2; 1; 2; 3; 4; 5; 6; 7] = [26; 7]
-So there, the [4 3 2 1 2 3 4 5 6] would be selected as the final rebalance to be run.
-
-
-Another way to think about it. Consider an ideally-filled subtree. The children are length [M; M; M], etc.
-Now consider that any M-1 children have one "gap", any M-2 children have 2 "gaps", and so on.
-As we look at sub-arrays, we have a length and we keep a running sum of the items in the sub-array.
-Formulas:
-  idealSlotCount = length * M (or length <<< blockSizeShift)
-  gaps = idealSlotCount - sum
-  reductions = gaps / M (or gaps >>> blockSizeShift)
-
-The score is the # of reductions, and between two items with the same reductions, the smaller length wins.
-So the score is (reductions, -length) and then you compare those tuples with normal comparison; the greater score wins.
-*)
-
-// TODO: At some point, see if it's worth implementing the idea above, as opposed to the simple idea that I've used
-// (that is, make a seq of "gaps", take smallest sub-seq of 32 or more, and also smallest sub-seq of 64 or more if that results in a more efficient reduction)
