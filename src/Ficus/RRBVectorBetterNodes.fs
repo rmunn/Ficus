@@ -417,6 +417,35 @@ and RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
         this.SetNodeSize newLen  // This allows expanded nodes to zero out the appropriate parts, so that garbage collection can happen on anything that was shifted
         newNode
 
+    member this.Rebalance2 (owner : OwnerToken) (shift : int) (right : RRBFullNode<'T>) =
+        let thisLen = this.NodeSize
+        let rightLen = right.NodeSize
+        let len = thisLen + rightLen
+        let thisItems = this.Children |> Seq.ofArray |> Seq.take thisLen
+        let rightItems = right.Children |> Seq.ofArray |> Seq.take rightLen
+        let items = Seq.append thisItems rightItems
+        let sizes = items |> Seq.map (fun node -> node.NodeSize)
+        let idx, mergeLen = findMergeCandidates sizes len
+        let sizeReduction = 1  // When we start using findMergeCandidatesTwoPasses, this will be part of the above line as a 3-tuple, not a 2-tuple
+        let newLen = len - sizeReduction
+        if newLen <= Literals.blockSize then
+            // TODO: This segment could be pulled out into a function called "applyRebalancePlan"
+            let newNode = this.GetEditableEmptyNodeOfLengthN owner newLen :?> RRBFullNode<'T>
+            // Prefix
+            if not (LanguagePrimitives.PhysicalEquality newNode this) then
+                Array.blit this.Children 0 newNode.Children 0 idx
+            // Consolidated section
+            this.ConsolidateChildren owner shift idx mergeLen newNode.Children
+            // Remnant
+            Array.blit this.Children (idx + mergeLen) newNode.Children (idx + mergeLen - sizeReduction) (len - idx)
+            this.SetNodeSize newLen  // This allows expanded nodes to zero out the appropriate parts, so that garbage collection can happen on anything that was shifted
+            newNode, None
+        else
+            let newItems = Array.zeroCreate newLen
+            Array.blit this.Children 0 newItems 0 idx
+            // TODO: Write the rest of this -- must figure out where the split is
+            this, None  // TODO: Change this line to be "left, right" once I write the rest of the if branch correctly
+
     member this.ConsolidateChildren (owner : OwnerToken) (shift : int) (idx : int) (mergeLen : int) (destChildren : RRBNode<'T>[]) =
         if shift <= Literals.blockSizeShift then
             // Children are leaves
