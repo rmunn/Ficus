@@ -141,7 +141,7 @@ type RRBNode<'T>(ownerToken : OwnerToken) =
     static member MkNodeKnownSize (owner : OwnerToken) (shift : int) (children : RRBNode<'T>[]) (sizeTable : int[]) =
         RRBRelaxedNode<'T>.CreateWithSizeTable(owner, shift, children, sizeTable)
     static member MkFullNode (owner : OwnerToken) (children : RRBNode<'T>[]) =
-        // if children.Length = 1 then SingletonNode<'T>(owner, entries) :> Node<'T> else  // TODO: Do we want an RRBSingletonNode class as well?
+        // if children.Length = 1 then SingletonNode<'T>(owner, entries) :> Node<'T> else  // TODO: Do we want an RRBSingletonNode class as well? ANSWER: No we don't; remove this TODO
         RRBFullNode<'T>.Create(owner, children)
 
     abstract member UpdatedTree : OwnerToken -> int -> int -> 'T -> RRBNode<'T>  // Params: owner shift treeIdx newItem
@@ -194,6 +194,7 @@ and RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
     override this.Expand _ = this :> RRBNode<'T>
 
     member this.ToRRBIfNeeded shift =
+        // TODO: Use this.BuildSizeTable instead???
         if shift <= 0 then this :> RRBNode<'T> else
             let sizeTable = RRBNode<'T>.CreateSizeTable shift children
             if RRBMath.isSizeTableFullAtShift shift sizeTable sizeTable.Length
@@ -208,25 +209,217 @@ and RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
         let nextTreeIdx = treeIdx &&& antimask
         localIdx, child, nextTreeIdx
 
-    member this.UpdatedChildSameSize owner localIdx newChild =
+(*
+
+AppendChild ch
+AppendChildS ch sz
+InsertChild n ch
+InsertChildS n ch sz
+RemoveChild n
+RemoveChildS n sz?
+UpdateChild n ch'
+UpdateChildSAbs n ch' sz
+UpdateChildSRel n ch' relSz
+KeepNLeft n -> Node
+SplitAndKeepNLeft n -> Node, arr of item
+SplitAndKeepNLeftS n -> Node, arr of (item * size)
+KeepNRight n -> Node
+SplitAndKeepNRight n -> arr of item, Node
+SplitAndKeepNRightS n -> arr of (item * size), Node
+AppendNChildren n seq<ch>
+AppendNChildrenS n seq<ch> seq<sz>
+PrependNChildren n seq<ch>
+PrependNChildrenS n seq<ch> seq<sz>
+
+*)
+
+    // ===== NODE MANIPULATION =====
+    // These low-level functions only create new nodes (or modify an expanded node), without doing any bounds checking.
+
+    abstract member AppendChild : OwnerToken -> int -> RRBNode<'T> -> RRBFullNode<'T>
+    default this.AppendChild owner shift newChild =
+        let newChildren = this.Children |> Array.copyAndAppend newChild
+        // Full nodes are allowed to have their last item be non-full, so we have to check that
+        if this.FullNodeIsTrulyFull shift then
+            RRBNode<'T>.MkFullNode owner newChildren
+        else
+            // Last item wasn't full, so this is going to become a relaxed node
+            RRBNode<'T>.MkNode owner shift newChildren
+
+    abstract member AppendChildS : OwnerToken -> int -> RRBNode<'T> -> int -> RRBFullNode<'T>
+    default this.AppendChildS owner shift newChild _newChildSize =
+        this.AppendChild owner shift newChild
+
+    member this.UpdateChild owner shift localIdx newChild =
         // TODO: If we need to override this in any child class, make it virtual (e.g. "abstract Foo" and then "default this.Foo")
         let node = this.GetEditableNode owner :?> RRBFullNode<'T>
         node.Children.[localIdx] <- newChild
         node
 
-    abstract member UpdatedChildDifferentSize : OwnerToken -> int -> RRBNode<'T> -> int -> RRBFullNode<'T>
-    default this.UpdatedChildDifferentSize owner localIdx newChild sizeDiff =
-        this.UpdatedChildSameSize owner localIdx newChild
-        // TODO: Actually, need to convert this to RRBRelaxedNode because child size has changed
+    abstract member UpdateChildSRel : OwnerToken -> int -> int -> RRBNode<'T> -> int -> RRBFullNode<'T>
+    default this.UpdateChildSRel owner shift localIdx newChild sizeDiff =
+        let size = this.NodeSize
+        let sizeTable = this.BuildSizeTable shift size (size-1)
+        let node' = RRBRelaxedNode<'T>(this.Owner, this.Children, sizeTable)
+        node'.UpdateChildSRel owner shift localIdx newChild sizeDiff
 
-    abstract member UpdatedChildSpecificChildSize : OwnerToken -> int -> RRBNode<'T> -> int -> RRBFullNode<'T>
-    default this.UpdatedChildSpecificChildSize owner localIdx newChild childSize =
-        this.UpdatedChildSameSize owner localIdx newChild
-        // TODO: Actually, need to convert this to RRBRelaxedNode because child size has changed
+    abstract member UpdateChildSAbs : OwnerToken -> int -> int -> RRBNode<'T> -> int -> RRBFullNode<'T>
+    default this.UpdateChildSAbs owner shift localIdx newChild childSize =
+        let size = this.NodeSize
+        let sizeTable = this.BuildSizeTable shift size (size-1)
+        let node' = RRBRelaxedNode<'T>(this.Owner, this.Children, sizeTable)
+        node'.UpdateChildSAbs owner shift localIdx newChild childSize
 
-    // TODO: Write a variant of UpdatedChildDifferentSize that can handle "sliding" items left or right, because RRBRelaxedNode will want to also "slide" the size table entries appropriately
+    abstract member KeepNLeft : OwnerToken -> int -> int -> RRBFullNode<'T>
+    default this.KeepNLeft owner shift n =
+        let arr' = this.Children |> Array.truncate n
+        RRBFullNode<'T>(owner, arr')
+        // Cannot become a relaxed node, since full nodes have all but their last child full (and the last child may be full)
+
+    abstract member KeepNRight : OwnerToken -> int -> int -> RRBFullNode<'T>
+    default this.KeepNRight owner shift n =
+        let skip = this.NodeSize - n
+        let arr' = this.Children |> Array.skip skip
+        RRBFullNode<'T>(owner, arr')
+        // Cannot become a relaxed node, since full nodes have all but their last child full (and the last child may be full)
+
+    abstract member SplitAndKeepNLeft : OwnerToken -> int -> int -> (RRBFullNode<'T> * RRBNode<'T> [])
+    default this.SplitAndKeepNLeft owner shift n =
+#if DEBUG
+        if n <= 0 then
+            failwithf "In SplitAndKeepNLeft, n must be at least one, got %d. This node: %A" n this
+#endif
+        let l, r = this.Children |> Array.splitAt n
+        let node' = RRBFullNode<'T>(owner, l)
+        (node', r)
+
+    abstract member SplitAndKeepNLeftS : OwnerToken -> int -> int -> (RRBFullNode<'T> * (RRBNode<'T> [] * int []))
+    default this.SplitAndKeepNLeftS owner shift n =
+#if DEBUG
+        if n <= 0 then
+            failwithf "In SplitAndKeepNLeftS, n must be at least one, got %d. This node: %A" n this
+#endif
+        let size = this.NodeSize
+        let sizeTable = this.BuildSizeTable shift size (size-1)
+        let l, r = this.Children |> Array.splitAt n
+        let lS, rS = sizeTable |> Array.splitAt n
+        let lastSize = lS |> Array.last
+        for i = 0 to rS.Length - 1 do
+            rS.[i] <- rS.[i] - lastSize
+        let node' = RRBFullNode<'T>(owner, l)
+        (node', (r, rS))
+
+    abstract member SplitAndKeepNRight : OwnerToken -> int -> int -> (RRBNode<'T> [] * RRBFullNode<'T>)
+    default this.SplitAndKeepNRight owner shift n =
+#if DEBUG
+        if n <= 0 then
+            failwithf "In SplitAndKeepNRight, n must be at least one, got %d. This node: %A" n this
+#endif
+        let l, r = this.Children |> Array.splitAt n
+        let node' = RRBFullNode<'T>(owner, r)
+        (l, node')
+
+    abstract member SplitAndKeepNRightS : OwnerToken -> int -> int -> ((RRBNode<'T> [] * int []) * RRBFullNode<'T>)
+    default this.SplitAndKeepNRightS owner shift n =
+#if DEBUG
+        if n <= 0 then
+            failwithf "In SplitAndKeepNRightS, n must be at least one, got %d. This node: %A" n this
+#endif
+        let size = this.NodeSize
+        let sizeTable = this.BuildSizeTable shift size (size-1)
+        let l, r = this.Children |> Array.splitAt n
+        let lS, rS = sizeTable |> Array.splitAt n
+        // No need to adjust rS here since we don't use it
+        let node' = RRBFullNode<'T>(owner, r)
+        ((l, lS), node')
+
+    abstract member AppendNChildren : OwnerToken -> int -> int -> RRBNode<'T> seq -> RRBFullNode<'T>
+    default this.AppendNChildren owner shift n newChildren =
+        let size = this.NodeSize
+        let newSize = size + n
+        let children' = Array.zeroCreate newSize
+        this.Children.CopyTo(children', 0)
+        let sizeTable = this.BuildSizeTable shift size (size - 1)
+        let sizeTable' = Array.zeroCreate newSize
+        sizeTable.CopyTo(sizeTable', 0)
+        let mutable prevSizeTableEntry = sizeTable'.[size - 1]
+        use eC = newChildren.GetEnumerator()
+        for i = size to newSize - 1 do
+            if eC.MoveNext() then
+                children'.[i] <- eC.Current
+                let childSize = eC.Current.TreeSize (down shift)
+                let nextSizeTableEntry = prevSizeTableEntry + childSize
+                sizeTable'.[i] <- nextSizeTableEntry
+                prevSizeTableEntry <- nextSizeTableEntry
+        RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
+
+    abstract member AppendNChildrenS : OwnerToken -> int -> int -> RRBNode<'T> seq -> int seq -> RRBFullNode<'T>
+    default this.AppendNChildrenS owner shift n newChildren sizes =
+        // Note: "sizes" should be a sequence of size table entries, i.e. cumulative: instead of [3;4;3;2;4] it should be [3;7;10;12;16]
+        let size = this.NodeSize
+        let newSize = size + n
+        let children' = Array.zeroCreate newSize
+        this.Children.CopyTo(children', 0)
+        let sizeTable = this.BuildSizeTable shift size (size - 1)
+        let sizeTable' = Array.zeroCreate newSize
+        sizeTable.CopyTo(sizeTable', 0)
+        let lastSizeTableEntry = sizeTable'.[size - 1]
+        use eC = newChildren.GetEnumerator()
+        use eS = sizes.GetEnumerator()
+        for i = size to newSize - 1 do
+            if eC.MoveNext() && eS.MoveNext() then
+                children'.[i] <- eC.Current
+                sizeTable'.[i] <- lastSizeTableEntry + eS.Current
+        RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
+
+    abstract member PrependNChildren : OwnerToken -> int -> int -> RRBNode<'T> seq -> RRBFullNode<'T>
+    default this.PrependNChildren owner shift n newChildren =
+        let size = this.NodeSize
+        let newSize = size + n
+        let children' = Array.zeroCreate newSize
+        this.Children.CopyTo(children', n)
+        let sizeTable = this.BuildSizeTable shift size (size - 1)
+        let sizeTable' = Array.zeroCreate newSize
+        sizeTable.CopyTo(sizeTable', n)
+        let mutable prevSizeTableEntry = 0
+        use eC = newChildren.GetEnumerator()
+        for i = 0 to n - 1 do
+            if eC.MoveNext() then
+                children'.[i] <- eC.Current
+                let childSize = eC.Current.TreeSize (down shift)
+                let nextSizeTableEntry = prevSizeTableEntry + childSize
+                sizeTable'.[i] <- nextSizeTableEntry
+                prevSizeTableEntry <- nextSizeTableEntry
+        RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
+
+    abstract member PrependNChildrenS : OwnerToken -> int -> int -> RRBNode<'T> seq -> int seq -> RRBFullNode<'T>
+    default this.PrependNChildrenS owner shift n newChildren sizes =
+        // Note: "sizes" should be a sequence of size table entries, i.e. cumulative: instead of [3;4;3;2;4] it should be [3;7;10;12;16]
+        let size = this.NodeSize
+        let newSize = size + n
+        let children' = Array.zeroCreate newSize
+        this.Children.CopyTo(children', n)
+        let sizeTable = this.BuildSizeTable shift size (size - 1)
+        let sizeTable' = Array.zeroCreate newSize
+        sizeTable.CopyTo(sizeTable', n)
+        use eC = newChildren.GetEnumerator()
+        use eS = sizes.GetEnumerator()
+        for i = 0 to n - 1 do
+            if eC.MoveNext() && eS.MoveNext() then
+                children'.[i] <- eC.Current
+                sizeTable'.[i] <- eS.Current
+        let lastSizeTableEntry = sizeTable'.[n - 1]
+        for i = n to newSize - 1 do
+            sizeTable'.[i] <- sizeTable'.[i] - lastSizeTableEntry
+        RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
+
+    // ===== END of NODE MANIPULATION functions =====
+
+    // TODO: Write a variant of UpdateChildDifferentSize that can handle "sliding" items left or right, because RRBRelaxedNode will want to also "slide" the size table entries appropriately
     // And it will be useful in implementing the rebalance feature as well, where we'll be combining multiple nodes, often by "sliding" items around.
     // Perhaps we'll implement it by keeping track of the individual sizes of each item (by subtraction from the previous size table entry), and then adding each individual size as we go
+
+    // TODO: Determine whether the above comment is complete now, then remove it.
 
     member this.BuildSizeTable shift count lastIdx =
         let fullSize = 1 <<< shift
@@ -297,62 +490,62 @@ and RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
     override this.UpdatedTree owner shift treeIdx newItem =
         let localIdx, child, nextIdx = this.IndexesAndChild shift treeIdx
         let newNode = child.UpdatedTree owner (down shift) nextIdx newItem
-        this.UpdatedChildSameSize owner localIdx newNode :> RRBNode<'T>
+        this.UpdateChild owner shift localIdx newNode :> RRBNode<'T>
 
     override this.InsertedTree owner shift treeIdx item parentOpt idxOfNodeInParent =
         let localIdx, child, nextLvlIdx = this.IndexesAndChild shift treeIdx
         let insertResult = child.InsertedTree owner (down shift) nextLvlIdx item (Some this) localIdx
         match insertResult with
         | SimpleInsertion newChild ->
-            SimpleInsertion (this.UpdatedChildDifferentSize owner localIdx newChild 1 :> RRBNode<'T>)
+            SimpleInsertion (this.UpdateChildSRel owner shift localIdx newChild 1 :> RRBNode<'T>)
         | SlidItemsLeft (newLeft, newChild) ->
             // Always update the *right* child first, then the left: that way the size table adjustments will be correct
-            let newNode = this.UpdatedChildSpecificChildSize owner localIdx newChild (newChild.TreeSize (down shift))
-            SimpleInsertion (newNode.UpdatedChildSpecificChildSize owner (localIdx - 1) newLeft (newLeft.TreeSize (down shift)) :> RRBNode<'T>)
+            let newNode = this.UpdateChildSAbs owner shift localIdx newChild (newChild.TreeSize (down shift))
+            SimpleInsertion (newNode.UpdateChildSAbs owner shift (localIdx - 1) newLeft (newLeft.TreeSize (down shift)) :> RRBNode<'T>)
             // TODO: Do I need an "Update two child items at once" function? What about the size table? We should be able to manage the size table more cleverly in RelaxedNodes.
         | SlidItemsRight (newChild, newRight) ->
-            let newNode = this.UpdatedChildSpecificChildSize owner localIdx newChild (newChild.TreeSize (down shift))
-            SimpleInsertion (newNode.UpdatedChildSpecificChildSize owner (localIdx + 1) newRight (newRight.TreeSize (down shift)) :> RRBNode<'T>)
+            let newNode = this.UpdateChildSAbs owner shift localIdx newChild (newChild.TreeSize (down shift))
+            SimpleInsertion (newNode.UpdateChildSAbs owner shift (localIdx + 1) newRight (newRight.TreeSize (down shift)) :> RRBNode<'T>)
             // TODO: Comments from SlidItemsLeft re size table apply here too.
         | SplitNode (newChild, newRight) ->
             if this.NodeSize < Literals.blockSize then
                 let newNode = this.InsertedChild owner shift (localIdx + 1) newRight (newRight.TreeSize (down shift))
-                SimpleInsertion (newNode.UpdatedChildSpecificChildSize owner localIdx newChild (newChild.TreeSize (down shift)) :> RRBNode<'T>)
+                SimpleInsertion (newNode.UpdateChildSAbs owner shift localIdx newChild (newChild.TreeSize (down shift)) :> RRBNode<'T>)
             else
                 let localIdx, _, _ = this.IndexesAndChild shift treeIdx
                 match (parentOpt, idxOfNodeInParent) with
                 | Some parent, idx when idx > 0 && parent.Children.[idx - 1].NodeSize < Literals.blockSize ->
                     // Room in the left sibling
                     let leftSib = parent.Children.[idx - 1] :?> RRBFullNode<'T>
-                    let newNode = this.UpdatedChildSpecificChildSize owner localIdx newChild (newChild.TreeSize (down shift))
+                    let newNode = this.UpdateChildSAbs owner shift localIdx newChild (newChild.TreeSize (down shift))
                     let newLeft, newRight = newNode.InsertAndSlideChildrenLeft owner shift (localIdx + 1) newRight leftSib
                     SlidItemsLeft (newLeft :> RRBNode<'T>, newRight :> RRBNode<'T>)
                 | Some parent, idx when idx < (parent.NodeSize - 1) && parent.Children.[idx + 1].NodeSize < Literals.blockSize ->
                     // Room in the right sibling
                     let rightSib = parent.Children.[idx + 1] :?> RRBFullNode<'T>
-                    let newNode = this.UpdatedChildSpecificChildSize owner localIdx newChild (newChild.TreeSize (down shift))
+                    let newNode = this.UpdateChildSAbs owner shift localIdx newChild (newChild.TreeSize (down shift))
                     let newLeft, newRight = newNode.InsertAndSlideChildrenRight owner shift (localIdx + 1) newRight rightSib
                     SlidItemsRight (newLeft :> RRBNode<'T>, newRight :> RRBNode<'T>)
                 | _ ->
                     // No room left or right, so split
-                    let newNode = this.UpdatedChildSpecificChildSize owner localIdx newChild (newChild.TreeSize (down shift))
+                    let newNode = this.UpdateChildSAbs owner shift localIdx newChild (newChild.TreeSize (down shift))
                     let newLeft, newRight = newNode.InsertAndSplitNode owner shift localIdx newRight
                     SplitNode (newLeft :> RRBNode<'T>, newRight :> RRBNode<'T>)
 
-    abstract member AppendChild : OwnerToken -> int -> RRBNode<'T> -> int -> RRBFullNode<'T>
-    default this.AppendChild owner shift newChild childSize =
-        let newChildren = this.Children |> Array.copyAndAppend newChild
-        // Full nodes are allowed to have their last item be non-full, so we have to check that
-        if this.FullNodeIsTrulyFull shift then
-            RRBNode<'T>.MkFullNode owner newChildren
-        else
-            // Last item wasn't full, so this is going to become a relaxed node
-            RRBNode<'T>.MkNode owner shift newChildren
+    // abstract member AppendChild : OwnerToken -> int -> RRBNode<'T> -> int -> RRBFullNode<'T>
+    // default this.AppendChild owner shift newChild childSize =
+    //     let newChildren = this.Children |> Array.copyAndAppend newChild
+    //     // Full nodes are allowed to have their last item be non-full, so we have to check that
+    //     if this.FullNodeIsTrulyFull shift then
+    //         RRBNode<'T>.MkFullNode owner newChildren
+    //     else
+    //         // Last item wasn't full, so this is going to become a relaxed node
+    //         RRBNode<'T>.MkNode owner shift newChildren
 
     abstract member InsertedChild : OwnerToken -> int -> int -> RRBNode<'T> -> int -> RRBFullNode<'T>
     default this.InsertedChild owner shift localIdx newChild childSize =
         if localIdx = this.NodeSize then
-            this.AppendChild owner shift newChild childSize
+            this.AppendChildS owner shift newChild childSize
         else
             let fullSize = 1 <<< shift
             let newChildren = this.Children |> Array.copyAndInsertAt localIdx newChild
@@ -394,7 +587,7 @@ and RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
             let newNode =
                 if newLastChild.NodeSize = 0
                 then this.RemoveLastChild owner shift  // Child had just one child of its own and is now empty, so remove it
-                else this.UpdatedChildSpecificChildSize owner (this.NodeSize - 1) newLastChild (newLastChild.TreeSize (down shift))
+                else this.UpdateChildSAbs owner shift (this.NodeSize - 1) newLastChild (newLastChild.TreeSize (down shift))
             leaf, newNode
 
     // --- REBALANCING ---
@@ -505,19 +698,170 @@ and RRBRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], sizeTa
         then this :> RRBNode<'T>
         else RRBRelaxedNode<'T>(owner, Array.copy children, Array.copy sizeTable) :> RRBNode<'T>
 
-    override this.UpdatedChildDifferentSize owner localIdx newChild sizeDiff =
-        let newNode = this.GetEditableNode owner :?> RRBRelaxedNode<'T>
-        newNode.Children.[localIdx] <- newChild
-        for i = localIdx to this.NodeSize - 1 do
-            newNode.SizeTable.[i] <- this.SizeTable.[i] + sizeDiff
-        newNode :> RRBFullNode<'T>
+    member this.ToFullNodeIfNeeded shift =
+        if RRBMath.isSizeTableFullAtShift shift sizeTable sizeTable.Length
+        then RRBFullNode<'T>(this.Owner, this.Children)
+        else this :> RRBFullNode<'T>
 
-    override this.UpdatedChildSpecificChildSize owner localIdx newChild childSize =
-        let oldChildSize = this.SizeTable.[localIdx]
-        this.UpdatedChildDifferentSize owner localIdx newChild (childSize - oldChildSize)
+    // ===== NODE MANIPULATION =====
+    // These low-level functions only create new nodes (or modify an expanded node), without doing any bounds checking.
+
+    override this.AppendChild owner shift newChild =
+        this.AppendChildS owner shift newChild (newChild.TreeSize (down shift))
+
+    override this.AppendChildS owner shift newChild newChildSize =
+        let children' = this.Children |> Array.copyAndAppend newChild
+        let lastSizeTableEntry = if this.SizeTable.Length = 0 then 0 else Array.last this.SizeTable
+        let sizeTable' = this.SizeTable |> Array.copyAndAppend (lastSizeTableEntry + newChildSize)
+        RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
+
+    override this.UpdateChildSRel owner shift localIdx newChild sizeDiff =
+        let node' = this.GetEditableNode owner :?> RRBRelaxedNode<'T>
+        node'.Children.[localIdx] <- newChild
+        for i = localIdx to this.NodeSize - 1 do
+            node'.SizeTable.[i] <- this.SizeTable.[i] + sizeDiff
+        node'.ToFullNodeIfNeeded shift
+
+    override this.UpdateChildSAbs owner shift localIdx newChild childSize =
+        let leftSiblingSize = if localIdx <= 0 then 0 else this.SizeTable.[localIdx - 1]
+        let oldChildSize = this.SizeTable.[localIdx] - leftSiblingSize
+        this.UpdateChildSRel owner shift localIdx newChild (childSize - oldChildSize)
+
+    override this.KeepNLeft owner shift n =
+        let children' = this.Children |> Array.truncate n
+        let sizeTable' = this.SizeTable |> Array.truncate n
+        RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
+
+    override this.KeepNRight owner shift n =
+        let skip = this.NodeSize - n
+#if DEBUG
+        if n <= 0 then
+            failwithf "In KeepNRight, n must be at least one, got %d. This node: %A" n this
+        if n >= this.NodeSize then
+            failwithf "In KeepNRight, n must be less than node size, got %d (and node size was %d). This node: %A" n this.NodeSize this
+        if skip <= 0 then
+            failwithf "In KeepNRight, n must be less than node size, got %d (and node size was %d), resulting in %d skipped children. This node: %A" n this.NodeSize skip this
+#endif
+        let children' = this.Children |> Array.skip skip
+        let sizeTable' = this.SizeTable |> Array.skip skip
+        let lastSizeTableEntry = this.SizeTable.[skip - 1]
+        for i = skip to this.NodeSize - 1 do
+            sizeTable'.[i] <- sizeTable'.[i] - lastSizeTableEntry
+        RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
+
+    override this.SplitAndKeepNLeft owner shift n =
+        let (node', (r, _)) = this.SplitAndKeepNLeftS owner shift n
+        (node', r)
+
+    override this.SplitAndKeepNLeftS owner shift n =
+#if DEBUG
+        if n <= 0 then
+            failwithf "In SplitAndKeepNLeftS, n must be at least one, got %d. This node: %A" n this
+#endif
+        let l, r = this.Children |> Array.splitAt n
+        let lS, rS = this.SizeTable |> Array.splitAt n
+        let lastSize = lS |> Array.last
+        for i = 0 to rS.Length - 1 do
+            rS.[i] <- rS.[i] - lastSize
+        let node' = RRBNode<'T>.MkNodeKnownSize owner shift l lS
+        (node', (r, rS))
+
+    override this.SplitAndKeepNRight owner shift n =
+        let ((l, _), node') = this.SplitAndKeepNRightS owner shift n
+        (l, node')
+
+    override this.SplitAndKeepNRightS owner shift n =
+#if DEBUG
+        if n <= 0 then
+            failwithf "In SplitAndKeepNRightS, n must be at least one, got %d. This node: %A" n this
+#endif
+        let l, r = this.Children |> Array.splitAt n
+        let lS, rS = this.SizeTable |> Array.splitAt n
+        let lastSize = lS |> Array.last
+        for i = 0 to rS.Length - 1 do
+            rS.[i] <- rS.[i] - lastSize
+        let node' = RRBNode<'T>.MkNodeKnownSize owner shift r rS
+        ((l, lS), node')
+
+    override this.AppendNChildren owner shift n newChildren =
+        let size = this.NodeSize
+        let newSize = size + n
+        let children' = Array.zeroCreate newSize
+        this.Children.CopyTo(children', 0)
+        let sizeTable' = Array.zeroCreate newSize
+        this.SizeTable.CopyTo(sizeTable', 0)
+        let mutable prevSizeTableEntry = sizeTable'.[size - 1]
+        use eC = newChildren.GetEnumerator()
+        for i = size to newSize - 1 do
+            if eC.MoveNext() then
+                children'.[i] <- eC.Current
+                let childSize = eC.Current.TreeSize (down shift)
+                let nextSizeTableEntry = prevSizeTableEntry + childSize
+                sizeTable'.[i] <- nextSizeTableEntry
+                prevSizeTableEntry <- nextSizeTableEntry
+        RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
+        // TODO: That's *almost* identical to the version in RRBFullNode<'T> - separate out the common code and combine it
+
+    override this.AppendNChildrenS owner shift n newChildren sizes =
+        // Note: "sizes" should be a sequence of size table entries, i.e. cumulative: instead of [3;4;3;2;4] it should be [3;7;10;12;16]
+        let size = this.NodeSize
+        let newSize = size + n
+        let children' = Array.zeroCreate newSize
+        this.Children.CopyTo(children', 0)
+        let sizeTable' = Array.zeroCreate newSize
+        this.SizeTable.CopyTo(sizeTable', 0)
+        let lastSizeTableEntry = sizeTable'.[size - 1]
+        use eC = newChildren.GetEnumerator()
+        use eS = sizes.GetEnumerator()
+        for i = size to newSize - 1 do
+            if eC.MoveNext() && eS.MoveNext() then
+                children'.[i] <- eC.Current
+                sizeTable'.[i] <- lastSizeTableEntry + eS.Current
+        RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
+        // TODO: That's *almost* identical to the version in RRBFullNode<'T> - separate out the common code and combine it
+
+    override this.PrependNChildren owner shift n newChildren =
+        let size = this.NodeSize
+        let newSize = size + n
+        let children' = Array.zeroCreate newSize
+        this.Children.CopyTo(children', n)
+        let sizeTable' = Array.zeroCreate newSize
+        this.SizeTable.CopyTo(sizeTable', 0)
+        let mutable prevSizeTableEntry = 0
+        use eC = newChildren.GetEnumerator()
+        for i = 0 to n - 1 do
+            if eC.MoveNext() then
+                children'.[i] <- eC.Current
+                let childSize = eC.Current.TreeSize (down shift)
+                let nextSizeTableEntry = prevSizeTableEntry + childSize
+                sizeTable'.[i] <- nextSizeTableEntry
+                prevSizeTableEntry <- nextSizeTableEntry
+        RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
+        // TODO: That's *almost* identical to the version in RRBFullNode<'T> - separate out the common code and combine it
+
+    override this.PrependNChildrenS owner shift n newChildren sizes =
+        // Note: "sizes" should be a sequence of size table entries, i.e. cumulative: instead of [3;4;3;2;4] it should be [3;7;10;12;16]
+        let size = this.NodeSize
+        let newSize = size + n
+        let children' = Array.zeroCreate newSize
+        this.Children.CopyTo(children', n)
+        let sizeTable' = Array.zeroCreate newSize
+        this.SizeTable.CopyTo(sizeTable', 0)
+        use eC = newChildren.GetEnumerator()
+        use eS = sizes.GetEnumerator()
+        for i = 0 to n - 1 do
+            if eC.MoveNext() && eS.MoveNext() then
+                children'.[i] <- eC.Current
+                sizeTable'.[i] <- eS.Current
+        let lastSizeTableEntry = sizeTable'.[n - 1]
+        for i = n to newSize - 1 do
+            sizeTable'.[i] <- sizeTable'.[i] - lastSizeTableEntry
+        RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
+        // TODO: That's *almost* identical to the version in RRBFullNode<'T> - separate out the common code and combine it
 
     override this.SplitNodeIntoArrays owner shift splitIdx =
         // TODO: Expanded nodes *must* rewrite this so that the right children will be handled correctly (not filled with nulls, since we won't always *want* the right child to end up expanded)
+        // TODO: Find and replace all occurrences of SplitNodeIntoArrays with the SplitAndKeep versions above... unless there's a darn good reason for using the arrays version here
         let leftChildren, rightChildren = this.Children |> Array.splitAt splitIdx
         let leftSizes, rightSizes = this.SizeTable |> Array.splitAt splitIdx
         if splitIdx > 0 then
@@ -558,12 +902,6 @@ and RRBRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], sizeTa
 
     // override this.InsertAndSplitNode owner shift localIdx newChild =
     //     failwith "Not implemented"
-
-    override this.AppendChild owner shift newChild childSize =
-        let newChildren = this.Children |> Array.copyAndAppend newChild
-        let lastSizeTableEntry = if this.SizeTable.Length = 0 then 0 else Array.last this.SizeTable
-        let newSizeTable = this.SizeTable |> Array.copyAndAppend (lastSizeTableEntry + childSize)
-        RRBNode<'T>.MkNodeKnownSize owner shift newChildren newSizeTable
 
     override this.RemoveLastChild owner shift =
         let children' = this.Children |> Array.copyAndPop
@@ -713,6 +1051,187 @@ and RRBExpandedFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], ?
             for i = newSize to curSize - 1 do
                 this.Children.[i] <- null
 
+    // ===== NODE MANIPULATION =====
+    // These low-level functions only create new nodes (or modify an expanded node), without doing any bounds checking.
+
+    // MARKER: Done up to here; low-level node functions BELOW this marker are still the versions copied from RRBFullNode<'T>
+
+    override this.AppendChild owner shift newChild =
+        let node' = this.GetEditableNode owner :?> RRBExpandedFullNode<'T>
+        let oldSize = node'.NodeSize
+        node'.Children.[oldSize] <- newChild
+        // TODO: Need to add one to the size, and so on.
+        // Full nodes are allowed to have their last item be non-full, so we have to check that
+        if this.FullNodeIsTrulyFull shift then
+            node' :> RRBFullNode<'T>
+        else
+            // Last item wasn't full, so this is going to become a relaxed node
+            let sizeTable = this.BuildSizeTable shift this.NodeSize (this.NodeSize - 1)
+#if DEBUG
+            if sizeTable |> Array.isEmpty then
+                failwithf "Got empty size table from calling this.BuildSizeTable %d %d %d in RRBExpandedFullNode<'T>.AppendChild. This node = %A" shift this.NodeSize (this.NodeSize - 1) this
+#endif
+            let lastEntry = sizeTable |> Array.last
+            let sizeTable' = Array.expandToBlockSize sizeTable
+            RRBExpandedRelaxedNode<'T>(owner, node'.Children, sizeTable') :> RRBFullNode<'T>
+            // BUG: Need to include the new child in the BuildSizeTable call... but we can't count on the last index being the *only* index that isn't complete. What to do here?
+
+    override this.AppendChildS owner shift newChild _newChildSize =
+        this.AppendChild owner shift newChild
+
+    member this.UpdateChild owner shift localIdx newChild =
+        // TODO: If we need to override this in any child class, make it virtual (e.g. "abstract Foo" and then "default this.Foo")
+        let node = this.GetEditableNode owner :?> RRBFullNode<'T>
+        node.Children.[localIdx] <- newChild
+        node
+
+    override this.UpdateChildSRel owner shift localIdx newChild sizeDiff =
+        let size = this.NodeSize
+        let sizeTable = this.BuildSizeTable shift size (size-1)
+        let node' = RRBRelaxedNode<'T>(this.Owner, this.Children, sizeTable)
+        node'.UpdateChildSRel owner shift localIdx newChild sizeDiff
+
+    override this.UpdateChildSAbs owner shift localIdx newChild childSize =
+        let size = this.NodeSize
+        let sizeTable = this.BuildSizeTable shift size (size-1)
+        let node' = RRBRelaxedNode<'T>(this.Owner, this.Children, sizeTable)
+        node'.UpdateChildSAbs owner shift localIdx newChild childSize
+
+    override this.KeepNLeft owner shift n =
+        let arr' = this.Children |> Array.truncate n
+        RRBFullNode<'T>(owner, arr')
+        // Cannot become a relaxed node, since full nodes have all but their last child full (and the last child may be full)
+
+    override this.KeepNRight owner shift n =
+        let skip = this.NodeSize - n
+        let arr' = this.Children |> Array.skip skip
+        RRBFullNode<'T>(owner, arr')
+        // Cannot become a relaxed node, since full nodes have all but their last child full (and the last child may be full)
+
+    override this.SplitAndKeepNLeft owner shift n =
+#if DEBUG
+        if n <= 0 then
+            failwithf "In SplitAndKeepNLeft, n must be at least one, got %d. This node: %A" n this
+#endif
+        let l, r = this.Children |> Array.splitAt n
+        let node' = RRBFullNode<'T>(owner, l)
+        (node', r)
+
+    override this.SplitAndKeepNLeftS owner shift n =
+#if DEBUG
+        if n <= 0 then
+            failwithf "In SplitAndKeepNLeftS, n must be at least one, got %d. This node: %A" n this
+#endif
+        let size = this.NodeSize
+        let sizeTable = this.BuildSizeTable shift size (size-1)
+        let l, r = this.Children |> Array.splitAt n
+        let lS, rS = sizeTable |> Array.splitAt n
+        let lastSize = lS |> Array.last
+        for i = 0 to rS.Length - 1 do
+            rS.[i] <- rS.[i] - lastSize
+        let node' = RRBFullNode<'T>(owner, l)
+        (node', (r, rS))
+
+    override this.SplitAndKeepNRight owner shift n =
+#if DEBUG
+        if n <= 0 then
+            failwithf "In SplitAndKeepNRight, n must be at least one, got %d. This node: %A" n this
+#endif
+        let l, r = this.Children |> Array.splitAt n
+        let node' = RRBFullNode<'T>(owner, r)
+        (l, node')
+
+    override this.SplitAndKeepNRightS owner shift n =
+#if DEBUG
+        if n <= 0 then
+            failwithf "In SplitAndKeepNRightS, n must be at least one, got %d. This node: %A" n this
+#endif
+        let size = this.NodeSize
+        let sizeTable = this.BuildSizeTable shift size (size-1)
+        let l, r = this.Children |> Array.splitAt n
+        let lS, rS = sizeTable |> Array.splitAt n
+        // No need to adjust rS here since we don't use it
+        let node' = RRBFullNode<'T>(owner, r)
+        ((l, lS), node')
+
+    override this.AppendNChildren owner shift n newChildren =
+        let size = this.NodeSize
+        let newSize = size + n
+        let children' = Array.zeroCreate newSize
+        this.Children.CopyTo(children', 0)
+        let sizeTable = this.BuildSizeTable shift size (size - 1)
+        let sizeTable' = Array.zeroCreate newSize
+        sizeTable.CopyTo(sizeTable', 0)
+        let mutable prevSizeTableEntry = sizeTable'.[size - 1]
+        use eC = newChildren.GetEnumerator()
+        for i = size to newSize - 1 do
+            if eC.MoveNext() then
+                children'.[i] <- eC.Current
+                let childSize = eC.Current.TreeSize (down shift)
+                let nextSizeTableEntry = prevSizeTableEntry + childSize
+                sizeTable'.[i] <- nextSizeTableEntry
+                prevSizeTableEntry <- nextSizeTableEntry
+        RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
+
+    override this.AppendNChildrenS owner shift n newChildren sizes =
+        // Note: "sizes" should be a sequence of size table entries, i.e. cumulative: instead of [3;4;3;2;4] it should be [3;7;10;12;16]
+        let size = this.NodeSize
+        let newSize = size + n
+        let children' = Array.zeroCreate newSize
+        this.Children.CopyTo(children', 0)
+        let sizeTable = this.BuildSizeTable shift size (size - 1)
+        let sizeTable' = Array.zeroCreate newSize
+        sizeTable.CopyTo(sizeTable', 0)
+        let lastSizeTableEntry = sizeTable'.[size - 1]
+        use eC = newChildren.GetEnumerator()
+        use eS = sizes.GetEnumerator()
+        for i = size to newSize - 1 do
+            if eC.MoveNext() && eS.MoveNext() then
+                children'.[i] <- eC.Current
+                sizeTable'.[i] <- lastSizeTableEntry + eS.Current
+        RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
+
+    override this.PrependNChildren owner shift n newChildren =
+        let size = this.NodeSize
+        let newSize = size + n
+        let children' = Array.zeroCreate newSize
+        this.Children.CopyTo(children', n)
+        let sizeTable = this.BuildSizeTable shift size (size - 1)
+        let sizeTable' = Array.zeroCreate newSize
+        sizeTable.CopyTo(sizeTable', n)
+        let mutable prevSizeTableEntry = 0
+        use eC = newChildren.GetEnumerator()
+        for i = 0 to n - 1 do
+            if eC.MoveNext() then
+                children'.[i] <- eC.Current
+                let childSize = eC.Current.TreeSize (down shift)
+                let nextSizeTableEntry = prevSizeTableEntry + childSize
+                sizeTable'.[i] <- nextSizeTableEntry
+                prevSizeTableEntry <- nextSizeTableEntry
+        RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
+
+    override this.PrependNChildrenS owner shift n newChildren sizes =
+        // Note: "sizes" should be a sequence of size table entries, i.e. cumulative: instead of [3;4;3;2;4] it should be [3;7;10;12;16]
+        let size = this.NodeSize
+        let newSize = size + n
+        let children' = Array.zeroCreate newSize
+        this.Children.CopyTo(children', n)
+        let sizeTable = this.BuildSizeTable shift size (size - 1)
+        let sizeTable' = Array.zeroCreate newSize
+        sizeTable.CopyTo(sizeTable', n)
+        use eC = newChildren.GetEnumerator()
+        use eS = sizes.GetEnumerator()
+        for i = 0 to n - 1 do
+            if eC.MoveNext() && eS.MoveNext() then
+                children'.[i] <- eC.Current
+                sizeTable'.[i] <- eS.Current
+        let lastSizeTableEntry = sizeTable'.[n - 1]
+        for i = n to newSize - 1 do
+            sizeTable'.[i] <- sizeTable'.[i] - lastSizeTableEntry
+        RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
+
+    // ===== END of NODE MANIPULATION functions =====
+
     // override this.InsertAndSlideChildrenLeft owner shift localIdx newChild leftSibling =
     //     failwith "Not implemented"
 
@@ -789,6 +1308,7 @@ and RRBExpandedRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]
         else
             newNode :> RRBFullNode<'T>
 
+// REDESIGN: Leaf nodes will never be expanded; only tree nodes will ever be expanded.
 
 
 and RRBExpandedLeafNode<'T>(ownerToken : OwnerToken, items : 'T[], ?realSize : int) =
