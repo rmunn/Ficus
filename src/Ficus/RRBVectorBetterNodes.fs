@@ -194,7 +194,9 @@ and RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
         else RRBFullNode<'T>(owner, Array.zeroCreate len) :> RRBNode<'T>
 
     override this.Shrink _ = this :> RRBNode<'T>
-    override this.Expand _ = this :> RRBNode<'T>
+    override this.Expand owner =
+        let node' = this.GetEditableNode owner :?> RRBFullNode<'T>
+        RRBExpandedFullNode<'T>(owner, node'.Children) :> RRBNode<'T>
 
     abstract member ToRelaxedNodeIfNeeded : int -> RRBNode<'T>
     default this.ToRelaxedNodeIfNeeded shift =
@@ -737,6 +739,11 @@ and RRBRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], sizeTa
         then this :> RRBNode<'T>
         else RRBRelaxedNode<'T>(owner, Array.copy children, Array.copy sizeTable) :> RRBNode<'T>
 
+    override this.Shrink _ = this :> RRBNode<'T>
+    override this.Expand owner =
+        let node' = this.GetEditableNode owner :?> RRBRelaxedNode<'T>
+        RRBExpandedRelaxedNode<'T>(owner, node'.Children, node'.SizeTable) :> RRBNode<'T>
+
     abstract member ToFullNodeIfNeeded : int -> RRBFullNode<'T>
     default this.ToFullNodeIfNeeded shift =
         if RRBMath.isSizeTableFullAtShift shift sizeTable sizeTable.Length
@@ -1087,14 +1094,12 @@ and RRBExpandedFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], ?
             else this.Children |> Array.truncate len
         RRBFullNode<'T>(owner, children') :> RRBNode<'T>
 
-    override this.Expand owner =
-        if this.IsEditableBy owner then this :> RRBNode<'T> else RRBExpandedFullNode<'T>(owner, Array.copy this.Children) :> RRBNode<'T>
-        // TODO: That's the same logic as GetEditableNode. Does it make sense to combine them? I.e., have `override this.Expand owner = this.GetEditableNode owner`?
+    override this.Expand owner = this.GetEditableNode owner
 
     override this.GetEditableNode owner =
         if this.IsEditableBy owner
         then this :> RRBNode<'T>
-        else RRBExpandedFullNode<'T>(owner, Array.copy this.Children) :> RRBNode<'T>
+        else RRBExpandedFullNode<'T>(owner, Array.copy this.Children, this.NodeSize) :> RRBNode<'T>
 
     override this.SetNodeSize newSize =
         // This should only be called when the node is already editable
@@ -1115,7 +1120,7 @@ and RRBExpandedFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], ?
             let sizeTable = RRBNode<'T>.CreateSizeTableS shift this.Children size
             if RRBMath.isSizeTableFullAtShift shift sizeTable size
             then this :> RRBNode<'T>
-            else RRBExpandedRelaxedNode<'T>(ownerToken, this.Children, sizeTable) :> RRBNode<'T>
+            else RRBExpandedRelaxedNode<'T>(ownerToken, this.Children, sizeTable, this.NodeSize) :> RRBNode<'T>
 
     // ===== NODE MANIPULATION =====
     // These low-level functions only create new nodes (or modify an expanded node), without doing any bounds checking.
@@ -1139,7 +1144,7 @@ and RRBExpandedFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], ?
             let lastEntry = sizeTable |> Array.last
             let sizeTable' = Array.expandToBlockSize sizeTable
             sizeTable'.[oldSize] <- lastEntry + newChild.TreeSize (down shift)
-            RRBExpandedRelaxedNode<'T>(owner, node'.Children, sizeTable') :> RRBFullNode<'T>
+            RRBExpandedRelaxedNode<'T>(owner, node'.Children, sizeTable', this.NodeSize) :> RRBFullNode<'T>
         // TODO: Might be able to optimize this by first checking if we're truly full, and then if we're not, convert to a relaxed node FIRST before calling RelaxedNode.AppendChildS
 
     override this.AppendChildS owner shift newChild _newChildSize =
@@ -1189,7 +1194,7 @@ and RRBExpandedFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], ?
         else
             let size = this.NodeSize
             let sizeTable = this.BuildSizeTable shift size (size-1)
-            let node' = RRBExpandedRelaxedNode<'T>(this.Owner, this.Children, sizeTable)
+            let node' = RRBExpandedRelaxedNode<'T>(this.Owner, this.Children, sizeTable, this.NodeSize)
             node'.UpdateChildSRel owner shift localIdx newChild sizeDiff
 
     override this.UpdateChildSAbs owner shift localIdx newChild childSize =
@@ -1199,7 +1204,7 @@ and RRBExpandedFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], ?
         else
             let size = this.NodeSize
             let sizeTable = this.BuildSizeTable shift size (size-1)
-            let node' = RRBExpandedRelaxedNode<'T>(this.Owner, this.Children, sizeTable)
+            let node' = RRBExpandedRelaxedNode<'T>(this.Owner, this.Children, sizeTable, this.NodeSize)
             node'.UpdateChildSAbs owner shift localIdx newChild childSize
 
     override this.KeepNLeft owner shift n =
@@ -1314,7 +1319,7 @@ and RRBExpandedFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], ?
         if stillFull then
             node' :> RRBFullNode<'T>
         else
-            RRBExpandedRelaxedNode<'T>(owner, node'.Children, sizeTable') :> RRBFullNode<'T>
+            RRBExpandedRelaxedNode<'T>(owner, node'.Children, sizeTable', newSize) :> RRBFullNode<'T>
 
     override this.PrependNChildren owner shift n newChildren =
         let node' = this.GetEditableNode owner :?> RRBExpandedFullNode<'T>
@@ -1343,7 +1348,7 @@ and RRBExpandedFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], ?
         if stillFull then
             node' :> RRBFullNode<'T>
         else
-            RRBExpandedRelaxedNode<'T>(owner, node'.Children, sizeTable') :> RRBFullNode<'T>
+            RRBExpandedRelaxedNode<'T>(owner, node'.Children, sizeTable', newSize) :> RRBFullNode<'T>
 
     override this.PrependNChildrenS owner shift n newChildren sizes =
         let node' = this.GetEditableNode owner :?> RRBExpandedFullNode<'T>
@@ -1368,7 +1373,7 @@ and RRBExpandedFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], ?
         if stillFull then
             node' :> RRBFullNode<'T>
         else
-            RRBExpandedRelaxedNode<'T>(owner, node'.Children, sizeTable') :> RRBFullNode<'T>
+            RRBExpandedRelaxedNode<'T>(owner, node'.Children, sizeTable', newSize) :> RRBFullNode<'T>
 
     // ===== END of NODE MANIPULATION functions =====
 
@@ -1401,14 +1406,12 @@ and RRBExpandedRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]
             else this.SizeTable |> Array.truncate len
         RRBRelaxedNode<'T>(owner, children', sizeTable') :> RRBNode<'T>
 
-    override this.Expand owner =
-        if this.IsEditableBy owner then this :> RRBNode<'T> else RRBExpandedFullNode<'T>(owner, Array.copy this.Children) :> RRBNode<'T>
-        // TODO: That's the same logic as GetEditableNode. Does it make sense to combine them? I.e., have `override this.Expand owner = this.GetEditableNode owner`?
+    override this.Expand owner = this.GetEditableNode owner
 
     override this.GetEditableNode owner =
         if this.IsEditableBy owner
         then this :> RRBNode<'T>
-        else RRBExpandedFullNode<'T>(owner, Array.copy this.Children) :> RRBNode<'T>
+        else RRBExpandedRelaxedNode<'T>(owner, Array.copy this.Children, Array.copy this.SizeTable, this.NodeSize) :> RRBNode<'T>
 
     override this.SetNodeSize newSize =
         // This should only be called when the node is already editable
@@ -1425,7 +1428,7 @@ and RRBExpandedRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]
 
     override this.ToFullNodeIfNeeded shift =
         if RRBMath.isSizeTableFullAtShift shift sizeTable this.NodeSize
-        then RRBExpandedFullNode<'T>(this.Owner, this.Children) :> RRBFullNode<'T>
+        then RRBExpandedFullNode<'T>(this.Owner, this.Children, this.NodeSize) :> RRBFullNode<'T>
         else this :> RRBFullNode<'T>
 
     // ===== NODE MANIPULATION =====
