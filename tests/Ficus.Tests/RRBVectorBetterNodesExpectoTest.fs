@@ -314,6 +314,7 @@ let nodeProperties = [
     "The size table of any tree node should match the cumulative tree sizes of its children", fun (shift : int) (root : RRBFullNode<'T>) ->
         let rec check shift (node : RRBFullNode<'T>) =
             let sizeTable = if isRelaxed node then (node :?> RRBRelaxedNode<'T>).SizeTable else node.BuildSizeTable shift node.NodeSize (node.NodeSize - 1)
+                            |> Array.truncate node.NodeSize
             let expectedSizeTable = children node |> Seq.map (fun child -> child.TreeSize (down shift)) |> Seq.scan (+) 0 |> Seq.skip 1 |> Array.ofSeq
             sizeTable = expectedSizeTable
         check shift root
