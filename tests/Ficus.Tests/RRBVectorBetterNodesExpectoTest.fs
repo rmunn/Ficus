@@ -457,8 +457,12 @@ let appendTests =
         let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
         checkProperties Literals.blockSizeShift result "Result"
 
-    ptestProp "Gen sized numbers" <| fun (n : int) ->
-        n < 1_000_000
+    ftestProp (1351746691, 296567420) "AppendChild on a generated node" <| fun (IsolatedNode node) ->
+        node.NodeSize < Literals.blockSize ==> (
+            checkProperties Literals.blockSizeShift node "Starting node"
+            let newChild = mkLeaf (M-2)
+            let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
+            checkProperties Literals.blockSizeShift result "Result")
   ]
 
 let tests = appendTests
