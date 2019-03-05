@@ -114,9 +114,9 @@ let genLeaf =
     Gen.oneof [ Gen.constant Literals.blockSize ; Gen.choose (Literals.blockSize / 2, Literals.blockSize) ]
     |> Gen.map mkLeaf
 
-let genLeaves = Gen.arrayOf genLeaf
+let genLeaves = Gen.nonEmptyListOf genLeaf |> Gen.map Array.ofList
 
-let genFullLeaves = Gen.arrayOf (Gen.constant fullLeaf)
+let genFullLeaves = Gen.nonEmptyListOf (Gen.constant fullLeaf) |> Gen.map Array.ofList
 
 let genFullLeavesExceptLast =
     let allButLast = Gen.sized <| fun s -> Gen.resize (s - 1 |> max 0) genFullLeaves
@@ -394,7 +394,7 @@ let nodeProperties = [
             if shift <= 0 then true
             elif isExpanded node then false
             else children node |> Seq.forall (check (down shift))
-        check shift root
+        if isExpanded root then true else check shift root
 
     "If a tree's root is an expanded Node variant, its right spine should contain expanded nodes but nothing else should", fun (shift : int) (root : RRBFullNode<'T>) ->
         let isExpanded (child : RRBNode<'T>) = (child :? RRBExpandedFullNode<'T>) || (child :? RRBExpandedRelaxedNode<'T>)
