@@ -453,7 +453,7 @@ let appendTests =
         checkProperties Literals.blockSizeShift result "Result"
 
     ftestProp (1351746691, 296567420) "AppendChild on a generated node" <| fun (IsolatedNode node) ->
-        node.NodeSize < Literals.blockSize ==> (
+        node.NodeSize < Literals.blockSize ==> lazy (
             logger.debug (
                 eventX "Node generated: {node}"
                 >> setField "node" (sprintf "%A" node)
