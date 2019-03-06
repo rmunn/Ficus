@@ -452,19 +452,21 @@ let appendTests =
         let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
         checkProperties Literals.blockSizeShift result "Result"
 
-    testProp "AppendChild on a generated node" <| fun (IsolatedShortNode node) ->
-        // logger.debug (
-        //     eventX "Node generated: {node}"
-        //     >> setField "node" (sprintf "%A" node)
-        // )
-        checkProperties Literals.blockSizeShift node "Starting node"
-        let newChild = mkLeaf (M-2)
-        let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
-        // logger.debug (
-        //     eventX "Result: {node}"
-        //     >> setField "node" (sprintf "%A" result)
-        // )
-        checkProperties Literals.blockSizeShift result "Result"
+    ftestProp (1351746691, 296567420) "AppendChild on a generated node" <| fun (IsolatedNode node) ->
+        node.NodeSize < Literals.blockSize ==> (
+            logger.debug (
+                eventX "Node generated: {node}"
+                >> setField "node" (sprintf "%A" node)
+            )
+            checkProperties Literals.blockSizeShift node "Starting node"
+            let newChild = mkLeaf (M-2)
+            let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
+            logger.debug (
+                eventX "Result: {node}"
+                >> setField "node" (sprintf "%A" result)
+            )
+            checkProperties Literals.blockSizeShift result "Result"
+            result.NodeSize = node.NodeSize + 1)
 
     testCase "AppendChildS on a singleton node" <| fun _ ->
         // There will be several arbitrary tests like this. Note that empty nodes are pretty much totally excluded from consideration: they're not allowed.
