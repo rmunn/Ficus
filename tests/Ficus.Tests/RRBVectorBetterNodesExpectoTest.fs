@@ -123,13 +123,13 @@ let genFullLeavesExceptLast =
     let lastLeaf = genLeaf |> Gen.map Array.singleton
     Gen.zip allButLast lastLeaf |> Gen.map (fun (a1,a2) -> Array.append a1 a2)
 
-let genLeavesForOneFullNode =
+let genLeavesForOneFullNode n =
     Gen.oneof [genFullLeavesExceptLast; genFullLeaves]
-    |> Gen.map (fun leaves -> leaves |> Array.truncate Literals.blockSize |> Array.map (fun l -> l :> RRBNode<int>))
+    |> Gen.map (fun leaves -> leaves |> Array.truncate n |> Array.map (fun l -> l :> RRBNode<int>))
 
-let genLeavesForOneRelaxedNode =
+let genLeavesForOneRelaxedNode n =
     genLeaves
-    |> Gen.map (fun leaves -> leaves |> Array.truncate Literals.blockSize |> Array.map (fun l -> l :> RRBNode<int>))
+    |> Gen.map (fun leaves -> leaves |> Array.truncate n |> Array.map (fun l -> l :> RRBNode<int>))
 
 let genLeavesForMultipleFullNodes =
     Gen.oneof [genFullLeavesExceptLast; genFullLeaves]
@@ -148,12 +148,13 @@ let mkExpandedRelaxedNode children =
     then RRBExpandedFullNode<int>(nullOwner, children) :> RRBFullNode<int>
     else RRBExpandedRelaxedNode<int>(nullOwner, children, sizeTable) :> RRBFullNode<int>
 
-let genFullNode = genLeavesForOneFullNode |> Gen.map mkFullNode
-let genExpandedFullNode = genLeavesForOneFullNode |> Gen.map mkExpandedFullNode
-let genRelaxedNode = genLeavesForOneRelaxedNode |> Gen.map mkRelaxedNode
-let genExpandedRelaxedNode = genLeavesForOneRelaxedNode |> Gen.map mkExpandedRelaxedNode
+let genFullNode n = genLeavesForOneFullNode n |> Gen.map mkFullNode
+let genExpandedFullNode n = genLeavesForOneFullNode n |> Gen.map mkExpandedFullNode
+let genRelaxedNode n = genLeavesForOneRelaxedNode n |> Gen.map mkRelaxedNode
+let genExpandedRelaxedNode n = genLeavesForOneRelaxedNode n |> Gen.map mkExpandedRelaxedNode
 
-let genNode = Gen.oneof [ genFullNode; genExpandedFullNode; genRelaxedNode; genExpandedRelaxedNode ]
+let genNode = Gen.oneof [ genFullNode Literals.blockSize; genExpandedFullNode Literals.blockSize; genRelaxedNode Literals.blockSize; genExpandedRelaxedNode Literals.blockSize ]
+let genShortNode = Gen.oneof [ genFullNode (Literals.blockSize - 1); genExpandedFullNode (Literals.blockSize - 1); genRelaxedNode (Literals.blockSize - 1); genExpandedRelaxedNode (Literals.blockSize  - 1)]
 
 let genSmallFullTree =
     genLeavesForMultipleFullNodes
@@ -184,6 +185,7 @@ let genTransientSmallRelaxedTree = genSmallRelaxedTree |> Gen.map toTransient
 let genTree = Gen.oneof [ genSmallFullTree; genTransientSmallFullTree; genSmallRelaxedTree; genTransientSmallRelaxedTree ]
 
 type IsolatedNode<'T> = IsolatedNode of RRBFullNode<'T>
+type IsolatedShortNode<'T> = IsolatedShortNode of RRBFullNode<'T>
 type RootNode<'T> = RootNode of RRBFullNode<'T>
 
 // TODO: Write shrinkers for nodes and for trees
@@ -213,7 +215,10 @@ type MyGenerators =
             override x.Generator = genTree |> Gen.map RootNode }
     static member arbNode() =
         { new Arbitrary<IsolatedNode<int>>() with
-            override x.Generator = genTree |> Gen.map IsolatedNode }
+            override x.Generator = genNode |> Gen.map IsolatedNode }
+    static member arbShortNode() =
+        { new Arbitrary<IsolatedShortNode<int>>() with
+            override x.Generator = genShortNode |> Gen.map IsolatedShortNode }
 
 // Now we can write test properties that take an IsolatedNode<int> or a RootNode<int>
 
@@ -448,21 +453,26 @@ let checkPropertiesSimple shift root = checkProperties shift root "Node"
 let appendTests =
   testList "Append tests" [
     testCase "AppendChild on a singleton node" <| fun _ ->
-        printfn "Write this test"
         // There will be several arbitrary tests like this. Note that empty nodes are pretty much totally excluded from consideration: they're not allowed.
-
         let node = mkManualNode [M-2]
         checkProperties Literals.blockSizeShift node "Starting node"
         let newChild = mkLeaf (M-2)
         let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
         checkProperties Literals.blockSizeShift result "Result"
 
-    ftestProp (1351746691, 296567420) "AppendChild on a generated node" <| fun (IsolatedNode node) ->
-        node.NodeSize < Literals.blockSize ==> (
-            checkProperties Literals.blockSizeShift node "Starting node"
-            let newChild = mkLeaf (M-2)
-            let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
-            checkProperties Literals.blockSizeShift result "Result")
+    testProp "AppendChild on a generated node" <| fun (IsolatedShortNode node) ->
+        // logger.debug (
+        //     eventX "Node generated: {node}"
+        //     >> setField "node" (sprintf "%A" node)
+        // )
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let newChild = mkLeaf (M-2)
+        let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
+        // logger.debug (
+        //     eventX "Result: {node}"
+        //     >> setField "node" (sprintf "%A" result)
+        // )
+        checkProperties Literals.blockSizeShift result "Result"
   ]
 
 let tests = appendTests

@@ -151,8 +151,7 @@ type RRBNode<'T>(ownerToken : OwnerToken) =
     abstract member InsertedTree : OwnerToken -> int -> int -> 'T -> RRBFullNode<'T> option -> int -> SlideResult<RRBNode<'T>>  // Params: owner shift treeIdx (item : 'T) (parentOpt : Node option) idxOfNodeInParent
 
 
-
-and RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
+and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
     inherit RRBNode<'T>(ownerToken)
 
     static member Create (ownerToken : OwnerToken, children : RRBNode<'T>[]) = RRBFullNode<'T>(ownerToken, children)
@@ -178,6 +177,8 @@ and RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
         if this.NodeSize = 0 then 0 else ((this.NodeSize - 1) <<< Literals.blockSizeShift) + this.LastChild.NodeSize
 
     override this.SetNodeSize _ = ()  // No-op; only used in expanded nodes
+
+    member this.StringRepr : string = sprintf "length=%d, children=%A" this.NodeSize this.Children
 
     member this.FullNodeIsTrulyFull shift =
         this.NodeSize = 0 || this.LastChild.TreeSize (down shift) >= (1 <<< shift)
@@ -708,7 +709,7 @@ PrependNChildrenS n seq<ch> seq<sz>
             newChildren.CopyTo(destChildren, idx)
 
 
-and RRBRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], sizeTable : int[]) =
+and [<StructuredFormatDisplay("RelaxedNode({StringRepr})")>] RRBRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], sizeTable : int[]) =
     inherit RRBFullNode<'T>(ownerToken, children)
 
     static member Create (owner : OwnerToken, shift : int, children : RRBNode<'T>[]) =
@@ -733,6 +734,8 @@ and RRBRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], sizeTa
     override this.TwigSlotCount =
         // In a relaxed twig node, the last entry in the size table is all we need to look up
         if this.NodeSize = 0 then 0 else this.SizeTable.[this.NodeSize - 1]
+
+    member this.StringRepr : string = sprintf "length=%d, sizetable=%A, children=%A" this.NodeSize this.SizeTable this.Children
 
     override this.GetEditableNode owner =
         if this.IsEditableBy owner
@@ -975,7 +978,7 @@ and RRBRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], sizeTa
 
 
 
-and RRBLeafNode<'T>(ownerToken : OwnerToken, items : 'T[]) =
+and [<StructuredFormatDisplay("{StringRepr}")>] RRBLeafNode<'T>(ownerToken : OwnerToken, items : 'T[]) =
     inherit RRBNode<'T>(ownerToken)
 
     member this.Items = items
@@ -990,6 +993,8 @@ and RRBLeafNode<'T>(ownerToken : OwnerToken, items : 'T[]) =
         this.NodeSize
 
     override this.SetNodeSize _ = ()
+
+    member this.StringRepr : string = sprintf "L%d" this.NodeSize
 
     override this.Shrink _ = this :> RRBNode<'T>
     override this.Expand owner =
@@ -1080,11 +1085,13 @@ and RRBLeafNode<'T>(ownerToken : OwnerToken, items : 'T[]) =
 // is used to keep track of the node's actual size. The rest of the node is filled with nulls (or the default value
 // of 'T in the case of leaves). This allows appends to be *very* fast.
 
-and RRBExpandedFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], ?realSize : int) =
+and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], ?realSize : int) =
     inherit RRBFullNode<'T>(ownerToken, Array.expandToBlockSize children)
 
     member val CurrentLength : int = defaultArg realSize (Array.length children) with get, set
     override this.NodeSize = this.CurrentLength
+
+    member this.StringRepr : string = sprintf "length=%d, children=%A" this.NodeSize this.Children  // TODO: Determine whether to use `this.Children |> Array.truncate this.NodeSize` here
 
     override this.Shrink owner =
         let len = this.NodeSize
@@ -1106,11 +1113,12 @@ and RRBExpandedFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], ?
         let curSize = this.NodeSize
         if curSize = newSize then
             ()
-        elif curSize > newSize then
+        elif curSize < newSize then
             // Node expanded, so no need to zero anything out
             this.CurrentLength <- newSize
         else
             // Node shrank, so zero out the children between newSize and oldSize
+            this.CurrentLength <- newSize
             for i = newSize to curSize - 1 do
                 this.Children.[i] <- null
 
@@ -1144,7 +1152,7 @@ and RRBExpandedFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], ?
             let lastEntry = sizeTable |> Array.last
             let sizeTable' = Array.expandToBlockSize sizeTable
             sizeTable'.[oldSize] <- lastEntry + newChild.TreeSize (down shift)
-            RRBExpandedRelaxedNode<'T>(owner, node'.Children, sizeTable', this.NodeSize) :> RRBFullNode<'T>
+            RRBExpandedRelaxedNode<'T>(owner, node'.Children, sizeTable', node'.NodeSize) :> RRBFullNode<'T>
         // TODO: Might be able to optimize this by first checking if we're truly full, and then if we're not, convert to a relaxed node FIRST before calling RelaxedNode.AppendChildS
 
     override this.AppendChildS owner shift newChild _newChildSize =
@@ -1388,11 +1396,13 @@ and RRBExpandedFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], ?
 
 
 
-and RRBExpandedRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], sizeTable : int[], ?realSize : int) =
+and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpandedRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], sizeTable : int[], ?realSize : int) =
     inherit RRBRelaxedNode<'T>(ownerToken, Array.expandToBlockSize children, Array.expandToBlockSize sizeTable)
 
     member val CurrentLength : int = defaultArg realSize (Array.length children) with get, set
     override this.NodeSize = this.CurrentLength
+
+    member this.StringRepr : string = sprintf "length=%d, sizetable=%A, children=%A" this.NodeSize this.SizeTable this.Children  // TODO: Determine whether to use `this.Children |> Array.truncate this.NodeSize` here
 
     override this.Shrink owner =
         let len = this.NodeSize
@@ -1418,13 +1428,17 @@ and RRBExpandedRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]
         let curSize = this.NodeSize
         if curSize = newSize then
             ()
-        elif curSize > newSize then
+        elif curSize < newSize then
             // Node expanded, so no need to zero anything out
             this.CurrentLength <- newSize
         else
             // Node shrank, so zero out the children between newSize and oldSize
+            // TODO: Are we already doing this elsewhere? Do we actually need this, or is it duplicated? Because I don't think this is the right place for this stuff...
+            // TODO: Once we have extensive tests, remove this if branch (and in ExpandedFullNode) and see if all tests continue to pass
+            this.CurrentLength <- newSize
             for i = newSize to curSize - 1 do
                 this.Children.[i] <- null
+                this.SizeTable.[i] <- 0
 
     override this.ToFullNodeIfNeeded shift =
         if RRBMath.isSizeTableFullAtShift shift sizeTable this.NodeSize
@@ -1642,7 +1656,7 @@ and RRBExpandedRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]
 // REDESIGN: Leaf nodes will never be expanded; only tree nodes will ever be expanded.
 
 
-and RRBExpandedLeafNode<'T>(ownerToken : OwnerToken, items : 'T[], ?realSize : int) =
+and [<StructuredFormatDisplay("ERROR: ExpandedLeafNode shouldn't exist!")>] RRBExpandedLeafNode<'T>(ownerToken : OwnerToken, items : 'T[], ?realSize : int) =
     inherit RRBLeafNode<'T>(ownerToken, Array.expandToBlockSize items)
 
     member val CurrentLength : int = defaultArg realSize (Array.length items) with get, set
@@ -1669,11 +1683,12 @@ and RRBExpandedLeafNode<'T>(ownerToken : OwnerToken, items : 'T[], ?realSize : i
         let curSize = this.NodeSize
         if curSize = newSize then
             ()
-        elif curSize > newSize then
+        elif curSize < newSize then
             // Node expanded, so no need to zero anything out
             this.CurrentLength <- newSize
         else
             // Node shrank, so zero out the children between newSize and oldSize
+            this.CurrentLength <- newSize
             for i = newSize to curSize - 1 do
                 this.Items.[i] <- Unchecked.defaultof<'T>
 
