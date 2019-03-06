@@ -230,30 +230,6 @@ let ftestProp replay name fn = ftestPropertyWithConfig replay { FsCheckConfig.de
 // === Tests here ===
 
 
-(*
-
-AppendChild ch
-AppendChildS ch sz
-InsertChild n ch
-InsertChildS n ch sz
-RemoveChild n
-RemoveChildS n sz?
-RemoveLastChild
-UpdateChild n ch'
-UpdateChildSAbs n ch' sz
-UpdateChildSRel n ch' relSz
-KeepNLeft n -> Node
-SplitAndKeepNLeft n -> Node, arr of item
-SplitAndKeepNLeftS n -> Node, arr of (item * size)
-KeepNRight n -> Node
-SplitAndKeepNRight n -> arr of item, Node
-SplitAndKeepNRightS n -> arr of (item * size), Node
-AppendNChildren n seq<ch>
-AppendNChildrenS n seq<ch> seq<sz>
-PrependNChildren n seq<ch>
-PrependNChildrenS n seq<ch> seq<sz>
-
-*)
 
 let mkManualNodeA (leafSizes : int []) =
     leafSizes |> Array.truncate Literals.blockSize |> Array.map (mkLeaf >> fun leaf -> leaf :> RRBNode<int>) |> mkRelaxedNode
@@ -460,6 +436,22 @@ let appendTests =
         let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
         checkProperties Literals.blockSizeShift result "Result"
 
+    testCase "AppendChild on a two-element full node" <| fun _ ->
+        // There will be several arbitrary tests like this. Note that empty nodes are pretty much totally excluded from consideration: they're not allowed.
+        let node = mkManualNode [M; M]
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let newChild = mkLeaf (M-2)
+        let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
+        checkProperties Literals.blockSizeShift result "Result"
+
+    testCase "AppendChild on a two-element nearly-full node" <| fun _ ->
+        // There will be several arbitrary tests like this. Note that empty nodes are pretty much totally excluded from consideration: they're not allowed.
+        let node = mkManualNode [M; M-1]
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let newChild = mkLeaf (M-2)
+        let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
+        checkProperties Literals.blockSizeShift result "Result"
+
     testProp "AppendChild on a generated node" <| fun (IsolatedShortNode node) ->
         // logger.debug (
         //     eventX "Node generated: {node}"
@@ -473,6 +465,54 @@ let appendTests =
         //     >> setField "node" (sprintf "%A" result)
         // )
         checkProperties Literals.blockSizeShift result "Result"
+
+    testCase "AppendChildS on a singleton node" <| fun _ ->
+        // There will be several arbitrary tests like this. Note that empty nodes are pretty much totally excluded from consideration: they're not allowed.
+        let node = mkManualNode [M-2]
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let newChild = mkLeaf (M-2)
+        let result = node.AppendChildS nullOwner Literals.blockSizeShift newChild (M-2)
+        checkProperties Literals.blockSizeShift result "Result"
+
+    testProp "AppendChildS on a generated node" <| fun (IsolatedShortNode node) ->
+        logger.debug (
+            eventX "Node generated: {node}"
+            >> setField "node" (sprintf "%A" node)
+        )
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let newChild = mkLeaf (M-2)
+        let result = node.AppendChildS nullOwner Literals.blockSizeShift newChild (M-2)
+        logger.debug (
+            eventX "Result: {node}"
+            >> setField "node" (sprintf "%A" result)
+        )
+        checkProperties Literals.blockSizeShift result "Result"
+
   ]
+
+(*
+
+AppendChild ch
+AppendChildS ch sz
+InsertChild n ch
+InsertChildS n ch sz
+RemoveChild n
+RemoveChildS n sz?
+RemoveLastChild
+UpdateChild n ch'
+UpdateChildSAbs n ch' sz
+UpdateChildSRel n ch' relSz
+KeepNLeft n -> Node
+SplitAndKeepNLeft n -> Node, arr of item
+SplitAndKeepNLeftS n -> Node, arr of (item * size)
+KeepNRight n -> Node
+SplitAndKeepNRight n -> arr of item, Node
+SplitAndKeepNRightS n -> arr of (item * size), Node
+AppendNChildren n seq<ch>
+AppendNChildrenS n seq<ch> seq<sz>
+PrependNChildren n seq<ch>
+PrependNChildrenS n seq<ch> seq<sz>
+
+*)
 
 let tests = appendTests
