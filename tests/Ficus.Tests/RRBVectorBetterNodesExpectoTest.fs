@@ -435,38 +435,111 @@ let appendTests =
         let newChild = mkLeaf (M-2)
         let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
         checkProperties Literals.blockSizeShift result "Result"
+        Expect.equal (result.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + (M-2)) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isRelaxed result) "Appending any leaf to a nearly-full node should result in a relaxed node"
+        let fullChild = mkLeaf M
+        let result2 = node.AppendChild nullOwner Literals.blockSizeShift fullChild
+        checkProperties Literals.blockSizeShift result2 "Result with full leaf"
+        Expect.equal (result2.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result2.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + M) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isRelaxed result2) "Appending any leaf to a nearly-full node should result in a relaxed node"
 
     testCase "AppendChild on a two-element full node" <| fun _ ->
-        // There will be several arbitrary tests like this. Note that empty nodes are pretty much totally excluded from consideration: they're not allowed.
         let node = mkManualNode [M; M]
         checkProperties Literals.blockSizeShift node "Starting node"
         let newChild = mkLeaf (M-2)
         let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
         checkProperties Literals.blockSizeShift result "Result"
+        Expect.equal (result.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + (M-2)) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isFull result) "Appending any leaf to a completely full node should result in a full node"
+        let fullChild = mkLeaf M
+        let result2 = node.AppendChild nullOwner Literals.blockSizeShift fullChild
+        checkProperties Literals.blockSizeShift result2 "Result with full leaf"
+        Expect.equal (result2.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result2.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + M) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isFull result2) "Appending any leaf to a completely full node should result in a full node"
 
     testCase "AppendChild on a two-element nearly-full node" <| fun _ ->
-        // There will be several arbitrary tests like this. Note that empty nodes are pretty much totally excluded from consideration: they're not allowed.
         let node = mkManualNode [M; M-1]
         checkProperties Literals.blockSizeShift node "Starting node"
         let newChild = mkLeaf (M-2)
         let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
         checkProperties Literals.blockSizeShift result "Result"
+        Expect.equal (result.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + (M-2)) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isRelaxed result) "Appending any leaf to a nearly-full node should result in a relaxed node"
+        let fullChild = mkLeaf M
+        let result2 = node.AppendChild nullOwner Literals.blockSizeShift fullChild
+        checkProperties Literals.blockSizeShift result2 "Result with full leaf"
+        Expect.equal (result2.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result2.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + M) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isRelaxed result2) "Appending any leaf to a nearly-full node should result in a relaxed node"
 
-    ftestProp (1351746691, 296567420) "AppendChild on a generated node" <| fun (IsolatedNode node) ->
-        node.NodeSize < Literals.blockSize ==> lazy (
-            logger.debug (
-                eventX "Node generated: {node}"
-                >> setField "node" (sprintf "%A" node)
-            )
-            checkProperties Literals.blockSizeShift node "Starting node"
-            let newChild = mkLeaf (M-2)
-            let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
-            logger.debug (
-                eventX "Result: {node}"
-                >> setField "node" (sprintf "%A" result)
-            )
-            checkProperties Literals.blockSizeShift result "Result"
-            result.NodeSize = node.NodeSize + 1)
+    testCase "AppendChild on a completely full node of M-2 elements" <| fun _ ->
+        let node = List.replicate (M-2) M |> mkManualNode
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let newChild = mkLeaf (M-2)
+        let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
+        checkProperties Literals.blockSizeShift result "Result"
+        Expect.equal (result.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + (M-2)) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isFull result) "Appending any leaf to a nearly-full node should result in a relaxed node"
+        let fullChild = mkLeaf M
+        let result2 = node.AppendChild nullOwner Literals.blockSizeShift fullChild
+        checkProperties Literals.blockSizeShift result2 "Result with full leaf"
+        Expect.equal (result2.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result2.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + M) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isFull result2) "Appending any leaf to a completely full node should result in a full node"
+
+    testCase "AppendChild on a nearly-full node of M-2 elements" <| fun _ ->
+        let node = List.replicate (M-3) M @ [M-1] |> mkManualNode
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let newChild = mkLeaf (M-2)
+        let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
+        checkProperties Literals.blockSizeShift result "Result"
+        Expect.equal (result.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + (M-2)) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isRelaxed result) "Appending any leaf to a nearly-full node should result in a relaxed node"
+        let fullChild = mkLeaf M
+        let result2 = node.AppendChild nullOwner Literals.blockSizeShift fullChild
+        checkProperties Literals.blockSizeShift result2 "Result with full leaf"
+        Expect.equal (result2.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result2.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + M) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isRelaxed result2) "Appending any leaf to a nearly-full node should result in a relaxed node"
+
+    testCase "AppendChild on a completely full node of M-1 elements" <| fun _ ->
+        let node = List.replicate (M-1) M |> mkManualNode
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let newChild = mkLeaf (M-2)
+        let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
+        checkProperties Literals.blockSizeShift result "Result"
+        Expect.equal (result.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + (M-2)) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isFull result) "Appending any leaf to a nearly-full node should result in a relaxed node"
+        let fullChild = mkLeaf M
+        let result2 = node.AppendChild nullOwner Literals.blockSizeShift fullChild
+        checkProperties Literals.blockSizeShift result2 "Result with full leaf"
+        Expect.equal (result2.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result2.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + M) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isFull result2) "Appending any leaf to a completely full node should result in a full node"
+
+    testCase "AppendChild on a nearly-full node of M-1 elements" <| fun _ ->
+        let node = List.replicate (M-2) M @ [M-1] |> mkManualNode
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let newChild = mkLeaf (M-2)
+        let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
+        checkProperties Literals.blockSizeShift result "Result"
+        Expect.equal (result.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + (M-2)) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isRelaxed result) "Appending any leaf to a nearly-full node should result in a relaxed node"
+        let fullChild = mkLeaf M
+        let result2 = node.AppendChild nullOwner Literals.blockSizeShift fullChild
+        checkProperties Literals.blockSizeShift result2 "Result with full leaf"
+        Expect.equal (result2.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result2.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + M) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isRelaxed result2) "Appending any leaf to a nearly-full node should result in a relaxed node"
 
     testCase "AppendChildS on a singleton node" <| fun _ ->
         // There will be several arbitrary tests like this. Note that empty nodes are pretty much totally excluded from consideration: they're not allowed.
@@ -475,21 +548,141 @@ let appendTests =
         let newChild = mkLeaf (M-2)
         let result = node.AppendChildS nullOwner Literals.blockSizeShift newChild (M-2)
         checkProperties Literals.blockSizeShift result "Result"
+        Expect.equal (result.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + (M-2)) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isRelaxed result) "Appending any leaf to a nearly-full node should result in a relaxed node"
+        let fullChild = mkLeaf M
+        let result2 = node.AppendChildS nullOwner Literals.blockSizeShift fullChild M
+        checkProperties Literals.blockSizeShift result2 "Result with full leaf"
+        Expect.equal (result2.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result2.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + M) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isRelaxed result2) "Appending any leaf to a nearly-full node should result in a relaxed node"
 
-    testProp "AppendChildS on a generated node" <| fun (IsolatedShortNode node) ->
-        logger.debug (
-            eventX "Node generated: {node}"
-            >> setField "node" (sprintf "%A" node)
-        )
+    testCase "AppendChildS on a two-element full node" <| fun _ ->
+        let node = mkManualNode [M; M]
         checkProperties Literals.blockSizeShift node "Starting node"
         let newChild = mkLeaf (M-2)
         let result = node.AppendChildS nullOwner Literals.blockSizeShift newChild (M-2)
-        logger.debug (
-            eventX "Result: {node}"
-            >> setField "node" (sprintf "%A" result)
-        )
         checkProperties Literals.blockSizeShift result "Result"
+        Expect.equal (result.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + (M-2)) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isFull result) "Appending any leaf to a completely full node should result in a full node"
+        let fullChild = mkLeaf M
+        let result2 = node.AppendChildS nullOwner Literals.blockSizeShift fullChild M
+        checkProperties Literals.blockSizeShift result2 "Result with full leaf"
+        Expect.equal (result2.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result2.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + M) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isFull result2) "Appending any leaf to a completely full node should result in a full node"
 
+    testCase "AppendChildS on a two-element nearly-full node" <| fun _ ->
+        let node = mkManualNode [M; M-1]
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let newChild = mkLeaf (M-2)
+        let result = node.AppendChildS nullOwner Literals.blockSizeShift newChild (M-2)
+        checkProperties Literals.blockSizeShift result "Result"
+        Expect.equal (result.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + (M-2)) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isRelaxed result) "Appending any leaf to a nearly-full node should result in a relaxed node"
+        let fullChild = mkLeaf M
+        let result2 = node.AppendChildS nullOwner Literals.blockSizeShift fullChild M
+        checkProperties Literals.blockSizeShift result2 "Result with full leaf"
+        Expect.equal (result2.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result2.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + M) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isRelaxed result2) "Appending any leaf to a nearly-full node should result in a relaxed node"
+
+    testCase "AppendChildS on a completely full node of M-2 elements" <| fun _ ->
+        let node = List.replicate (M-2) M |> mkManualNode
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let newChild = mkLeaf (M-2)
+        let result = node.AppendChildS nullOwner Literals.blockSizeShift newChild (M-2)
+        checkProperties Literals.blockSizeShift result "Result"
+        Expect.equal (result.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + (M-2)) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isFull result) "Appending any leaf to a nearly-full node should result in a relaxed node"
+        let fullChild = mkLeaf M
+        let result2 = node.AppendChildS nullOwner Literals.blockSizeShift fullChild M
+        checkProperties Literals.blockSizeShift result2 "Result with full leaf"
+        Expect.equal (result2.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result2.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + M) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isFull result2) "Appending any leaf to a completely full node should result in a full node"
+
+    testCase "AppendChildS on a nearly-full node of M-2 elements" <| fun _ ->
+        let node = List.replicate (M-3) M @ [M-1] |> mkManualNode
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let newChild = mkLeaf (M-2)
+        let result = node.AppendChildS nullOwner Literals.blockSizeShift newChild (M-2)
+        checkProperties Literals.blockSizeShift result "Result"
+        Expect.equal (result.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + (M-2)) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isRelaxed result) "Appending any leaf to a nearly-full node should result in a relaxed node"
+        let fullChild = mkLeaf M
+        let result2 = node.AppendChildS nullOwner Literals.blockSizeShift fullChild M
+        checkProperties Literals.blockSizeShift result2 "Result with full leaf"
+        Expect.equal (result2.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result2.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + M) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isRelaxed result2) "Appending any leaf to a nearly-full node should result in a relaxed node"
+
+    testCase "AppendChildS on a completely full node of M-1 elements" <| fun _ ->
+        let node = List.replicate (M-1) M |> mkManualNode
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let newChild = mkLeaf (M-2)
+        let result = node.AppendChildS nullOwner Literals.blockSizeShift newChild (M-2)
+        checkProperties Literals.blockSizeShift result "Result"
+        Expect.equal (result.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + (M-2)) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isFull result) "Appending any leaf to a nearly-full node should result in a relaxed node"
+        let fullChild = mkLeaf M
+        let result2 = node.AppendChildS nullOwner Literals.blockSizeShift fullChild M
+        checkProperties Literals.blockSizeShift result2 "Result with full leaf"
+        Expect.equal (result2.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result2.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + M) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isFull result2) "Appending any leaf to a completely full node should result in a full node"
+
+    testCase "AppendChildS on a nearly-full node of M-1 elements" <| fun _ ->
+        let node = List.replicate (M-2) M @ [M-1] |> mkManualNode
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let newChild = mkLeaf (M-2)
+        let result = node.AppendChildS nullOwner Literals.blockSizeShift newChild (M-2)
+        checkProperties Literals.blockSizeShift result "Result"
+        Expect.equal (result.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + (M-2)) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isRelaxed result) "Appending any leaf to a nearly-full node should result in a relaxed node"
+        let fullChild = mkLeaf M
+        let result2 = node.AppendChildS nullOwner Literals.blockSizeShift fullChild M
+        checkProperties Literals.blockSizeShift result2 "Result with full leaf"
+        Expect.equal (result2.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
+        Expect.equal (result2.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + M) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+        Expect.isTrue (isRelaxed result2) "Appending any leaf to a nearly-full node should result in a relaxed node"
+
+    testProp "AppendChild on a generated node" <| fun (IsolatedShortNode node) ->
+        // logger.debug (
+        //     eventX "Node generated: {node}"
+        //     >> setField "node" (sprintf "%A" node)
+        // )
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let newChild = mkLeaf (M-2)
+        let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
+        // logger.debug (
+        //     eventX "Result: {node}"
+        //     >> setField "node" (sprintf "%A" result)
+        // )
+        checkProperties Literals.blockSizeShift result "Result"
+        result.NodeSize = node.NodeSize + 1
+
+    testProp "AppendChildS on a generated node" <| fun (IsolatedShortNode node) ->
+        // logger.debug (
+        //     eventX "Node generated: {node}"
+        //     >> setField "node" (sprintf "%A" node)
+        // )
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let newChild = mkLeaf (M-2)
+        let result = node.AppendChildS nullOwner Literals.blockSizeShift newChild (M-2)
+        // logger.debug (
+        //     eventX "Result: {node}"
+        //     >> setField "node" (sprintf "%A" result)
+        // )
+        checkProperties Literals.blockSizeShift result "Result"
+        result.NodeSize = node.NodeSize + 1
   ]
 
 (*
