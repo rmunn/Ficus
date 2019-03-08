@@ -593,6 +593,24 @@ let insertPropertyTests =
         result.NodeSize = node.NodeSize + 1
   ]
 
+let removePropertyTests =
+  testList "Remove property tests" [
+    ftestProp (1824556962, 296568481) "RemoveChild on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (NonNegativeInt idx) ->
+        node.NodeSize > 1 ==> lazy (
+            let idx = idx % node.NodeSize
+            checkProperties Literals.blockSizeShift node "Starting node"
+            let result = node.RemoveChild nullOwner Literals.blockSizeShift idx
+            checkProperties Literals.blockSizeShift result "Result"
+            result.NodeSize = node.NodeSize - 1)
+
+    ftestProp (1824555940, 296568481) "RemoveLastChild on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) ->
+        node.NodeSize > 1 ==> lazy (
+            checkProperties Literals.blockSizeShift node "Starting node"
+            let result = node.RemoveLastChild nullOwner Literals.blockSizeShift
+            checkProperties Literals.blockSizeShift result "Result"
+            result.NodeSize = node.NodeSize - 1)
+  ]
+
 (*
 
 AppendChild ch
@@ -627,6 +645,7 @@ let tests =
   testList "Basic node tests" [
     appendPropertyTests
     insertPropertyTests
+    removePropertyTests
     appendTests
     insertTests
   ]
