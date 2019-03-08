@@ -398,6 +398,7 @@ type PropResult = string list
 
 let checkProperty name pred shift root =
     try
+        // logger.debug(eventX "Checking property {name} on root {root}" >> setField "name" name >> setField "root" (sprintf "%A" root))
         if pred shift root then [] else [name]
     with
     | :? System.InvalidCastException ->
@@ -494,8 +495,6 @@ let appendPropertyTests =
   ]
 
 
-
-
 let inputDataForInsertTests : (int list * int * int * ExpectedResult * string) list =
   [ // Initial leaves, insert position, size of inserted node, expected fullness of result, partial name
     [M-2], 0, M-2, Relaxed, "nearly-full singleton"
@@ -549,7 +548,6 @@ let mkInsertTests (leafSizes, insertPos, newLeafSize, expectedResult, namePart) 
     let leafDesc = if newLeafSize = Literals.blockSize then "full" else "non-full"
     let isWhat = match expectedResult with Full -> isFull | Relaxed -> isRelaxed
     let isWhatStr = match expectedResult with Full -> "full" | Relaxed -> "relaxed"
-    let insertedAtStr = sprintf "inserted at %d" insertPos
     ["InsertChild"; "InsertChildS"]
     |> List.map (fun fname ->
         let test = fun _ ->
@@ -578,37 +576,19 @@ let insertTests =
 
 let insertPropertyTests =
   testList "Insert property tests" [
-    ftestProp (962331905, 296568455) "InsertChild on a generated node" <| fun (IsolatedShortNode node) (NonNegativeInt idx) ->
+    testProp "InsertChild on a generated node" <| fun (IsolatedShortNode node) (NonNegativeInt idx) ->
         let idx = idx % (node.NodeSize + 1)
-        logger.debug (
-            eventX "InsertChild test with idx {idx} and node {node}"
-            >> setField "idx" idx
-            >> setField "node" (sprintf "%A" node)
-        )
         checkProperties Literals.blockSizeShift node "Starting node"
         let newChild = mkLeaf (M-2)
         let result = node.InsertChild nullOwner Literals.blockSizeShift idx newChild
-        logger.debug (
-            eventX "Result: {node}"
-            >> setField "node" (sprintf "%A" result)
-        )
         checkProperties Literals.blockSizeShift result "Result"
         result.NodeSize = node.NodeSize + 1
 
-    ftestProp (962331993, 296568455) "InsertChildS on a generated node" <| fun (IsolatedShortNode node) (NonNegativeInt idx) ->
+    testProp "InsertChildS on a generated node" <| fun (IsolatedShortNode node) (NonNegativeInt idx) ->
         let idx = idx % (node.NodeSize + 1)
-        logger.debug (
-            eventX "InsertChildSx test with idx {idx} and node {node}"
-            >> setField "idx" idx
-            >> setField "node" (sprintf "%A" node)
-        )
         checkProperties Literals.blockSizeShift node "Starting node"
         let newChild = mkLeaf (M-2)
         let result = node.InsertChildS nullOwner Literals.blockSizeShift idx newChild (M-2)
-        logger.debug (
-            eventX "Result: {node}"
-            >> setField "node" (sprintf "%A" result)
-        )
         checkProperties Literals.blockSizeShift result "Result"
         result.NodeSize = node.NodeSize + 1
   ]

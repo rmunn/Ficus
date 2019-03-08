@@ -167,7 +167,7 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
         // Therefore, we can shortcut this calculation for most of the nodes, but we do need to calculate the rightmost node.
         // TODO: Remove the "deliberate failure" check once we go to production
         if this.NodeSize = 0 then
-            failwith "TreeSize called on an empty node; shouldn't happen"
+            failwithf "TreeSize called on an empty node; shouldn't happen. Node is %A" this
             0
         else
             ((this.NodeSize - 1) <<< shift) + this.LastChild.TreeSize (down shift)
@@ -771,7 +771,9 @@ and [<StructuredFormatDisplay("RelaxedNode({StringRepr})")>] RRBRelaxedNode<'T>(
     override this.InsertChildS owner shift localIdx newChild newChildSize =
         if localIdx = this.NodeSize then this.AppendChildS owner shift newChild newChildSize else
         let children' = this.Children |> Array.copyAndInsertAt localIdx newChild
-        let sizeTable' = this.SizeTable |> Array.copyAndInsertAt localIdx newChildSize
+        let sizeTable' = this.SizeTable |> Array.copyAndInsertAt localIdx (newChildSize + (if localIdx <= 0 then 0 else this.SizeTable.[localIdx-1]))
+        for i = localIdx + 1 to this.NodeSize do
+            sizeTable'.[i] <- sizeTable'.[i] + newChildSize
         RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
 
     override this.RemoveChild owner shift localIdx =
@@ -1164,10 +1166,10 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
     override this.InsertChildS owner shift localIdx newChild newChildSize =
         if localIdx = this.NodeSize then this.AppendChildS owner shift newChild newChildSize else
         let node' = this.GetEditableNode owner :?> RRBExpandedFullNode<'T>
-        let newSize = node'.NodeSize - 1
-        for i = newSize downto localIdx do
+        let oldSize = node'.NodeSize
+        for i = oldSize - 1 downto localIdx do
             node'.Children.[i+1] <- node'.Children.[i]
-        node'.SetNodeSize newSize
+        node'.SetNodeSize (oldSize + 1)
         if newChildSize = (1 <<< shift) then
             // Inserted a full child, so this is still a full node
             node' :> RRBFullNode<'T>
@@ -1470,11 +1472,13 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
     override this.InsertChildS owner shift localIdx newChild newChildSize =
         if localIdx = this.NodeSize then this.AppendChildS owner shift newChild newChildSize else
         let node' = this.GetEditableNode owner :?> RRBExpandedRelaxedNode<'T>
-        let newSize = node'.NodeSize - 1
-        for i = newSize downto localIdx do
+        let oldSize = node'.NodeSize
+        for i = oldSize - 1 downto localIdx do
             node'.Children.[i+1] <- node'.Children.[i]
             node'.SizeTable.[i+1] <- node'.SizeTable.[i] + newChildSize
-        node'.SetNodeSize newSize
+        node'.Children.[localIdx] <- newChild
+        node'.SizeTable.[localIdx] <- newChildSize + (if localIdx <= 0 then 0 else node'.SizeTable.[localIdx-1])
+        node'.SetNodeSize (oldSize + 1)
         node'.ToFullNodeIfNeeded shift
 
     override this.RemoveChild owner shift localIdx =
