@@ -388,6 +388,28 @@ let nodeProperties = [
                 let checkResultForLastChild = children node |> Seq.skip (node.NodeSize - 1) |> Seq.head |> check (down shift) true
                 checkResultForAllButLast && checkResultForLastChild
         if isExpanded root then check shift true root else true
+
+    "ExpandedNodes (and ExpandedRRBNodes) should have exactly as much data in their children & size tables as their node size indicates", fun (shift : int) (root : RRBFullNode<'T>) ->
+        let isExpanded (child : RRBNode<'T>) = (child :? RRBExpandedFullNode<'T>) || (child :? RRBExpandedRelaxedNode<'T>)
+        let rec check shift (node : RRBNode<'T>) =
+            if shift <= 0 then true else
+            if isExpanded node then
+                let sizeTableClean =
+                    if isRelaxed node then
+                        (node :?> RRBExpandedRelaxedNode<'T>).SizeTable |> Seq.skip node.NodeSize |> Seq.forall ((=) 0) &&
+                        (node :?> RRBExpandedRelaxedNode<'T>).SizeTable |> Seq.take node.NodeSize |> Seq.forall ((<>) 0)
+                    else true
+                let childrenArrayClean =
+                    if isRelaxed node then
+                        (node :?> RRBExpandedRelaxedNode<'T>).Children |> Seq.skip node.NodeSize |> Seq.forall isNull &&
+                        (node :?> RRBExpandedRelaxedNode<'T>).Children |> Seq.take node.NodeSize |> Seq.forall (not << isNull)
+                    else
+                        (node :?> RRBExpandedFullNode<'T>).Children |> Seq.skip node.NodeSize |> Seq.forall isNull &&
+                        (node :?> RRBExpandedFullNode<'T>).Children |> Seq.take node.NodeSize |> Seq.forall (not << isNull)
+                sizeTableClean && childrenArrayClean && children node |> Seq.forall (check (down shift))
+            else
+                children node |> Seq.forall (check (down shift))
+        check shift root
 ]
 
 
@@ -595,7 +617,7 @@ let insertPropertyTests =
 
 let removePropertyTests =
   testList "Remove property tests" [
-    ftestProp (1824556962, 296568481) "RemoveChild on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (NonNegativeInt idx) ->
+    testProp "RemoveChild on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (NonNegativeInt idx) ->
         node.NodeSize > 1 ==> lazy (
             let idx = idx % node.NodeSize
             checkProperties Literals.blockSizeShift node "Starting node"
@@ -613,7 +635,7 @@ let removePropertyTests =
                 )
             result.NodeSize = node.NodeSize - 1)
 
-    ftestProp (1824555940, 296568481) "RemoveLastChild on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) ->
+    testProp "RemoveLastChild on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) ->
         node.NodeSize > 1 ==> lazy (
             checkProperties Literals.blockSizeShift node "Starting node"
             let result = node.RemoveLastChild nullOwner Literals.blockSizeShift

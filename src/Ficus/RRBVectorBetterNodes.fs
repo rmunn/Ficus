@@ -650,6 +650,7 @@ PrependNChildrenS n seq<ch> seq<sz>
         // Remnant
         Array.blit this.Children (idx + mergeLen) newNode.Children (idx + mergeLen - sizeReduction) (len - idx)
         this.SetNodeSize newLen  // This allows expanded nodes to zero out the appropriate parts, so that garbage collection can happen on anything that was shifted
+        // TODO: No, it doesn't! Not anymore. Now we should be using the SplitAndKeepNLeft, etc., functions instead of doing this stuff manually in high-level functions like Rebalance
         newNode
 
     member this.Rebalance2 (owner : OwnerToken) (shift : int) (right : RRBFullNode<'T>) =
@@ -674,6 +675,7 @@ PrependNChildrenS n seq<ch> seq<sz>
             // Remnant
             Array.blit this.Children (idx + mergeLen) newNode.Children (idx + mergeLen - sizeReduction) (len - idx)
             this.SetNodeSize newLen  // This allows expanded nodes to zero out the appropriate parts, so that garbage collection can happen on anything that was shifted
+            // TODO: No, it doesn't! Not anymore. Now we should be using the SplitAndKeepNLeft, etc., functions instead of doing this stuff manually in high-level functions like Rebalance
             newNode, None
         else
             let newItems = Array.zeroCreate newLen
@@ -1113,19 +1115,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         then this :> RRBNode<'T>
         else RRBExpandedFullNode<'T>(owner, Array.copy this.Children, this.NodeSize) :> RRBNode<'T>
 
-    override this.SetNodeSize newSize =
-        // This should only be called when the node is already editable
-        let curSize = this.NodeSize
-        if curSize = newSize then
-            ()
-        elif curSize < newSize then
-            // Node expanded, so no need to zero anything out
-            this.CurrentLength <- newSize
-        else
-            // Node shrank, so zero out the children between newSize and oldSize
-            this.CurrentLength <- newSize
-            for i = newSize to curSize - 1 do
-                this.Children.[i] <- null
+    override this.SetNodeSize newSize = this.CurrentLength <- newSize
 
     override this.ToRelaxedNodeIfNeeded shift =
         if shift <= 0 then this :> RRBNode<'T> else
@@ -1428,22 +1418,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         then this :> RRBNode<'T>
         else RRBExpandedRelaxedNode<'T>(owner, Array.copy this.Children, Array.copy this.SizeTable, this.NodeSize) :> RRBNode<'T>
 
-    override this.SetNodeSize newSize =
-        // This should only be called when the node is already editable
-        let curSize = this.NodeSize
-        if curSize = newSize then
-            ()
-        elif curSize < newSize then
-            // Node expanded, so no need to zero anything out
-            this.CurrentLength <- newSize
-        else
-            // Node shrank, so zero out the children between newSize and oldSize
-            // TODO: Are we already doing this elsewhere? Do we actually need this, or is it duplicated? Because I don't think this is the right place for this stuff...
-            // TODO: Once we have extensive tests, remove this if branch (and in ExpandedFullNode) and see if all tests continue to pass
-            this.CurrentLength <- newSize
-            for i = newSize to curSize - 1 do
-                this.Children.[i] <- null
-                this.SizeTable.[i] <- 0
+    override this.SetNodeSize newSize = this.CurrentLength <- newSize
 
     override this.ToFullNodeIfNeeded shift =
         if RRBMath.isSizeTableFullAtShift shift sizeTable this.NodeSize
@@ -1685,19 +1660,7 @@ and [<StructuredFormatDisplay("ERROR: ExpandedLeafNode shouldn't exist!")>] RRBE
         then this :> RRBNode<'T>
         else RRBExpandedLeafNode<'T>(owner, Array.copy this.Items) :> RRBNode<'T>
 
-    override this.SetNodeSize newSize =
-        // This should only be called when the node is already editable
-        let curSize = this.NodeSize
-        if curSize = newSize then
-            ()
-        elif curSize < newSize then
-            // Node expanded, so no need to zero anything out
-            this.CurrentLength <- newSize
-        else
-            // Node shrank, so zero out the children between newSize and oldSize
-            this.CurrentLength <- newSize
-            for i = newSize to curSize - 1 do
-                this.Items.[i] <- Unchecked.defaultof<'T>
+    override this.SetNodeSize newSize = this.CurrentLength <- newSize
 
     override this.InsertedItem owner localIdx item =
         // No bounds-checking: that's the job of the caller
