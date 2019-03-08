@@ -24,73 +24,7 @@ let logger = Log.create "Expecto"
 
 
 
-// === GENERATORS copied from ExpectoTest.fs ===
-// We may or may not end up using these, but this is a good example of what to do.
-// I'll probably write some simpler functions, since generating arbitrary arrays isn't really needed. All we really need is to generate arrays of length N, containing [|1..N|]
-
-// For various tests, we'll want to generate a list and an index of an item within that list.
-// Note that if the list is empty, the index will be 0, which is not a valid index of an
-// empty list. So for some tests, we'll want to use arbNonEmptyArrayAndIdx instead.
-type ArrayAndIdx = ArrayAndIdx of arr:int[] * idx:int
-type NonEmptyArrayAndIdx = NonEmptyArrayAndIdx of arr:int[] * idx:int
-type LeafPlusArrAndIdx = LeafPlusArrAndIdx of leaf:RRBLeafNode<int> * arr:int[] * idx:int
-type NonEmptyLeafPlusArrAndIdx = NonEmptyLeafPlusArrAndIdx of leaf:RRBLeafNode<int> * arr:int[] * idx:int
-
-// TODO: Determine if we can use Arb.from<PositiveInt> here, or Gen.nonEmptyListOf, or something
-let genArray = Gen.sized <| fun s -> gen {
-    let! arr = Gen.arrayOfLength s (Gen.choose (1,100))
-    let! idx = Gen.choose (0, Operators.max 0 (Array.length arr - 1))
-    return ArrayAndIdx (arr,idx)
-}
-let genArraySimpler = gen {
-    let! arr = Gen.arrayOf (Gen.choose (1,100))
-    let! idx = Gen.choose (0, Operators.max 0 (Array.length arr - 1))
-    return ArrayAndIdx (arr,idx)
-}
-let genNonEmptyArray = Gen.sized <| fun s -> gen {
-    let! arr = Gen.arrayOfLength (Operators.max s 1) (Gen.choose (1,100))
-    let! idx = Gen.choose (0, Operators.max 0 (Array.length arr - 1))
-    return NonEmptyArrayAndIdx (arr,idx)
-}
-let genNonEmptyArraySimpler = gen {
-    let! lst = Gen.nonEmptyListOf (Gen.choose (1,100))
-    let arr = Array.ofList lst
-    let! idx = Gen.choose (0, Operators.max 0 (Array.length arr - 1))
-    return NonEmptyArrayAndIdx (arr,idx)
-}
-let mapArrAndIdxToLeaf (ArrayAndIdx (arr,idx)) = LeafPlusArrAndIdx (RRBNode<int>.MkLeaf nullOwner arr, arr, idx)
-let mapNEArrAndIdxToNELeaf (NonEmptyArrayAndIdx (arr,idx)) = NonEmptyLeafPlusArrAndIdx (RRBNode<int>.MkLeaf nullOwner arr, arr, idx)
-
-let genLeafPlusArrAndIdx = genArraySimpler |> Gen.map mapArrAndIdxToLeaf
-let genNonEmptyLeafPlusArrAndIdx = genNonEmptyArraySimpler |> Gen.map mapNEArrAndIdxToNELeaf
-
-let rec shrink (ArrayAndIdx (arr:int[],idx:int)) = seq {
-    if arr.Length <= 0 then yield! Seq.empty else
-    let rest = arr |> Array.skip 1
-    let i = Operators.max 0 (Operators.min idx rest.Length - 1)
-    yield ArrayAndIdx (rest,i)
-    yield! shrink (ArrayAndIdx (rest,i))
-}
-let rec shrinkNonEmpty (NonEmptyArrayAndIdx (arr:int[],idx:int)) = seq {
-    if arr.Length <= 1 then yield! Seq.empty else
-    let rest = arr |> Array.skip 1
-    let i = Operators.max 0 (Operators.min idx rest.Length - 1)
-    yield NonEmptyArrayAndIdx (rest,i)
-    yield! shrinkNonEmpty (NonEmptyArrayAndIdx (rest,i))
-}
-let shrinkLeaf (LeafPlusArrAndIdx (leaf,arr,idx)) =
-    shrink (ArrayAndIdx (arr,idx)) |> Seq.map mapArrAndIdxToLeaf
-let shrinkNonEmptyLeaf (NonEmptyLeafPlusArrAndIdx (leaf,arr,idx)) =
-    shrinkNonEmpty (NonEmptyArrayAndIdx (arr,idx)) |> Seq.map mapNEArrAndIdxToNELeaf
-
-let genDebug = Gen.sized <| fun s ->
-    logger.debug (
-        eventX "Generated number with size {size}"
-        >> setField "size" s
-    )
-    Gen.choose(0,s)
-
-// === From-scratch generators ===
+// === Generators ===
 
 let mkArr n = [| 1..n |]
 let mkLeaf n = RRBLeafNode(nullOwner, mkArr n)
@@ -186,32 +120,17 @@ let genTree = Gen.oneof [ genSmallFullTree; genTransientSmallFullTree; genSmallR
 type IsolatedNode<'T> = IsolatedNode of RRBFullNode<'T>
 type IsolatedShortNode<'T> = IsolatedShortNode of RRBFullNode<'T>
 type RootNode<'T> = RootNode of RRBFullNode<'T>
+type LeafNode<'T> = LeafNode of RRBLeafNode<'T>
 
 // TODO: Write shrinkers for nodes and for trees
 
 type MyGenerators =
-    static member arbArrayAndIdx() =
-        { new Arbitrary<ArrayAndIdx>() with
-            override x.Generator = genArraySimpler
-            override x.Shrinker t = shrink t }
-    static member arbNonEmptyArrayAndIdx() =
-        { new Arbitrary<NonEmptyArrayAndIdx>() with
-            override x.Generator = genNonEmptyArraySimpler
-            override x.Shrinker t = shrinkNonEmpty t }
-    static member arbLeaf() =
-        { new Arbitrary<LeafPlusArrAndIdx>() with
-            override x.Generator = genLeafPlusArrAndIdx
-            override x.Shrinker t = shrinkLeaf t }
-    static member arbNonEmptyLeaf() =
-        { new Arbitrary<NonEmptyLeafPlusArrAndIdx>() with
-            override x.Generator = genNonEmptyLeafPlusArrAndIdx
-            override x.Shrinker t = shrinkNonEmptyLeaf t }
-    static member arbInt() =
-        { new Arbitrary<int>() with
-            override x.Generator = genDebug }
     static member arbTree() =
         { new Arbitrary<RootNode<int>>() with
             override x.Generator = genTree |> Gen.map RootNode }
+    static member arbLeaf() =
+        { new Arbitrary<LeafNode<int>>() with
+            override x.Generator = genLeaf |> Gen.map LeafNode }
     static member arbNode() =
         { new Arbitrary<IsolatedNode<int>>() with
             override x.Generator = genNode |> Gen.map IsolatedNode }
@@ -643,6 +562,57 @@ let removePropertyTests =
             result.NodeSize = node.NodeSize - 1)
   ]
 
+let updatePropertyTests =
+  testList "Update property tests" [
+    testProp "UpdateChild on a generated node" <| fun (IsolatedNode node) (NonNegativeInt idx) ->
+        let idx = idx % node.NodeSize
+        let oldLeaf = node.Children.[idx]
+        let newLeaf = mkLeaf (oldLeaf.NodeSize)
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let result = node.UpdateChild nullOwner Literals.blockSizeShift idx newLeaf
+        checkProperties Literals.blockSizeShift result "Result"
+        result.NodeSize = node.NodeSize && result.TreeSize Literals.blockSizeShift = node.TreeSize Literals.blockSizeShift
+
+    testProp "UpdateChildSAbs on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (NonNegativeInt idx) (LeafNode newLeaf) ->
+        let idx = idx % node.NodeSize
+        let oldLeaf = node.Children.[idx]
+        let sizeDiff = newLeaf.NodeSize - oldLeaf.NodeSize
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let result = node.UpdateChildSAbs nullOwner Literals.blockSizeShift idx newLeaf newLeaf.NodeSize
+        checkProperties Literals.blockSizeShift result "Result"
+        result.NodeSize = node.NodeSize && result.TreeSize Literals.blockSizeShift = node.TreeSize Literals.blockSizeShift + sizeDiff
+
+    testProp "UpdateChildSRel on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (NonNegativeInt idx) (LeafNode newLeaf) ->
+        let idx = idx % node.NodeSize
+        let oldLeaf = node.Children.[idx]
+        let sizeDiff = newLeaf.NodeSize - oldLeaf.NodeSize
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let result = node.UpdateChildSRel nullOwner Literals.blockSizeShift idx newLeaf sizeDiff
+        checkProperties Literals.blockSizeShift result "Result"
+        result.NodeSize = node.NodeSize && result.TreeSize Literals.blockSizeShift = node.TreeSize Literals.blockSizeShift + sizeDiff
+  ]
+
+let keepPropertyTests =
+  testList "KeepN(Left/Right) property tests" [
+    testProp "KeepNLeft on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (PositiveInt n) ->
+        let n = n % (node.NodeSize + 1) |> max 1
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let result = node.KeepNLeft nullOwner Literals.blockSizeShift n
+        checkProperties Literals.blockSizeShift result "Result"
+        let keptLeaves = node.Children |> Array.truncate node.NodeSize |> Array.truncate n
+        let totalKeptSize = keptLeaves |> Array.sumBy (fun leaf -> leaf.NodeSize)
+        result.NodeSize = n && result.TreeSize Literals.blockSizeShift = totalKeptSize
+
+    ftestProp (777305916, 296568641) "KeepNRight on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (PositiveInt n) -> // Also check (2063521659, 296568640)
+        let n = n % (node.NodeSize + 1) |> max 1
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let result = node.KeepNRight nullOwner Literals.blockSizeShift n
+        checkProperties Literals.blockSizeShift result "Result"
+        let keptLeaves = node.Children |> Array.truncate node.NodeSize |> Array.skip (node.NodeSize - n)
+        let totalKeptSize = keptLeaves |> Array.sumBy (fun leaf -> leaf.NodeSize)
+        result.NodeSize = n && result.TreeSize Literals.blockSizeShift = totalKeptSize
+  ]
+
 (*
 
 AppendChild ch
@@ -678,6 +648,8 @@ let tests =
     appendPropertyTests
     insertPropertyTests
     removePropertyTests
+    updatePropertyTests
+    keepPropertyTests
     appendTests
     insertTests
   ]
