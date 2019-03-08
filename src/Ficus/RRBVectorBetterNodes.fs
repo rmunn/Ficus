@@ -1166,7 +1166,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         let node' = this.GetEditableNode owner :?> RRBExpandedFullNode<'T>
         let newSize = node'.NodeSize - 1
         for i = newSize downto localIdx do
-            node'.Children.[i] <- node'.Children.[i-1]
+            node'.Children.[i+1] <- node'.Children.[i]
         node'.SetNodeSize newSize
         if newChildSize = (1 <<< shift) then
             // Inserted a full child, so this is still a full node
@@ -1472,8 +1472,8 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         let node' = this.GetEditableNode owner :?> RRBExpandedRelaxedNode<'T>
         let newSize = node'.NodeSize - 1
         for i = newSize downto localIdx do
-            node'.Children.[i] <- node'.Children.[i-1]
-            node'.SizeTable.[i] <- node'.SizeTable.[i-1] + newChildSize
+            node'.Children.[i+1] <- node'.Children.[i]
+            node'.SizeTable.[i+1] <- node'.SizeTable.[i] + newChildSize
         node'.SetNodeSize newSize
         node'.ToFullNodeIfNeeded shift
 

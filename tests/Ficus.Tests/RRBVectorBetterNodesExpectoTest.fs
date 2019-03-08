@@ -426,8 +426,8 @@ let checkPropertiesSimple shift root = checkProperties shift root "Node"
 type ExpectedResult = Full | Relaxed
 
 let inputDataForAppendTests : (int list * int * ExpectedResult * string) list =
-  [
-    [M-2], M-2, Relaxed, "singleton"  // Add: "completely full/nearly-full node with full/nearly-full leaf"
+  [ // Initial leaves, size of inserted node, expected fullness of result, partial name
+    [M-2], M-2, Relaxed, "singleton"
     [M-2], M, Relaxed, "singleton"
     [M], M-2, Full, "singleton"
     [M], M, Full, "singleton"
@@ -452,7 +452,6 @@ let mkAppendTests (leafSizes, newLeafSize, expectedResult, namePart) =
     let isWhatStr = match expectedResult with Full -> "full" | Relaxed -> "relaxed"
     ["AppendChild"; "AppendChildS"]
     |> List.map (fun fname ->
-        // TODO: Build AppendChild and AppendChildS tests from this
         let test = fun _ ->
             let node = mkManualNode leafSizes
             checkProperties Literals.blockSizeShift node "Starting node"
@@ -477,36 +476,139 @@ let appendTests =
     |> List.collect mkAppendTests
     |> testList "Append tests"
 
-
 let appendPropertyTests =
   testList "Append property tests" [
     testProp "AppendChild on a generated node" <| fun (IsolatedShortNode node) ->
-        // logger.debug (
-        //     eventX "Node generated: {node}"
-        //     >> setField "node" (sprintf "%A" node)
-        // )
         checkProperties Literals.blockSizeShift node "Starting node"
         let newChild = mkLeaf (M-2)
         let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
-        // logger.debug (
-        //     eventX "Result: {node}"
-        //     >> setField "node" (sprintf "%A" result)
-        // )
         checkProperties Literals.blockSizeShift result "Result"
         result.NodeSize = node.NodeSize + 1
 
     testProp "AppendChildS on a generated node" <| fun (IsolatedShortNode node) ->
-        // logger.debug (
-        //     eventX "Node generated: {node}"
-        //     >> setField "node" (sprintf "%A" node)
-        // )
         checkProperties Literals.blockSizeShift node "Starting node"
         let newChild = mkLeaf (M-2)
         let result = node.AppendChildS nullOwner Literals.blockSizeShift newChild (M-2)
-        // logger.debug (
-        //     eventX "Result: {node}"
-        //     >> setField "node" (sprintf "%A" result)
-        // )
+        checkProperties Literals.blockSizeShift result "Result"
+        result.NodeSize = node.NodeSize + 1
+  ]
+
+
+
+
+let inputDataForInsertTests : (int list * int * int * ExpectedResult * string) list =
+  [ // Initial leaves, insert position, size of inserted node, expected fullness of result, partial name
+    [M-2], 0, M-2, Relaxed, "nearly-full singleton"
+    [M-2], 1, M-2, Relaxed, "nearly-full singleton"
+    [M-2], 0, M, Full, "nearly-full singleton"
+    [M-2], 1, M, Relaxed, "nearly-full singleton"
+    [M], 0, M-2, Relaxed, "completely full singleton"
+    [M], 1, M-2, Full, "completely full singleton"
+    [M], 0, M, Full, "completely full singleton"
+    [M], 1, M, Full, "completely full singleton"
+    [M; M-2], 0, M-2, Relaxed, "nearly-full two-element"
+    [M; M-2], 1, M-2, Relaxed, "nearly-full two-element"
+    [M; M-2], 2, M-2, Relaxed, "nearly-full two-element"
+    [M; M-2], 0, M, Full, "nearly-full two-element"
+    [M; M-2], 1, M, Full, "nearly-full two-element"
+    [M; M-2], 2, M, Relaxed, "nearly-full two-element"
+    [M; M], 0, M-2, Relaxed, "completely full two-element"
+    [M; M], 1, M-2, Relaxed, "completely full two-element"
+    [M; M], 2, M-2, Full, "completely full two-element"
+    [M; M], 0, M, Full, "completely full two-element"
+    [M; M], 1, M, Full, "completely full two-element"
+    [M; M], 2, M, Full, "completely full two-element"
+    List.replicate (M-2) M, 0, M-2, Relaxed, "completely full size M-2"
+    List.replicate (M-2) M, M/2, M-2, Relaxed, "completely full size M-2"
+    List.replicate (M-2) M, M-2, M-2, Full, "completely full size M-2"
+    List.replicate (M-2) M, 0, M, Full, "completely full size M-2"
+    List.replicate (M-2) M, M/2, M, Full, "completely full size M-2"
+    List.replicate (M-2) M, M-2, M, Full, "completely full size M-2"
+    List.replicate (M-3) M @ [M-1], 0, M-2, Relaxed, "nearly-full size M-2"
+    List.replicate (M-3) M @ [M-1], M/2, M-2, Relaxed, "nearly-full size M-2"
+    List.replicate (M-3) M @ [M-1], M-2, M-2, Relaxed, "nearly-full size M-2"
+    List.replicate (M-3) M @ [M-1], 0, M, Full, "nearly-full size M-2"
+    List.replicate (M-3) M @ [M-1], M/2, M, Full, "nearly-full size M-2"
+    List.replicate (M-3) M @ [M-1], M-2, M, Relaxed, "nearly-full size M-2"
+    List.replicate (M-1) M, 0, M-2, Relaxed, "completely full size M-1"
+    List.replicate (M-1) M, M/2, M-2, Relaxed, "completely full size M-1"
+    List.replicate (M-1) M, M-1, M-2, Full, "completely full size M-1"
+    List.replicate (M-1) M, 0, M, Full, "completely full size M-1"
+    List.replicate (M-1) M, M/2, M, Full, "completely full size M-1"
+    List.replicate (M-1) M, M-1, M, Full, "completely full size M-1"
+    List.replicate (M-2) M @ [M-1], 0, M-2, Relaxed, "nearly-full size M-1"
+    List.replicate (M-2) M @ [M-1], M/2, M-2, Relaxed, "nearly-full size M-1"
+    List.replicate (M-2) M @ [M-1], M-1, M-2, Relaxed, "nearly-full size M-1"
+    List.replicate (M-2) M @ [M-1], 0, M, Full, "nearly-full size M-1"
+    List.replicate (M-2) M @ [M-1], M/2, M, Full, "nearly-full size M-1"
+    List.replicate (M-2) M @ [M-1], M-1, M, Relaxed, "nearly-full size M-1"
+  ]
+
+let mkInsertTests (leafSizes, insertPos, newLeafSize, expectedResult, namePart) =
+    // let nodeDesc = match expectedResult with Full -> "completely full" | Relaxed -> "nearly-full"
+    let leafDesc = if newLeafSize = Literals.blockSize then "full" else "non-full"
+    let isWhat = match expectedResult with Full -> isFull | Relaxed -> isRelaxed
+    let isWhatStr = match expectedResult with Full -> "full" | Relaxed -> "relaxed"
+    let insertedAtStr = sprintf "inserted at %d" insertPos
+    ["InsertChild"; "InsertChildS"]
+    |> List.map (fun fname ->
+        let test = fun _ ->
+            let node = mkManualNode leafSizes
+            checkProperties Literals.blockSizeShift node "Starting node"
+            let newChild = mkLeaf newLeafSize
+            let result =
+                if fname = "InsertChild" then
+                    node.InsertChild nullOwner Literals.blockSizeShift insertPos newChild
+                elif fname = "InsertChildS" then
+                    node.InsertChildS nullOwner Literals.blockSizeShift insertPos newChild newLeafSize
+                else
+                    failwith <| sprintf "Unknown method name %s in test creation - fix unit tests" fname
+            checkProperties Literals.blockSizeShift result "Result"
+            Expect.equal (result.NodeSize) (node.NodeSize + 1) "Inserting any leaf into a node should increase its node size by 1"
+            Expect.equal (result.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + newLeafSize) "Inserting any leaf into a node should increase its tree size by the leaf's NodeSize"
+            Expect.isTrue (isWhat result) (sprintf "Inserting a %s leaf into a %s node at position %d should result in a %s node" leafDesc namePart insertPos isWhatStr)
+        let name = sprintf "%s on a %s node with a %s leaf inserted at %d" fname namePart leafDesc insertPos
+        testCase name test
+    )
+
+let insertTests =
+    inputDataForInsertTests
+    |> List.collect mkInsertTests
+    |> testList "Insert tests"
+
+let insertPropertyTests =
+  testList "Insert property tests" [
+    ftestProp (962331905, 296568455) "InsertChild on a generated node" <| fun (IsolatedShortNode node) (NonNegativeInt idx) ->
+        let idx = idx % (node.NodeSize + 1)
+        logger.debug (
+            eventX "InsertChild test with idx {idx} and node {node}"
+            >> setField "idx" idx
+            >> setField "node" (sprintf "%A" node)
+        )
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let newChild = mkLeaf (M-2)
+        let result = node.InsertChild nullOwner Literals.blockSizeShift idx newChild
+        logger.debug (
+            eventX "Result: {node}"
+            >> setField "node" (sprintf "%A" result)
+        )
+        checkProperties Literals.blockSizeShift result "Result"
+        result.NodeSize = node.NodeSize + 1
+
+    ftestProp (962331993, 296568455) "InsertChildS on a generated node" <| fun (IsolatedShortNode node) (NonNegativeInt idx) ->
+        let idx = idx % (node.NodeSize + 1)
+        logger.debug (
+            eventX "InsertChildSx test with idx {idx} and node {node}"
+            >> setField "idx" idx
+            >> setField "node" (sprintf "%A" node)
+        )
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let newChild = mkLeaf (M-2)
+        let result = node.InsertChildS nullOwner Literals.blockSizeShift idx newChild (M-2)
+        logger.debug (
+            eventX "Result: {node}"
+            >> setField "node" (sprintf "%A" result)
+        )
         checkProperties Literals.blockSizeShift result "Result"
         result.NodeSize = node.NodeSize + 1
   ]
@@ -536,8 +638,15 @@ PrependNChildrenS n seq<ch> seq<sz>
 
 *)
 
+// logger.debug (
+//     eventX "Result: {node}"
+//     >> setField "node" (sprintf "%A" result)
+// )
+
 let tests =
   testList "Basic node tests" [
-    appendTests
     appendPropertyTests
+    insertPropertyTests
+    appendTests
+    insertTests
   ]
