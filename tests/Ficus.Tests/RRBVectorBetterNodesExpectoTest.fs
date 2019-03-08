@@ -613,6 +613,57 @@ let keepPropertyTests =
         result.NodeSize = n && result.TreeSize Literals.blockSizeShift = totalKeptSize
   ]
 
+let splitAndKeepPropertyTests =
+  testList "SplitAndKeep property tests" [
+    testProp "SplitAndKeepNLeft on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (PositiveInt n) ->
+        let n = n % (node.NodeSize + 1) |> max 1
+        let origLeavesL, origLeavesR = node.Children |> Array.truncate node.NodeSize |> Array.splitAt n
+        let totalKeptL = origLeavesL |> Array.sumBy (fun leaf -> leaf.NodeSize)
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let resultNode, resultLeavesR = node.SplitAndKeepNLeft nullOwner Literals.blockSizeShift n
+        checkProperties Literals.blockSizeShift resultNode "Result"
+        Expect.equal resultNode.NodeSize n "Node after split should have N items"
+        Expect.equal (Array.length resultLeavesR) (Array.length origLeavesR) "Array of leaves returned from split should have (size - N) items"
+        Expect.equal (resultNode.TreeSize Literals.blockSizeShift) totalKeptL "Node after split should have same tree size as total of remaining N items"
+
+    ftestProp (1862454774, 296568680) "SplitAndKeepNRight on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (PositiveInt n) ->
+        let n = n % (node.NodeSize + 1) |> max 1
+        let origLeavesL, origLeavesR = node.Children |> Array.truncate node.NodeSize |> Array.splitAt (node.NodeSize - n)
+        let totalKeptR = origLeavesR |> Array.sumBy (fun leaf -> leaf.NodeSize)
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let resultLeavesL, resultNode = node.SplitAndKeepNRight nullOwner Literals.blockSizeShift n
+        checkProperties Literals.blockSizeShift resultNode "Result"
+        Expect.equal resultNode.NodeSize n "Node after split should have N items"
+        Expect.equal (Array.length resultLeavesL) (Array.length origLeavesL) "Array of leaves returned from split should have (size - N) items"
+        Expect.equal (resultNode.TreeSize Literals.blockSizeShift) totalKeptR "Node after split should have same tree size as total of remaining N items"
+
+    testProp "SplitAndKeepNLeftS on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (PositiveInt n) ->
+        let n = n % (node.NodeSize + 1) |> max 1
+        let origLeavesL, origLeavesR = node.Children |> Array.truncate node.NodeSize |> Array.splitAt n
+        let totalKeptL = origLeavesL |> Array.sumBy (fun leaf -> leaf.NodeSize)
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let resultNode, (resultLeavesR, resultSizesR) = node.SplitAndKeepNLeftS nullOwner Literals.blockSizeShift n
+        let expectedSizesR = origLeavesR |> Seq.map (fun leaf -> leaf.NodeSize) |> Seq.scan (+) 0 |> Seq.tail |> Array.ofSeq
+        checkProperties Literals.blockSizeShift resultNode "Result"
+        Expect.equal resultNode.NodeSize n "Node after split should have N items"
+        Expect.equal (Array.length resultLeavesR) (Array.length origLeavesR) "Array of leaves returned from split should have (size - N) items"
+        Expect.equal resultSizesR expectedSizesR "Sizes returned from split should be cumulative sizes of leaves returned from split"
+        Expect.equal (resultNode.TreeSize Literals.blockSizeShift) totalKeptL "Node after split should have same tree size as total of remaining N items"
+
+    ftestProp (1863076980, 296568680) "SplitAndKeepNRightS on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (PositiveInt n) ->
+        let n = n % (node.NodeSize + 1) |> max 1
+        let origLeavesL, origLeavesR = node.Children |> Array.truncate node.NodeSize |> Array.splitAt (node.NodeSize - n)
+        let totalKeptR = origLeavesR |> Array.sumBy (fun leaf -> leaf.NodeSize)
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let (resultLeavesL, resultSizesL), resultNode = node.SplitAndKeepNRightS nullOwner Literals.blockSizeShift n
+        let expectedSizesL = origLeavesL |> Seq.map (fun leaf -> leaf.NodeSize) |> Seq.scan (+) 0 |> Seq.tail |> Array.ofSeq
+        checkProperties Literals.blockSizeShift resultNode "Result"
+        Expect.equal resultNode.NodeSize n "Node after split should have N items"
+        Expect.equal (Array.length resultLeavesL) (Array.length origLeavesL) "Array of leaves returned from split should have (size - N) items"
+        Expect.equal resultSizesL expectedSizesL "Sizes returned from split should be cumulative sizes of leaves returned from split"
+        Expect.equal (resultNode.TreeSize Literals.blockSizeShift) totalKeptR "Node after split should have same tree size as total of remaining N items"
+  ]
+
 (*
 
 AppendChild ch
@@ -650,6 +701,7 @@ let tests =
     removePropertyTests
     updatePropertyTests
     keepPropertyTests
+    splitAndKeepPropertyTests
     appendTests
     insertTests
   ]
