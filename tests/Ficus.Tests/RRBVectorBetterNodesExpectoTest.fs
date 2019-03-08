@@ -626,7 +626,7 @@ let splitAndKeepPropertyTests =
         Expect.equal (Array.length resultLeavesR) (Array.length origLeavesR) "Array of leaves returned from split should have (size - N) items"
         Expect.equal (resultNode.TreeSize Literals.blockSizeShift) totalKeptL "Node after split should have same tree size as total of remaining N items"
 
-    ftestProp (1862454774, 296568680) "SplitAndKeepNRight on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (PositiveInt n) ->
+    testProp "SplitAndKeepNRight on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (PositiveInt n) ->
         let n = n % (node.NodeSize + 1) |> max 1
         let origLeavesL, origLeavesR = node.Children |> Array.truncate node.NodeSize |> Array.splitAt (node.NodeSize - n)
         let totalKeptR = origLeavesR |> Array.sumBy (fun leaf -> leaf.NodeSize)
@@ -650,7 +650,7 @@ let splitAndKeepPropertyTests =
         Expect.equal resultSizesR expectedSizesR "Sizes returned from split should be cumulative sizes of leaves returned from split"
         Expect.equal (resultNode.TreeSize Literals.blockSizeShift) totalKeptL "Node after split should have same tree size as total of remaining N items"
 
-    ftestProp (1863076980, 296568680) "SplitAndKeepNRightS on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (PositiveInt n) ->
+    testProp "SplitAndKeepNRightS on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (PositiveInt n) ->
         let n = n % (node.NodeSize + 1) |> max 1
         let origLeavesL, origLeavesR = node.Children |> Array.truncate node.NodeSize |> Array.splitAt (node.NodeSize - n)
         let totalKeptR = origLeavesR |> Array.sumBy (fun leaf -> leaf.NodeSize)

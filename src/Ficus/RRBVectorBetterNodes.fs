@@ -857,11 +857,13 @@ and [<StructuredFormatDisplay("RelaxedNode({StringRepr})")>] RRBRelaxedNode<'T>(
         if n <= 0 then
             failwithf "In SplitAndKeepNRightS, n must be at least one, got %d. This node: %A" n this
 #endif
-        let l, r = this.Children |> Array.splitAt n
-        let lS, rS = this.SizeTable |> Array.splitAt n
-        let lastSize = lS |> Array.last
-        for i = 0 to rS.Length - 1 do
-            rS.[i] <- rS.[i] - lastSize
+        let skip = this.NodeSize - n
+        let l, r = this.Children |> Array.splitAt skip
+        let lS, rS = this.SizeTable |> Array.splitAt skip
+        if not (lS |> Array.isEmpty) then
+            let lastSize = lS |> Array.last
+            for i = 0 to rS.Length - 1 do
+                rS.[i] <- rS.[i] - lastSize
         let node' = RRBNode<'T>.MkNodeKnownSize owner shift r rS
         ((l, lS), node')
 
@@ -1264,7 +1266,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         if n <= 0 then
             failwithf "In SplitAndKeepNRight, n must be at least one, got %d. This node: %A" n this
 #endif
-        let l = Array.sub this.Children 0 n
+        let l = Array.sub this.Children 0 (this.NodeSize - n)
         let node' = this.KeepNRight owner shift n
         (l, node')
 
@@ -1273,10 +1275,11 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         if n <= 0 then
             failwithf "In SplitAndKeepNRightS, n must be at least one, got %d. This node: %A" n this
 #endif
-        let l = Array.sub this.Children 0 n
         let size = this.NodeSize
+        let skip = size - n
+        let l = Array.sub this.Children 0 skip
         let sizeTable = this.BuildSizeTable shift size (size-1)
-        let lS = Array.sub sizeTable 0 n
+        let lS = Array.sub sizeTable 0 skip
         let node' = this.KeepNRight owner shift n
         ((l, lS), node')
 
