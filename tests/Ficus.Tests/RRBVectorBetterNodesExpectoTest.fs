@@ -603,7 +603,7 @@ let keepPropertyTests =
         let totalKeptSize = keptLeaves |> Array.sumBy (fun leaf -> leaf.NodeSize)
         result.NodeSize = n && result.TreeSize Literals.blockSizeShift = totalKeptSize
 
-    ftestProp (777305916, 296568641) "KeepNRight on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (PositiveInt n) -> // Also check (2063521659, 296568640)
+    testProp "KeepNRight on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (PositiveInt n) ->
         let n = n % (node.NodeSize + 1) |> max 1
         checkProperties Literals.blockSizeShift node "Starting node"
         let result = node.KeepNRight nullOwner Literals.blockSizeShift n

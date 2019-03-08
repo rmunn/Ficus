@@ -317,6 +317,7 @@ PrependNChildrenS n seq<ch> seq<sz>
 
     abstract member KeepNLeft : OwnerToken -> int -> int -> RRBFullNode<'T>
     default this.KeepNLeft owner shift n =
+        if n = this.NodeSize then this else
         let arr' = this.Children |> Array.truncate n
         RRBFullNode<'T>(owner, arr')
         // Cannot become a relaxed node, since full nodes have all but their last child full (and the last child may be full)
@@ -324,6 +325,7 @@ PrependNChildrenS n seq<ch> seq<sz>
     abstract member KeepNRight : OwnerToken -> int -> int -> RRBFullNode<'T>
     default this.KeepNRight owner shift n =
         let skip = this.NodeSize - n
+        if skip = 0 then this else
         let arr' = this.Children |> Array.skip skip
         RRBFullNode<'T>(owner, arr')
         // Cannot become a relaxed node, since full nodes have all but their last child full (and the last child may be full)
@@ -804,12 +806,14 @@ and [<StructuredFormatDisplay("RelaxedNode({StringRepr})")>] RRBRelaxedNode<'T>(
         this.UpdateChildSRel owner shift localIdx newChild (childSize - oldChildSize)
 
     override this.KeepNLeft owner shift n =
+        if n = this.NodeSize then this :> RRBFullNode<'T> else
         let children' = this.Children |> Array.truncate n
         let sizeTable' = this.SizeTable |> Array.truncate n
         RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
 
     override this.KeepNRight owner shift n =
         let skip = this.NodeSize - n
+        if skip = 0 then this :> RRBFullNode<'T> else
 #if DEBUG
         if n <= 0 then
             failwithf "In KeepNRight, n must be at least one, got %d. This node: %A" n this
@@ -821,7 +825,7 @@ and [<StructuredFormatDisplay("RelaxedNode({StringRepr})")>] RRBRelaxedNode<'T>(
         let children' = this.Children |> Array.skip skip
         let sizeTable' = this.SizeTable |> Array.skip skip
         let lastSizeTableEntry = this.SizeTable.[skip - 1]
-        for i = skip to this.NodeSize - 1 do
+        for i = 0 to this.NodeSize - skip - 1 do
             sizeTable'.[i] <- sizeTable'.[i] - lastSizeTableEntry
         RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
 
@@ -1211,6 +1215,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
             node'.UpdateChildSAbs owner shift localIdx newChild childSize
 
     override this.KeepNLeft owner shift n =
+        if n = this.NodeSize then this :> RRBFullNode<'T> else
         let node' = this.GetEditableNode owner :?> RRBExpandedFullNode<'T>
         for i = n to node'.NodeSize - 1 do
             node'.Children.[i] <- null
@@ -1220,6 +1225,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
 
     override this.KeepNRight owner shift n =
         let skip = this.NodeSize - n
+        if skip = 0 then this :> RRBFullNode<'T> else
         let node' = this.GetEditableNode owner :?> RRBExpandedFullNode<'T>
         for i = 0 to n - 1 do
             node'.Children.[i] <- node'.Children.[i + skip]
@@ -1486,6 +1492,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
     // No need to override UpdateChildSRel and UpdateChildSAbs; versions from compact RRBRelaxedNode will work just fine in expanded nodes
 
     override this.KeepNLeft owner shift n =
+        if n = this.NodeSize then this :> RRBFullNode<'T> else
         let node' = this.GetEditableNode owner :?> RRBExpandedRelaxedNode<'T>
         for i = n to node'.NodeSize - 1 do
             node'.Children.[i] <- null
@@ -1495,6 +1502,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
 
     override this.KeepNRight owner shift n =
         let skip = this.NodeSize - n
+        if skip = 0 then this :> RRBFullNode<'T> else
 #if DEBUG
         if n <= 0 then
             failwithf "In KeepNRight, n must be at least one, got %d. This node: %A" n this
