@@ -601,6 +601,16 @@ let removePropertyTests =
             checkProperties Literals.blockSizeShift node "Starting node"
             let result = node.RemoveChild nullOwner Literals.blockSizeShift idx
             checkProperties Literals.blockSizeShift result "Result"
+            if isRelaxed node && isFull result then
+                logger.debug (
+                    eventX "Remove index {idx} from {node}"
+                    >> setField "idx" idx
+                    >> setField "node" (sprintf "%A" node)
+                )
+                logger.debug (
+                    eventX "Result: {node}"
+                    >> setField "node" (sprintf "%A" result)
+                )
             result.NodeSize = node.NodeSize - 1)
 
     ftestProp (1824555940, 296568481) "RemoveLastChild on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) ->

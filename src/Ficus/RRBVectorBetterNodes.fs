@@ -777,8 +777,11 @@ and [<StructuredFormatDisplay("RelaxedNode({StringRepr})")>] RRBRelaxedNode<'T>(
         RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
 
     override this.RemoveChild owner shift localIdx =
+        let oldChildSize = this.SizeTable.[localIdx] - (if localIdx <= 0 then 0 else this.SizeTable.[localIdx-1])
         let children' = this.Children |> Array.copyAndRemoveAt localIdx
         let sizeTable' = this.SizeTable |> Array.copyAndRemoveAt localIdx
+        for i = localIdx to this.NodeSize - 2 do
+            sizeTable'.[i] <- sizeTable'.[i] - oldChildSize
         RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
 
     override this.RemoveLastChild owner shift =
@@ -1181,7 +1184,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         let newSize = node'.NodeSize - 1
         for i = localIdx to newSize - 1 do
             node'.Children.[i] <- node'.Children.[i+1]
-        node'.Children.[node'.NodeSize] <- null
+        node'.Children.[newSize] <- null
         node'.SetNodeSize newSize
         // Removing a child from a full node can never make it non-full
         node' :> RRBFullNode<'T>
@@ -1190,12 +1193,12 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         // TODO: First make sure that "owner" isn't null at this point, because that's causing a failure in one of my tests
         // [push 1063; rev(); pop 118] --> after the rev(), we're a transient node that has become persistent so our owner is now null -- but we failed to check that.
         // ... I think that's been fixed, but let's make sure we test this scenario.
-        let node' = this.GetEditableNode owner :?> RRBExpandedRelaxedNode<'T>
+        let node' = this.GetEditableNode owner :?> RRBExpandedFullNode<'T>
         let newSize = node'.NodeSize - 1
         node'.Children.[newSize] <- null
-        node'.SizeTable.[newSize] <- 0
         node'.SetNodeSize newSize
-        node'.ToFullNodeIfNeeded shift
+        // Removing the last child from a full node can never make it non-full
+        node' :> RRBFullNode<'T>
 
     override this.UpdateChildSRel owner shift localIdx newChild sizeDiff =
         if localIdx = (this.NodeSize - 1) || sizeDiff = 0 then
