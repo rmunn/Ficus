@@ -131,6 +131,9 @@ type MyGenerators =
     static member arbLeaf() =
         { new Arbitrary<LeafNode<int>>() with
             override x.Generator = genLeaf |> Gen.map LeafNode }
+    static member arbLeaves() =
+        { new Arbitrary<RRBLeafNode<int> []>() with
+            override x.Generator = genLeaves }
     static member arbNode() =
         { new Arbitrary<IsolatedNode<int>>() with
             override x.Generator = genNode |> Gen.map IsolatedNode }
@@ -542,16 +545,6 @@ let removePropertyTests =
             checkProperties Literals.blockSizeShift node "Starting node"
             let result = node.RemoveChild nullOwner Literals.blockSizeShift idx
             checkProperties Literals.blockSizeShift result "Result"
-            if isRelaxed node && isFull result then
-                logger.debug (
-                    eventX "Remove index {idx} from {node}"
-                    >> setField "idx" idx
-                    >> setField "node" (sprintf "%A" node)
-                )
-                logger.debug (
-                    eventX "Result: {node}"
-                    >> setField "node" (sprintf "%A" result)
-                )
             result.NodeSize = node.NodeSize - 1)
 
     testProp "RemoveLastChild on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) ->
@@ -664,30 +657,70 @@ let splitAndKeepPropertyTests =
         Expect.equal (resultNode.TreeSize Literals.blockSizeShift) totalKeptR "Node after split should have same tree size as total of remaining N items"
   ]
 
-(*
+let appendAndPrependChildrenPropertyTests =
+  testList "(Ap/Pre)pendChildren property tests" [
+    ftestProp (322727192, 296568885) "AppendNChildren on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (newLeaves : RRBLeafNode<int> []) ->
+        let remaining = Literals.blockSize - node.NodeSize
+        let toAdd = newLeaves |> Array.truncate remaining
+        let n = toAdd.Length
+        let origLeafArrays = node.Children |> Array.truncate node.NodeSize |> Array.map (fun leaf -> (leaf :?> RRBLeafNode<int>).Items)
+        let newLeafArrays = toAdd |> Array.map (fun leaf -> leaf.Items)
+        let expectedLeafArrays = Array.append origLeafArrays newLeafArrays
 
-AppendChild ch
-AppendChildS ch sz
-InsertChild n ch
-InsertChildS n ch sz
-RemoveChild n
-RemoveChildS n sz?
-RemoveLastChild
-UpdateChild n ch'
-UpdateChildSAbs n ch' sz
-UpdateChildSRel n ch' relSz
-KeepNLeft n -> Node
-SplitAndKeepNLeft n -> Node, arr of item
-SplitAndKeepNLeftS n -> Node, arr of (item * size)
-KeepNRight n -> Node
-SplitAndKeepNRight n -> arr of item, Node
-SplitAndKeepNRightS n -> arr of (item * size), Node
-AppendNChildren n seq<ch>
-AppendNChildrenS n seq<ch> seq<sz>
-PrependNChildren n seq<ch>
-PrependNChildrenS n seq<ch> seq<sz>
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let result = node.AppendNChildren nullOwner Literals.blockSizeShift n (toAdd |> Seq.cast)
+        checkProperties Literals.blockSizeShift result "Result"
+        Expect.equal result.NodeSize (node.NodeSize + n) "Node after append should have N more items"
+        let actualLeafArrays = result.Children |> Array.truncate result.NodeSize |> Array.map (fun leaf -> (leaf :?> RRBLeafNode<int>).Items)
+        Expect.sequenceEqual actualLeafArrays expectedLeafArrays "Leaves should have been placed in the correct locations"
 
-*)
+    ftestProp (323029714, 296568885) "AppendNChildrenS on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (newLeaves : RRBLeafNode<int> []) ->
+        let remaining = Literals.blockSize - node.NodeSize
+        let toAdd = newLeaves |> Array.truncate remaining
+        let n = toAdd.Length
+        let sizes = toAdd |> Seq.map (fun n -> n.NodeSize) |> Seq.scan (+) 0 |> Seq.tail
+        let origLeafArrays = node.Children |> Array.truncate node.NodeSize |> Array.map (fun leaf -> (leaf :?> RRBLeafNode<int>).Items)
+        let newLeafArrays = toAdd |> Array.map (fun leaf -> leaf.Items)
+        let expectedLeafArrays = Array.append origLeafArrays newLeafArrays
+
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let result = node.AppendNChildrenS nullOwner Literals.blockSizeShift n (toAdd |> Seq.cast) sizes
+        checkProperties Literals.blockSizeShift result "Result"
+        Expect.equal result.NodeSize (node.NodeSize + n) "Node after prepend should have N more items"
+        let actualLeafArrays = result.Children |> Array.truncate result.NodeSize |> Array.map (fun leaf -> (leaf :?> RRBLeafNode<int>).Items)
+        Expect.sequenceEqual actualLeafArrays expectedLeafArrays "Leaves should have been placed in the correct locations"
+
+    ftestProp (323205659, 296568885) "PrependNChildren on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (newLeaves : RRBLeafNode<int> []) ->
+        let remaining = Literals.blockSize - node.NodeSize
+        let toAdd = newLeaves |> Array.truncate remaining
+        let n = toAdd.Length
+        let origLeafArrays = node.Children |> Array.truncate node.NodeSize |> Array.map (fun leaf -> (leaf :?> RRBLeafNode<int>).Items)
+        let newLeafArrays = toAdd |> Array.map (fun leaf -> leaf.Items)
+        let expectedLeafArrays = Array.append newLeafArrays origLeafArrays
+
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let result = node.PrependNChildren nullOwner Literals.blockSizeShift n (toAdd |> Seq.cast)
+        checkProperties Literals.blockSizeShift result "Result"
+        Expect.equal result.NodeSize (node.NodeSize + n) "Node after prepend should have N more items"
+        let actualLeafArrays = result.Children |> Array.truncate result.NodeSize |> Array.map (fun leaf -> (leaf :?> RRBLeafNode<int>).Items)
+        Expect.sequenceEqual actualLeafArrays expectedLeafArrays "Leaves should have been placed in the correct locations"
+
+    ftestProp (323281485, 296568885) "PrependNChildrenS on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (newLeaves : RRBLeafNode<int> []) ->
+        let remaining = Literals.blockSize - node.NodeSize
+        let toAdd = newLeaves |> Array.truncate remaining
+        let n = toAdd.Length
+        let sizes = toAdd |> Seq.map (fun n -> n.NodeSize) |> Seq.scan (+) 0 |> Seq.tail
+        let origLeafArrays = node.Children |> Array.truncate node.NodeSize |> Array.map (fun leaf -> (leaf :?> RRBLeafNode<int>).Items)
+        let newLeafArrays = toAdd |> Array.map (fun leaf -> leaf.Items)
+        let expectedLeafArrays = Array.append newLeafArrays origLeafArrays
+
+        checkProperties Literals.blockSizeShift node "Starting node"
+        let result = node.PrependNChildrenS nullOwner Literals.blockSizeShift n (toAdd |> Seq.cast) sizes
+        checkProperties Literals.blockSizeShift result "Result"
+        Expect.equal result.NodeSize (node.NodeSize + n) "Node after prepend should have N more items"
+        let actualLeafArrays = result.Children |> Array.truncate result.NodeSize |> Array.map (fun leaf -> (leaf :?> RRBLeafNode<int>).Items)
+        Expect.sequenceEqual actualLeafArrays expectedLeafArrays "Leaves should have been placed in the correct locations"
+  ]
 
 // logger.debug (
 //     eventX "Result: {node}"
@@ -702,6 +735,7 @@ let tests =
     updatePropertyTests
     keepPropertyTests
     splitAndKeepPropertyTests
+    appendAndPrependChildrenPropertyTests
     appendTests
     insertTests
   ]
