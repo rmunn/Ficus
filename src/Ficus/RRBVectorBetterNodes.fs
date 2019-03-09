@@ -439,6 +439,8 @@ PrependNChildrenS n seq<ch> seq<sz>
                 let nextSizeTableEntry = prevSizeTableEntry + childSize
                 sizeTable'.[i] <- nextSizeTableEntry
                 prevSizeTableEntry <- nextSizeTableEntry
+        for i = n to newSize - 1 do
+            sizeTable'.[i] <- sizeTable'.[i] + prevSizeTableEntry
         RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
 
     abstract member PrependNChildrenS : OwnerToken -> int -> int -> RRBNode<'T> seq -> int seq -> RRBFullNode<'T>
@@ -910,7 +912,7 @@ and [<StructuredFormatDisplay("RelaxedNode({StringRepr})")>] RRBRelaxedNode<'T>(
         let children' = Array.zeroCreate newSize
         this.Children.CopyTo(children', n)
         let sizeTable' = Array.zeroCreate newSize
-        this.SizeTable.CopyTo(sizeTable', 0)
+        this.SizeTable.CopyTo(sizeTable', n)
         let mutable prevSizeTableEntry = 0
         use eC = newChildren.GetEnumerator()
         for i = 0 to n - 1 do
@@ -920,6 +922,8 @@ and [<StructuredFormatDisplay("RelaxedNode({StringRepr})")>] RRBRelaxedNode<'T>(
                 let nextSizeTableEntry = prevSizeTableEntry + childSize
                 sizeTable'.[i] <- nextSizeTableEntry
                 prevSizeTableEntry <- nextSizeTableEntry
+        for i = n to newSize - 1 do
+            sizeTable'.[i] <- sizeTable'.[i] + prevSizeTableEntry
         RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
         // TODO: That's *almost* identical to the version in RRBFullNode<'T> - separate out the common code and combine it
 
@@ -930,7 +934,7 @@ and [<StructuredFormatDisplay("RelaxedNode({StringRepr})")>] RRBRelaxedNode<'T>(
         let children' = Array.zeroCreate newSize
         this.Children.CopyTo(children', n)
         let sizeTable' = Array.zeroCreate newSize
-        this.SizeTable.CopyTo(sizeTable', 0)
+        this.SizeTable.CopyTo(sizeTable', n)
         use eC = newChildren.GetEnumerator()
         use eS = sizes.GetEnumerator()
         for i = 0 to n - 1 do

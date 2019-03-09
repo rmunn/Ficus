@@ -659,7 +659,7 @@ let splitAndKeepPropertyTests =
 
 let appendAndPrependChildrenPropertyTests =
   testList "(Ap/Pre)pendChildren property tests" [
-    ftestProp (322727192, 296568885) "AppendNChildren on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (newLeaves : RRBLeafNode<int> []) ->
+    testProp "AppendNChildren on a generated node" <| fun (IsolatedShortNode node : IsolatedShortNode<int>) (newLeaves : RRBLeafNode<int> []) ->
         let remaining = Literals.blockSize - node.NodeSize
         let toAdd = newLeaves |> Array.truncate remaining
         let n = toAdd.Length
@@ -674,7 +674,7 @@ let appendAndPrependChildrenPropertyTests =
         let actualLeafArrays = result.Children |> Array.truncate result.NodeSize |> Array.map (fun leaf -> (leaf :?> RRBLeafNode<int>).Items)
         Expect.sequenceEqual actualLeafArrays expectedLeafArrays "Leaves should have been placed in the correct locations"
 
-    ftestProp (323029714, 296568885) "AppendNChildrenS on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (newLeaves : RRBLeafNode<int> []) ->
+    testProp "AppendNChildrenS on a generated node" <| fun (IsolatedShortNode node : IsolatedShortNode<int>) (newLeaves : RRBLeafNode<int> []) ->
         let remaining = Literals.blockSize - node.NodeSize
         let toAdd = newLeaves |> Array.truncate remaining
         let n = toAdd.Length
@@ -690,7 +690,7 @@ let appendAndPrependChildrenPropertyTests =
         let actualLeafArrays = result.Children |> Array.truncate result.NodeSize |> Array.map (fun leaf -> (leaf :?> RRBLeafNode<int>).Items)
         Expect.sequenceEqual actualLeafArrays expectedLeafArrays "Leaves should have been placed in the correct locations"
 
-    ftestProp (323205659, 296568885) "PrependNChildren on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (newLeaves : RRBLeafNode<int> []) ->
+    testProp "PrependNChildren on a generated node" <| fun (IsolatedShortNode node : IsolatedShortNode<int>) (newLeaves : RRBLeafNode<int> []) ->
         let remaining = Literals.blockSize - node.NodeSize
         let toAdd = newLeaves |> Array.truncate remaining
         let n = toAdd.Length
@@ -705,7 +705,7 @@ let appendAndPrependChildrenPropertyTests =
         let actualLeafArrays = result.Children |> Array.truncate result.NodeSize |> Array.map (fun leaf -> (leaf :?> RRBLeafNode<int>).Items)
         Expect.sequenceEqual actualLeafArrays expectedLeafArrays "Leaves should have been placed in the correct locations"
 
-    ftestProp (323281485, 296568885) "PrependNChildrenS on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (newLeaves : RRBLeafNode<int> []) ->
+    testProp "PrependNChildrenS on a generated node" <| fun (IsolatedShortNode node : IsolatedShortNode<int>) (newLeaves : RRBLeafNode<int> []) ->
         let remaining = Literals.blockSize - node.NodeSize
         let toAdd = newLeaves |> Array.truncate remaining
         let n = toAdd.Length
@@ -729,13 +729,11 @@ let appendAndPrependChildrenPropertyTests =
 
 let tests =
   testList "Basic node tests" [
+    appendAndPrependChildrenPropertyTests  // Put this first since it's so long
     appendPropertyTests
     insertPropertyTests
     removePropertyTests
     updatePropertyTests
     keepPropertyTests
     splitAndKeepPropertyTests
-    appendAndPrependChildrenPropertyTests
-    appendTests
-    insertTests
   ]
