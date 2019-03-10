@@ -28,6 +28,8 @@ module Literals =
 // (Successively higher levels of the tree could called, in order after twig: branch, limb, trunk...
 // But we don't actually use those terms in the code, just "twig" and "leaf".)
 
+let inline isSameObj a b = LanguagePrimitives.PhysicalEquality a b
+
 module RRBMath =
     let inline radixIndex (shift : int) (treeIdx : int) : int =
         (treeIdx >>> shift) &&& Literals.blockIndexMask
@@ -124,7 +126,7 @@ type RRBNode<'T>(ownerToken : OwnerToken) =
     abstract member GetEditableEmptyNodeOfLengthN : OwnerToken -> int -> RRBNode<'T>
 
     member this.IsEditableBy (owner : OwnerToken) =
-        LanguagePrimitives.PhysicalEquality owner ownerToken && not (isNull !ownerToken)
+        isSameObj owner ownerToken && not (isNull !ownerToken)
         // Note that this test is NOT "if owner = owner".
 
     static member CreateSizeTableS (shift : int) (array:RRBNode<'T>[]) (len : int) : int[] =
@@ -194,7 +196,7 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
         then this :> RRBNode<'T>
         else RRBFullNode<'T>(owner, Array.zeroCreate len) :> RRBNode<'T>
 
-    override this.Shrink _ = this :> RRBNode<'T>
+    override this.Shrink owner = this.GetEditableNode owner
     override this.Expand owner =
         let node' = this.GetEditableNode owner :?> RRBFullNode<'T>
         RRBExpandedFullNode<'T>(owner, node'.Children) :> RRBNode<'T>
@@ -476,39 +478,6 @@ PrependNChildrenS n seq<ch> seq<sz>
         let fullSize = 1 <<< shift
         Array.init count (fun idx -> if idx = lastIdx then fullSize * idx + this.Children.[idx].TreeSize (down shift) else fullSize * (idx + 1))
 
-    abstract member SplitNodeIntoArrays : OwnerToken -> int -> int -> (RRBNode<'T> [] * int []) * (RRBNode<'T> [] * int [])  // Params: owner shift splitIdx, and return: (left items, left sizes), (right items, right sizes)
-    default this.SplitNodeIntoArrays owner shift splitIdx =
-        // TODO: Expanded nodes *must* rewrite this so that the right children will be handled correctly (not filled with nulls, since we won't always *want* the right child to end up expanded)
-        let fullSize = 1 <<< shift
-        let rightLen = this.NodeSize - splitIdx
-        let leftChildren, rightChildren = this.Children |> Array.splitAt splitIdx
-        let leftSizes = Array.init splitIdx (fun idx -> fullSize * (idx+1))
-        if rightChildren |> Array.isEmpty && splitIdx > 0 then
-            // Usually the last child's size goes into rightSizes, but in this one case it needs to go into leftSizes instead
-            leftSizes.[splitIdx - 1] <- (splitIdx - 1) * fullSize + (Array.last leftChildren).TreeSize (down shift)
-        let rightSizes = Array.init rightLen (fun idx -> if idx = rightLen - 1 then fullSize * idx + this.Children.[idx].TreeSize (down shift) else fullSize * (idx+1))
-        (leftChildren, leftSizes), (rightChildren, rightSizes)
-
-    abstract member RemoveLeftmostChildren : OwnerToken -> int -> int -> (RRBNode<'T> * int) seq * RRBNode<'T>  // Params: owner shift itemCount, and return: (removed items, sizes of removed items, new node)
-    default this.RemoveLeftmostChildren owner shift itemCount =
-        // TODO: Document that itemCount of 0 should never happen, and/or make sure it does. This should be an internal function anyway. OR... decide that it's okay, and verify that it's okay.
-#if DEBUG
-        if itemCount <= 0 then failwith <| sprintf "Item count of %d in RRBFullNode<'T>.RemoveLeftmostChildren -- should never be zero or negative" itemCount
-#else
-        if itemCount <= 0 then Seq.empty, this :> RRBNode<'T> else
-#endif
-        let fullSize = 1 <<< shift
-        let lastIdx = this.NodeSize - 1
-        let newLen = this.NodeSize - itemCount
-        let newNode = this.GetEditableEmptyNodeOfLengthN owner newLen :?> RRBFullNode<'T>
-        if newLen > 0 then
-            Array.blit this.Children itemCount newNode.Children 0 newLen
-        this.Children |> Seq.truncate itemCount |> Seq.mapi (fun idx child ->
-            let cumulativeSize = if idx = lastIdx then (fullSize * idx) + child.TreeSize (down shift) else fullSize * (idx + 1)
-            child, cumulativeSize), newNode :> RRBNode<'T>
-
-    // TODO: Test the RemoveLeftmostChildren variants with a wide variety of node types
-
     abstract member InsertAndSlideChildrenLeft : OwnerToken -> int -> int -> RRBNode<'T> -> RRBFullNode<'T> -> RRBFullNode<'T> * RRBFullNode<'T>
     default this.InsertAndSlideChildrenLeft owner shift localIdx newChild leftSibling =
         // if localIdx <= itemCount then
@@ -647,7 +616,7 @@ PrependNChildrenS n seq<ch> seq<sz>
         let newLen = len - sizeReduction
         let newNode = this.GetEditableEmptyNodeOfLengthN owner newLen :?> RRBFullNode<'T>
         // Prefix
-        if not (LanguagePrimitives.PhysicalEquality newNode this) then
+        if not (isSameObj newNode this) then
             Array.blit this.Children 0 newNode.Children 0 idx
         // Consolidated section
         this.ConsolidateChildren owner shift idx mergeLen newNode.Children
@@ -672,7 +641,7 @@ PrependNChildrenS n seq<ch> seq<sz>
             // TODO: This segment could be pulled out into a function called "applyRebalancePlan"
             let newNode = this.GetEditableEmptyNodeOfLengthN owner newLen :?> RRBFullNode<'T>
             // Prefix
-            if not (LanguagePrimitives.PhysicalEquality newNode this) then
+            if not (isSameObj newNode this) then
                 Array.blit this.Children 0 newNode.Children 0 idx
             // Consolidated section
             this.ConsolidateChildren owner shift idx mergeLen newNode.Children
@@ -748,7 +717,7 @@ and [<StructuredFormatDisplay("RelaxedNode({StringRepr})")>] RRBRelaxedNode<'T>(
         then this :> RRBNode<'T>
         else RRBRelaxedNode<'T>(owner, Array.copy children, Array.copy sizeTable) :> RRBNode<'T>
 
-    override this.Shrink _ = this :> RRBNode<'T>
+    override this.Shrink owner = this.GetEditableNode owner
     override this.Expand owner =
         let node' = this.GetEditableNode owner :?> RRBRelaxedNode<'T>
         RRBExpandedRelaxedNode<'T>(owner, node'.Children, node'.SizeTable) :> RRBNode<'T>
@@ -949,39 +918,6 @@ and [<StructuredFormatDisplay("RelaxedNode({StringRepr})")>] RRBRelaxedNode<'T>(
 
     // ===== END of NODE MANIPULATION functions =====
 
-    override this.SplitNodeIntoArrays owner shift splitIdx =
-        // TODO: Expanded nodes *must* rewrite this so that the right children will be handled correctly (not filled with nulls, since we won't always *want* the right child to end up expanded)
-        // TODO: Find and replace all occurrences of SplitNodeIntoArrays with the SplitAndKeep versions above... unless there's a darn good reason for using the arrays version here
-        let leftChildren, rightChildren = this.Children |> Array.splitAt splitIdx
-        let leftSizes, rightSizes = this.SizeTable |> Array.splitAt splitIdx
-        if splitIdx > 0 then
-            let lastLeftSize = Array.last leftSizes
-            let lastRightIdx = rightSizes.Length - 1
-            for i = 0 to lastRightIdx do
-                rightSizes.[i] <- rightSizes.[i] - lastLeftSize
-        (leftChildren, leftSizes), (rightChildren, rightSizes)
-
-    override this.RemoveLeftmostChildren owner shift itemCount =
-        // TODO: Document that itemCount of 0 should never happen, and/or make sure it does. This should be an internal function anyway. OR... decide that it's okay, and verify that it's okay.
-#if DEBUG
-        if itemCount <= 0 then failwith <| sprintf "Item count of %d in RRBFullNode<'T>.RemoveLeftmostChildren -- should never be zero or negative" itemCount
-#else
-        if itemCount <= 0 then Seq.empty, this :> RRBNode<'T> else
-#endif
-        // TODO: Triple-check this one because I wrote it in haste. Check that the cumulative size table is correct, for example: make sure it doesn't start with 0
-        let newLen = this.NodeSize - itemCount
-        let newNode = this.GetEditableEmptyNodeOfLengthN owner newLen :?> RRBRelaxedNode<'T>
-        // TODO: Consider the scenario where GetEditableEmptyNodeOfLengthN returns `this`. We'd end up returning the wrong set of children in the result below unless we created an intermediate array.
-        // And if that's the case, why are we trying so hard to *avoid* creating an intermediate array here? Just split the arrays and be done with it, and call this.CreateSomethingSizeTable (new function)
-        // to create the new nodes from items and size tables. Why a new function? Because our current CreateWithSizeTable is a static method, so RRBExpandedRelaxedNode won't override it, and we want
-        // to override it in the specific case of an expanded node (which will create an array of length 32 and then use Array.CopyTo to populate it from the source arrays).
-        if newLen > 0 then
-            let sizeDiff = this.SizeTable.[itemCount - 1]
-            for i = 0 to newLen - 1 do
-                let j = i + itemCount
-                newNode.Children.[i] <- this.Children.[j]
-                newNode.SizeTable.[i] <- this.SizeTable.[j] - sizeDiff
-        ((this.Children |> Seq.truncate itemCount), (this.SizeTable |> Seq.truncate itemCount)) ||> Seq.map2 (fun child size -> child, size), newNode :> RRBNode<'T>
 
     // TODO: If there's a good way to implement this, do so. Might be more efficient, might not.
     // override this.InsertAndSlideChildrenLeft owner shift localIdx newChild leftSibling =
@@ -992,107 +928,6 @@ and [<StructuredFormatDisplay("RelaxedNode({StringRepr})")>] RRBRelaxedNode<'T>(
 
     // override this.InsertAndSplitNode owner shift localIdx newChild =
     //     failwith "Not implemented"
-
-
-
-and [<StructuredFormatDisplay("{StringRepr}")>] RRBLeafNode<'T>(ownerToken : OwnerToken, items : 'T[]) =
-    inherit RRBNode<'T>(ownerToken)
-
-    member this.Items = items
-
-    override this.NodeSize = items.Length
-    override this.TreeSize _ = items.Length
-    override this.SlotCount =
-        failwith "Slot count called on a leaf node"  // TODO: Remove this before going into production, and make it return this.NodeSize
-        this.NodeSize
-    override this.TwigSlotCount =
-        failwith "Twig slot count called on a leaf node"  // TODO: Remove this before going into production, and make it return this.NodeSize
-        this.NodeSize
-
-    override this.SetNodeSize _ = ()
-
-    member this.StringRepr : string = sprintf "L%d" this.NodeSize
-
-    override this.Shrink _ = this :> RRBNode<'T>
-    override this.Expand owner =
-        // If anyone else might possibly have a reference to this node, we need to copy the item array
-        // But if the item array isn't Literals.blockSize in length, then the RRBExpandedLeafNode constructor will take care of that detail for us
-        let safeItems = if not (this.IsEditableBy owner) && this.NodeSize = Literals.blockSize then Array.copy items else items
-        RRBExpandedLeafNode<'T>(owner, safeItems) :> RRBNode<'T>
-
-    override this.GetEditableNode owner =
-        if this.IsEditableBy owner
-        then this :> RRBNode<'T>
-        else RRBLeafNode<'T>(owner, Array.copy items) :> RRBNode<'T>
-
-    override this.GetEditableEmptyNodeOfLengthN owner len =
-        if this.IsEditableBy owner && this.Items.Length = len
-        then this :> RRBNode<'T>
-        else RRBLeafNode<'T>(owner, Array.zeroCreate len) :> RRBNode<'T>
-
-    abstract member LeafNodeWithItems : OwnerToken -> 'T [] -> RRBLeafNode<'T>
-    default this.LeafNodeWithItems owner newItems =
-        if this.NodeSize = newItems.Length then  // NOT this.NodeSize here
-            let newNode = this.GetEditableNode owner :?> RRBLeafNode<'T>
-            newItems.CopyTo(newNode.Items, 0)
-            newNode
-        else
-            RRBNode<'T>.MkLeaf owner newItems
-
-    member this.UpdatedItem owner localIdx newItem =
-        let node = this.GetEditableNode owner :?> RRBLeafNode<'T>
-        node.Items.[localIdx] <- newItem
-        node :> RRBNode<'T>
-
-    override this.UpdatedTree owner shift treeIdx newItem =
-        this.UpdatedItem owner treeIdx newItem
-
-    abstract member InsertedItem : OwnerToken -> int -> 'T -> RRBLeafNode<'T>
-    default this.InsertedItem owner localIdx item =
-        // ExpandedLeafNodes will override this to do an insert in place if they can,
-        // but shrunken nodes cannot insert in place so there's no point in checking the owner in *this* class.
-        let newItems = this.Items |> Array.copyAndInsertAt localIdx item
-        RRBLeafNode<'T>(owner, newItems)
-
-    abstract member AppendedItem : OwnerToken -> 'T -> RRBLeafNode<'T>
-    default this.AppendedItem owner item =
-        // ExpandedLeafNodes will override this to do an insert in place if they can,
-        // but shrunken nodes cannot insert in place so there's no point in checking the owner in *this* class.
-        let newItems = this.Items |> Array.copyAndAppend item
-        RRBLeafNode<'T>(owner, newItems)
-
-    override this.InsertedTree owner shift treeIdx item parentOpt idxOfNodeInParent =
-        if this.NodeSize < Literals.blockSize then
-            SimpleInsertion (this.InsertedItem owner treeIdx item :> RRBNode<'T>)
-        else
-            let localIdx = treeIdx
-            match (parentOpt, idxOfNodeInParent) with
-            | Some parent, idx when idx > 0 && parent.Children.[idx - 1].NodeSize < Literals.blockSize ->
-                // Room in the left sibling
-                let leftSib = parent.Children.[idx - 1] :?> RRBLeafNode<'T>
-                let newLeftItems, newRightItems = Array.appendAndInsertAndSplitEvenly (localIdx + leftSib.NodeSize) item leftSib.Items this.Items
-                let newLeft  = RRBNode<'T>.MkLeaf owner newLeftItems :> RRBNode<'T>
-                let newRight = this.LeafNodeWithItems owner newRightItems :> RRBNode<'T>
-                SlidItemsLeft (newLeft, newRight)
-            | Some parent, idx when idx < (parent.NodeSize - 1) && parent.Children.[idx + 1].NodeSize < Literals.blockSize ->
-                // Room in the right sibling
-                let rightSib = parent.Children.[idx + 1] :?> RRBLeafNode<'T>
-                let newLeftItems, newRightItems = Array.appendAndInsertAndSplitEvenly localIdx item this.Items rightSib.Items
-                // Note that we DON'T use LeafNodeWithItems here: expanded leaves may only be the rightmost leaf in the tree,
-                // so if this is an expanded note that would benefit from using LeafNodeWithItems, we should never reach this branch
-                let newLeft  = RRBNode<'T>.MkLeaf owner newLeftItems :> RRBNode<'T>
-                let newRight = RRBNode<'T>.MkLeaf owner newRightItems :> RRBNode<'T>
-                SlidItemsRight (newLeft, newRight)
-            | _ ->
-                // Don't need to get fancy with SplitNode here, though expanded leaf nodes will want to do something slightly more clever (ensuring that the new right-hand node is still expanded)
-                let newLeftItems, newRightItems = Array.insertAndSplitEvenly localIdx item this.Items
-                let newLeft  = RRBNode<'T>.MkLeaf owner newLeftItems :> RRBNode<'T>
-                let newRight = this.LeafNodeWithItems owner newRightItems :> RRBNode<'T>
-                SplitNode (newLeft, newRight)
-
-    abstract member RemoveLastItem : OwnerToken -> RRBLeafNode<'T>
-    override this.RemoveLastItem owner =
-        this.Items |> Array.copyAndPop |> RRBNode<'T>.MkLeaf owner
 
 
 
@@ -1111,12 +946,15 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
     member this.StringRepr : string = sprintf "length=%d, children=%A" this.NodeSize this.Children  // TODO: Determine whether to use `this.Children |> Array.truncate this.NodeSize` here
 
     override this.Shrink owner =
-        let len = this.NodeSize
-        let children' =
-            if len = Literals.blockSize
-            then Array.copy this.Children
-            else this.Children |> Array.truncate len
-        RRBFullNode<'T>(owner, children') :> RRBNode<'T>
+        if this.IsEditableBy owner then
+            RRBFullNode<'T>(owner, this.Children) :> RRBNode<'T>
+        else
+            let size = this.NodeSize
+            let children' =
+                if size = Literals.blockSize
+                then Array.copy this.Children
+                else this.Children |> Array.truncate size
+            RRBFullNode<'T>(owner, children') :> RRBNode<'T>
 
     override this.Expand owner = this.GetEditableNode owner
 
@@ -1142,7 +980,12 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         let trulyFull = this.FullNodeIsTrulyFull shift
         let node' = this.GetEditableNode owner :?> RRBExpandedFullNode<'T>
         let oldSize = node'.NodeSize
-        node'.Children.[oldSize] <- newChild
+        // Expanded nodes always have their rightmost child, and only that child, expanded
+        let lastChild = node'.LastChild
+        let shrunkLastChild = lastChild.Shrink owner
+        if not (isSameObj lastChild shrunkLastChild) then
+            node'.Children.[oldSize - 1] <- shrunkLastChild
+        node'.Children.[oldSize] <- newChild.Expand owner
         node'.SetNodeSize (oldSize + 1)
         // Full nodes are allowed to have their last item be non-full, so we have to check that
         if trulyFull then
@@ -1180,6 +1023,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
             node'.ToRelaxedNodeIfNeeded shift :?> RRBFullNode<'T>
 
     override this.RemoveChild owner shift localIdx =
+        if localIdx = this.NodeSize - 1 then this.RemoveLastChild owner shift else
         let node' = this.GetEditableNode owner :?> RRBExpandedFullNode<'T>
         let newSize = node'.NodeSize - 1
         for i = localIdx to newSize - 1 do
@@ -1197,6 +1041,11 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         let newSize = node'.NodeSize - 1
         node'.Children.[newSize] <- null
         node'.SetNodeSize newSize
+        if newSize > 0 then
+            let lastChild = node'.LastChild
+            let expandedLastChild = lastChild.Expand owner
+            if not (isSameObj lastChild expandedLastChild) then
+                node'.Children.[newSize - 1] <- expandedLastChild
         // Removing the last child from a full node can never make it non-full
         node' :> RRBFullNode<'T>
 
@@ -1226,6 +1075,11 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         for i = n to node'.NodeSize - 1 do
             node'.Children.[i] <- null
         node'.SetNodeSize n
+        if n > 0 then
+            let lastChild = node'.LastChild
+            let expandedLastChild = lastChild.Expand owner
+            if not (isSameObj lastChild expandedLastChild) then
+                node'.Children.[n - 1] <- expandedLastChild
         node' :> RRBFullNode<'T>
         // Cannot become a relaxed node, since full nodes have all but their last child full (and the last child may be full)
 
@@ -1247,6 +1101,12 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
             failwithf "In SplitAndKeepNLeft, n must be at least one, got %d. This node: %A" n this
 #endif
         let r = Array.sub this.Children n (this.NodeSize - n)
+        let rLen = r.Length
+        if rLen > 0 then
+            let lastChild = r.[rLen - 1]
+            let shrunkLastChild = lastChild.Shrink owner
+            if not (isSameObj lastChild shrunkLastChild) then
+                r.[rLen - 1] <- shrunkLastChild
         let node' = this.KeepNLeft owner shift n
         (node', r)
 
@@ -1255,14 +1115,13 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         if n <= 0 then
             failwithf "In SplitAndKeepNLeftS, n must be at least one, got %d. This node: %A" n this
 #endif
-        let r = Array.sub this.Children n (this.NodeSize - n)
         let size = this.NodeSize
         let sizeTable = this.BuildSizeTable shift size (size-1)
         let lS, rS = sizeTable |> Array.splitAt n
         let lastSize = lS |> Array.last
         for i = 0 to rS.Length - 1 do
             rS.[i] <- rS.[i] - lastSize
-        let node' = this.KeepNLeft owner shift n
+        let node', r = this.SplitAndKeepNLeft owner shift n
         (node', (r, rS))
 
     override this.SplitAndKeepNRight owner shift n =
@@ -1290,6 +1149,11 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
     override this.AppendNChildren owner shift n newChildren =
         let node' = this.GetEditableNode owner :?> RRBExpandedFullNode<'T>
         let size = node'.NodeSize
+        // Expanded nodes always have their rightmost child, and only that child, expanded
+        let lastChild = node'.LastChild
+        let shrunkLastChild = lastChild.Shrink owner
+        if not (isSameObj lastChild shrunkLastChild) then
+            node'.Children.[size - 1] <- shrunkLastChild
         let newSize = size + n
         let fullChildSize = (1 <<< shift)
         let mutable stillFull = (node'.LastChild.TreeSize (down shift) >= fullChildSize)
@@ -1302,6 +1166,10 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
                     let childSize = eC.Current.TreeSize (down shift)
                     stillFull <- childSize >= fullChildSize
         node'.SetNodeSize newSize
+        let newLastChild = node'.LastChild
+        let expandedNewLastChild = newLastChild.Expand owner
+        if not (isSameObj newLastChild expandedNewLastChild) then
+            node'.Children.[newSize - 1] <- expandedNewLastChild
         if stillFull then
             node' :> RRBFullNode<'T>
         else
@@ -1311,6 +1179,11 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         // Note: "sizes" should be a sequence of size table entries, i.e. cumulative: instead of [3;4;3;2;4] it should be [3;7;10;12;16]
         let node' = this.GetEditableNode owner :?> RRBExpandedFullNode<'T>
         let size = node'.NodeSize
+        // Expanded nodes always have their rightmost child, and only that child, expanded
+        let lastChild = node'.LastChild
+        let shrunkLastChild = lastChild.Shrink owner
+        if not (isSameObj lastChild shrunkLastChild) then
+            node'.Children.[size - 1] <- shrunkLastChild
         let newSize = size + n
         let sizeTable = this.BuildSizeTable shift size (size - 1)
         let sizeTable' = Array.zeroCreate Literals.blockSize
@@ -1332,6 +1205,10 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
                     // Last child can be non-full, but we need to check all the others
                     stillFull <- childSize >= (1 <<< shift)
         node'.SetNodeSize newSize
+        let newLastChild = node'.LastChild
+        let expandedNewLastChild = newLastChild.Expand owner
+        if not (isSameObj newLastChild expandedNewLastChild) then
+            node'.Children.[newSize - 1] <- expandedNewLastChild
         if stillFull then
             node' :> RRBFullNode<'T>
         else
@@ -1413,16 +1290,19 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
     member this.StringRepr : string = sprintf "length=%d, sizetable=%A, children=%A" this.NodeSize this.SizeTable this.Children  // TODO: Determine whether to use `this.Children |> Array.truncate this.NodeSize` here
 
     override this.Shrink owner =
-        let len = this.NodeSize
-        let children' =
-            if len = Literals.blockSize
-            then Array.copy this.Children
-            else this.Children |> Array.truncate len
-        let sizeTable' =
-            if len = Literals.blockSize
-            then Array.copy this.SizeTable
-            else this.SizeTable |> Array.truncate len
-        RRBRelaxedNode<'T>(owner, children', sizeTable') :> RRBNode<'T>
+        if this.IsEditableBy owner then
+            RRBRelaxedNode<'T>(owner, this.Children, this.SizeTable) :> RRBNode<'T>
+        else
+            let size = this.NodeSize
+            let children' =
+                if size = Literals.blockSize
+                then Array.copy this.Children
+                else this.Children |> Array.truncate size
+            let sizeTable' =
+                if size = Literals.blockSize
+                then Array.copy this.SizeTable
+                else this.SizeTable |> Array.truncate size
+            RRBRelaxedNode<'T>(owner, children', sizeTable') :> RRBNode<'T>
 
     override this.Expand owner = this.GetEditableNode owner
 
@@ -1452,7 +1332,12 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         if oldSize <= 0 then
             failwithf "AppendChildS called on an empty node; this should never happen. Parameters: owner=%A shift=%d newChild=%A and this node=%A" owner shift newChild this
 #endif
-        node'.Children.[oldSize] <- newChild
+        // Expanded nodes always have their rightmost child, and only that child, expanded
+        let lastChild = node'.LastChild
+        let shrunkLastChild = lastChild.Shrink owner
+        if not (isSameObj lastChild shrunkLastChild) then
+            node'.Children.[oldSize - 1] <- shrunkLastChild
+        node'.Children.[oldSize] <- newChild.Expand owner
         node'.SizeTable.[oldSize] <- node'.SizeTable.[oldSize - 1] + newChildSize
         node'.SetNodeSize (oldSize + 1)
         node' :> RRBFullNode<'T>
@@ -1473,6 +1358,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         node'.ToFullNodeIfNeeded shift
 
     override this.RemoveChild owner shift localIdx =
+        if localIdx = this.NodeSize - 1 then this.RemoveLastChild owner shift else
         let node' = this.GetEditableNode owner :?> RRBExpandedRelaxedNode<'T>
         let size = node'.NodeSize
         let newSize = size - 1
@@ -1483,7 +1369,10 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         node'.Children.[newSize] <- null
         node'.SizeTable.[newSize] <- 0
         node'.SetNodeSize newSize
-        node'.ToFullNodeIfNeeded shift
+        if newSize > 0 then
+            node'.ToFullNodeIfNeeded shift
+        else
+            node' :> RRBFullNode<'T>
 
     override this.RemoveLastChild owner shift =
         // TODO: First make sure that "owner" isn't null at this point, because that's causing a failure in one of my tests
@@ -1494,7 +1383,14 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         node'.Children.[newSize] <- null
         node'.SizeTable.[newSize] <- 0
         node'.SetNodeSize newSize
-        node'.ToFullNodeIfNeeded shift
+        if newSize > 0 then
+            let lastChild = node'.LastChild
+            let expandedLastChild = lastChild.Expand owner
+            if not (isSameObj lastChild expandedLastChild) then
+                node'.Children.[newSize - 1] <- expandedLastChild
+            node'.ToFullNodeIfNeeded shift
+        else
+            node' :> RRBFullNode<'T>
 
     // No need to override UpdateChildSRel and UpdateChildSAbs; versions from compact RRBRelaxedNode will work just fine in expanded nodes
 
@@ -1505,7 +1401,14 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
             node'.Children.[i] <- null
             node'.SizeTable.[i] <- 0
         node'.SetNodeSize n
-        node'.ToFullNodeIfNeeded shift
+        if n > 0 then
+            let lastChild = node'.LastChild
+            let expandedLastChild = lastChild.Expand owner
+            if not (isSameObj lastChild expandedLastChild) then
+                node'.Children.[n - 1] <- expandedLastChild
+            node'.ToFullNodeIfNeeded shift
+        else
+            node' :> RRBFullNode<'T>
 
     override this.KeepNRight owner shift n =
         let skip = this.NodeSize - n
@@ -1535,6 +1438,12 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
             failwithf "In SplitAndKeepNLeft, n must be at least one, got %d. This node: %A" n this
 #endif
         let r = Array.sub this.Children n (this.NodeSize - n)
+        let rLen = r.Length
+        if rLen > 0 then
+            let lastChild = r.[rLen - 1]
+            let shrunkLastChild = lastChild.Shrink owner
+            if not (isSameObj lastChild shrunkLastChild) then
+                r.[rLen - 1] <- shrunkLastChild
         let node' = this.KeepNLeft owner shift n
         (node', r)
 
@@ -1548,8 +1457,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         let rS = Array.sub this.SizeTable n (size - n)
         for i = 0 to rS.Length - 1 do
             rS.[i] <- rS.[i] - lastSizeL
-        let r = Array.sub this.Children n (size - n)
-        let node' = this.KeepNLeft owner shift n
+        let node', r = this.SplitAndKeepNLeft owner shift n
         (node', (r, rS))
 
     override this.SplitAndKeepNRight owner shift n =
@@ -1576,6 +1484,11 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
     override this.AppendNChildren owner shift n newChildren =
         let node' = this.GetEditableNode owner :?> RRBExpandedRelaxedNode<'T>
         let size = node'.NodeSize
+        // Expanded nodes always have their rightmost child, and only that child, expanded
+        let lastChild = node'.LastChild
+        let shrunkLastChild = lastChild.Shrink owner
+        if not (isSameObj lastChild shrunkLastChild) then
+            node'.Children.[size - 1] <- shrunkLastChild
         let newSize = size + n
         let mutable prevSizeTableEntry = node'.SizeTable.[size - 1]
         use eC = newChildren.GetEnumerator()
@@ -1587,12 +1500,21 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
                 node'.SizeTable.[i] <- nextSizeTableEntry
                 prevSizeTableEntry <- nextSizeTableEntry
         node'.SetNodeSize newSize
+        let newLastChild = node'.LastChild
+        let expandedNewLastChild = newLastChild.Expand owner
+        if not (isSameObj newLastChild expandedNewLastChild) then
+            node'.Children.[newSize - 1] <- expandedNewLastChild
         node' :> RRBFullNode<'T>
 
     override this.AppendNChildrenS owner shift n newChildren sizes =
         // Note: "sizes" should be a sequence of size table entries, i.e. cumulative: instead of [3;4;3;2;4] it should be [3;7;10;12;16]
         let node' = this.GetEditableNode owner :?> RRBExpandedRelaxedNode<'T>
         let size = node'.NodeSize
+        // Expanded nodes always have their rightmost child, and only that child, expanded
+        let lastChild = node'.LastChild
+        let shrunkLastChild = lastChild.Shrink owner
+        if not (isSameObj lastChild shrunkLastChild) then
+            node'.Children.[size - 1] <- shrunkLastChild
         let newSize = size + n
         let lastSizeTableEntry = node'.SizeTable.[size - 1]
         use eC = newChildren.GetEnumerator()
@@ -1606,6 +1528,10 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
                     failwithf "AppendNChildrenS called on an empty node; this should never happen. Parameters: owner=%A shift=%d n=%d newChildren=%A sizes=%A and this node=%A" owner shift n newChildren sizes this
 #endif
         node'.SetNodeSize newSize
+        let newLastChild = node'.LastChild
+        let expandedNewLastChild = newLastChild.Expand owner
+        if not (isSameObj newLastChild expandedNewLastChild) then
+            node'.Children.[newSize - 1] <- expandedNewLastChild
         node' :> RRBFullNode<'T>
 
     override this.PrependNChildren owner shift n newChildren =
@@ -1650,62 +1576,95 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
 
     // ===== END of NODE MANIPULATION functions =====
 
-// REDESIGN: Leaf nodes will never be expanded; only tree nodes will ever be expanded.
 
 
-and [<StructuredFormatDisplay("ERROR: ExpandedLeafNode shouldn't exist!")>] RRBExpandedLeafNode<'T>(ownerToken : OwnerToken, items : 'T[], ?realSize : int) =
-    inherit RRBLeafNode<'T>(ownerToken, Array.expandToBlockSize items)
+and [<StructuredFormatDisplay("{StringRepr}")>] RRBLeafNode<'T>(ownerToken : OwnerToken, items : 'T[]) =
+    inherit RRBNode<'T>(ownerToken)
 
-    member val CurrentLength : int = defaultArg realSize (Array.length items) with get, set
-    override this.NodeSize = this.CurrentLength
+    member this.Items = items
 
-    override this.Shrink owner =
-        let len = this.NodeSize
-        let items' =
-            if len = Literals.blockSize
-            then Array.copy items
-            else items |> Array.truncate len
-        RRBLeafNode<'T>(owner, items') :> RRBNode<'T>
+    override this.NodeSize = items.Length
+    override this.TreeSize _ = items.Length
+    override this.SlotCount =
+        failwith "Slot count called on a leaf node"  // TODO: Remove this before going into production, and make it return this.NodeSize
+        this.NodeSize
+    override this.TwigSlotCount =
+        failwith "Twig slot count called on a leaf node"  // TODO: Remove this before going into production, and make it return this.NodeSize
+        this.NodeSize
 
-    override this.Expand owner =
-        if this.IsEditableBy owner then this :> RRBNode<'T> else RRBExpandedLeafNode<'T>(owner, Array.copy this.Items) :> RRBNode<'T>
+    override this.SetNodeSize _ = ()
+
+    member this.StringRepr : string = sprintf "L%d" this.NodeSize
+
+    override this.Shrink owner = this.GetEditableNode owner
+    override this.Expand owner = this.GetEditableNode owner
 
     override this.GetEditableNode owner =
         if this.IsEditableBy owner
         then this :> RRBNode<'T>
-        else RRBExpandedLeafNode<'T>(owner, Array.copy this.Items) :> RRBNode<'T>
+        else RRBLeafNode<'T>(owner, Array.copy items) :> RRBNode<'T>
 
-    override this.SetNodeSize newSize = this.CurrentLength <- newSize
+    override this.GetEditableEmptyNodeOfLengthN owner len =
+        if this.IsEditableBy owner && this.Items.Length = len
+        then this :> RRBNode<'T>
+        else RRBLeafNode<'T>(owner, Array.zeroCreate len) :> RRBNode<'T>
 
-    override this.InsertedItem owner localIdx item =
-        // No bounds-checking: that's the job of the caller
-        let newLeaf = this.GetEditableNode owner :?> RRBExpandedLeafNode<'T>
-        Array.blit newLeaf.Items localIdx newLeaf.Items (localIdx+1) (newLeaf.NodeSize - localIdx)
-        newLeaf.Items.[localIdx] <- item
-        newLeaf.CurrentLength <- newLeaf.NodeSize + 1
-        newLeaf :> RRBLeafNode<'T>
+    // TODO: This one might not be needed anymore
+    member this.LeafNodeWithItems owner (newItems : 'T []) =
+        if this.NodeSize = newItems.Length then  // NOT this.NodeSize here
+            let newNode = this.GetEditableNode owner :?> RRBLeafNode<'T>
+            newItems.CopyTo(newNode.Items, 0)
+            newNode
+        else
+            RRBNode<'T>.MkLeaf owner newItems
 
-    override this.AppendedItem owner item =
-        // No bounds-checking: that's the job of the caller
-        let newLeaf = this.GetEditableNode owner :?> RRBExpandedLeafNode<'T>
-        let len = newLeaf.NodeSize
-        newLeaf.Items.[len] <- item
-        newLeaf.CurrentLength <- len + 1
-        newLeaf :> RRBLeafNode<'T>
+    member this.UpdatedItem owner localIdx newItem =
+        let node = this.GetEditableNode owner :?> RRBLeafNode<'T>
+        node.Items.[localIdx] <- newItem
+        node :> RRBNode<'T>
 
-    override this.LeafNodeWithItems owner newItems =
-        let oldNodeLength = this.NodeSize
-        let newNode = this.GetEditableNode owner :?> RRBExpandedLeafNode<'T>
-        let newNodeLength = newItems.Length
-        newItems.CopyTo(newNode.Items, 0)
-        for i = newNodeLength to oldNodeLength - 1 do
-            newNode.Items.[i] <- Unchecked.defaultof<'T>
-        newNode.CurrentLength <- newNodeLength
-        newNode :> RRBLeafNode<'T>
+    override this.UpdatedTree owner shift treeIdx newItem =
+        this.UpdatedItem owner treeIdx newItem
 
+    member this.InsertedItem owner localIdx item =
+        // Leaf nodes are never expanded and cannot insert in place so there's no point in checking the owner.
+        let newItems = this.Items |> Array.copyAndInsertAt localIdx item
+        RRBLeafNode<'T>(owner, newItems)
+
+    member this.AppendedItem owner item =
+        // Leaf nodes are never expanded and cannot insert in place so there's no point in checking the owner.
+        let newItems = this.Items |> Array.copyAndAppend item
+        RRBLeafNode<'T>(owner, newItems)
+
+    override this.InsertedTree owner shift treeIdx item parentOpt idxOfNodeInParent =
+        if this.NodeSize < Literals.blockSize then
+            SimpleInsertion (this.InsertedItem owner treeIdx item :> RRBNode<'T>)
+        else
+            let localIdx = treeIdx
+            match (parentOpt, idxOfNodeInParent) with
+            | Some parent, idx when idx > 0 && parent.Children.[idx - 1].NodeSize < Literals.blockSize ->
+                // Room in the left sibling
+                let leftSib = parent.Children.[idx - 1] :?> RRBLeafNode<'T>
+                let newLeftItems, newRightItems = Array.appendAndInsertAndSplitEvenly (localIdx + leftSib.NodeSize) item leftSib.Items this.Items
+                let newLeft  = RRBNode<'T>.MkLeaf owner newLeftItems :> RRBNode<'T>
+                let newRight = this.LeafNodeWithItems owner newRightItems :> RRBNode<'T>
+                SlidItemsLeft (newLeft, newRight)
+            | Some parent, idx when idx < (parent.NodeSize - 1) && parent.Children.[idx + 1].NodeSize < Literals.blockSize ->
+                // Room in the right sibling
+                let rightSib = parent.Children.[idx + 1] :?> RRBLeafNode<'T>
+                let newLeftItems, newRightItems = Array.appendAndInsertAndSplitEvenly localIdx item this.Items rightSib.Items
+                // Note that we DON'T use LeafNodeWithItems here: expanded leaves may only be the rightmost leaf in the tree,
+                // so if this is an expanded note that would benefit from using LeafNodeWithItems, we should never reach this branch
+                let newLeft  = RRBNode<'T>.MkLeaf owner newLeftItems :> RRBNode<'T>
+                let newRight = RRBNode<'T>.MkLeaf owner newRightItems :> RRBNode<'T>
+                SlidItemsRight (newLeft, newRight)
+            | _ ->
+                // Don't need to get fancy with SplitNode here, though expanded leaf nodes will want to do something slightly more clever (ensuring that the new right-hand node is still expanded)
+                let newLeftItems, newRightItems = Array.insertAndSplitEvenly localIdx item this.Items
+                let newLeft  = RRBNode<'T>.MkLeaf owner newLeftItems :> RRBNode<'T>
+                let newRight = this.LeafNodeWithItems owner newRightItems :> RRBNode<'T>
+                SplitNode (newLeft, newRight)
+
+    abstract member RemoveLastItem : OwnerToken -> RRBLeafNode<'T>
     override this.RemoveLastItem owner =
-        let newLeaf = this.GetEditableNode owner :?> RRBExpandedLeafNode<'T>
-        let idx = this.NodeSize - 1
-        newLeaf.Items.[idx] <- Unchecked.defaultof<'T>
-        newLeaf.CurrentLength <- idx
-        newLeaf :> RRBLeafNode<'T>
+        this.Items |> Array.copyAndPop |> RRBNode<'T>.MkLeaf owner
