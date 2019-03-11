@@ -478,34 +478,92 @@ PrependNChildrenS n seq<ch> seq<sz>
         let fullSize = 1 <<< shift
         Array.init count (fun idx -> if idx = lastIdx then fullSize * idx + this.Children.[idx].TreeSize (down shift) else fullSize * (idx + 1))
 
-    abstract member InsertAndSlideChildrenLeft : OwnerToken -> int -> int -> RRBNode<'T> -> RRBFullNode<'T> -> RRBFullNode<'T> * RRBFullNode<'T>
-    default this.InsertAndSlideChildrenLeft owner shift localIdx newChild leftSibling =
-        // if localIdx <= itemCount then
-        //     printfn "DEBUG: Inserted item will end up in left sibling (left-hand side of slide left)"
-        // else
-        //     printfn "DEBUG: Inserted item will end up in this node (right-hand side of slide left)"
-        let newLeftItems, newRightItems = Array.appendAndInsertAndSplitEvenly (localIdx + leftSibling.NodeSize) newChild leftSibling.Children this.Children
-        // TODO: Might be able to be clever with an "append new items" thing in the left sibling, but this will do since it's simple
-        // TODO: Optimize LATER, once we're sure that this works. Don't prematurely optimize.
-        let newLeft  = RRBNode<'T>.MkNode owner shift newLeftItems
-        let newRight = RRBNode<'T>.MkNode owner shift newRightItems
-        newLeft, newRight
+    member this.SlideChildrenLeft owner shift n (leftSibling : RRBFullNode<'T>) =
+        let (l, lS), this' = this.SplitAndKeepNRightS owner shift n
+        let leftSibling' = leftSibling.AppendNChildrenS owner shift n l lS
+        leftSibling', this'
 
-    abstract member InsertAndSlideChildrenRight : OwnerToken -> int -> int -> RRBNode<'T> -> RRBFullNode<'T> -> RRBFullNode<'T> * RRBFullNode<'T>
-    default this.InsertAndSlideChildrenRight owner shift localIdx newChild rightSibling =
-        let newLeftItems, newRightItems = Array.appendAndInsertAndSplitEvenly localIdx newChild this.Children rightSibling.Children
-        // TODO: Might be able to be clever with an "insert new items at left side" thing in the right sibling, but this will do since it's simple
-        // TODO: Optimize LATER, once we're sure that this works. Don't prematurely optimize.
-        let newLeft  = RRBNode<'T>.MkNode owner shift newLeftItems
-        let newRight = RRBNode<'T>.MkNode owner shift newRightItems
-        newLeft, newRight
+    member this.SlideChildrenRight owner shift n (rightSibling : RRBFullNode<'T>) =
+        let this', (r, rS) = this.SplitAndKeepNLeftS owner shift n
+        let rightSibling' = rightSibling.PrependNChildrenS owner shift n r rS
+        this', rightSibling'
 
-    abstract member InsertAndSplitNode : OwnerToken -> int -> int -> RRBNode<'T> -> RRBFullNode<'T> * RRBFullNode<'T>
-    default this.InsertAndSplitNode owner shift localIdx newChild =
-        let newLeftItems, newRightItems = Array.insertAndSplitEvenly (localIdx + 1) newChild this.Children
-        let newLeft  = RRBNode<'T>.MkNode owner shift newLeftItems
-        let newRight = RRBNode<'T>.MkNode owner shift newRightItems
-        newLeft, newRight
+    member this.InsertAndSlideChildrenLeft owner shift localIdx newChild (leftSibling : RRBFullNode<'T>) =
+        // TODO: Change this to calculate the amount to slide over, then use SlideChildrenLeft and SlideChildrenRight just up above
+        // Preconditions: this.NodeSize = Literals.blockSize and leftSibling.NodeSize < Literals.blockSize
+
+        // GOAL: we make left and right balanced, with any extra going on the left.
+        // Method: calculate the average size, and make each one fit that average. Extra should go on the side that localIdx isn't on.
+        // Special cases: 32 and 32 = we're not being called in that situation.
+        // 31 and 32: if localIdx = 0, then just AppendChild on the left node and be done with it.
+        // 30 and 32: turns to 31 and 31 and then we can insert on either side.
+        // In the 31/32 case, totalSize will be 63 and that divided by 2 will be 31, so resultSizeL will end up as 31.
+
+        let thisSize = this.NodeSize
+        let sibSize = leftSibling.NodeSize
+#if DEBUG
+        if thisSize <> Literals.blockSize || sibSize >= Literals.blockSize then
+            failwith <| sprintf "InsertAndSlideChildrenLeft should be called when this node is full (size %d) and left sibling is NOT full (size less than %d). Instead, this node was %A and left sibling was %A"
+                                Literals.blockSize Literals.blockSize this leftSibling
+#endif
+        if localIdx = 0 && thisSize = Literals.blockSize && sibSize = Literals.blockSize - 1 then
+            // Special case since the algorithm below would fail on this one scenario
+            let leftSibling' = leftSibling.AppendChild owner shift newChild
+            leftSibling', this
+        else
+            let totalSize = thisSize + sibSize
+            let resultSizeL = totalSize >>> 1
+            let resultSizeR = totalSize - resultSizeL
+            let n = thisSize - resultSizeR |> max 1
+            let l, r = this.SlideChildrenLeft owner shift n leftSibling
+            let idx = localIdx - n   // If we insert at 5 but we slid 3 items over, we're inserting at 2. If we insert at 2 but we slid 3 items over, we're inserting at -1, which is
+            // 1 *before* the node size of the new left sibling. So left sibling was 24, now is 27, we're inserting at 26. Yep.
+            if idx < 0 then
+                // Inserting into left sibling
+                let idx' = idx + l.NodeSize
+                let l' = l.InsertChild owner shift idx' newChild
+                l', r
+            else
+                let r' = r.InsertChild owner shift idx newChild
+                l, r'
+        // Special case of 31/32 must also be considered here. Custom test for that one.
+
+    member this.InsertAndSlideChildrenRight owner shift localIdx newChild (rightSibling : RRBFullNode<'T>) =
+        let thisSize = this.NodeSize
+        let sibSize = rightSibling.NodeSize
+#if DEBUG
+        if thisSize <> Literals.blockSize || sibSize >= Literals.blockSize then
+            failwith <| sprintf "InsertAndSlideChildrenLeft should be called when this node is full (size %d) and left sibling is NOT full (size less than %d). Instead, this node was %A and left sibling was %A"
+                                Literals.blockSize Literals.blockSize this rightSibling
+#endif
+        let totalSize = thisSize + sibSize
+        let resultSizeL = totalSize >>> 1
+        let resultSizeR = totalSize - resultSizeL
+        let n = thisSize - resultSizeL
+        let l, r = this.SlideChildrenRight owner shift n rightSibling
+        if localIdx < resultSizeL then
+            let l' = l.InsertChild owner shift localIdx newChild
+            l', r
+        else
+            // Inserting into right sibling
+            // TODO: Double-check this calculation with specific unit tests
+            let r' = r.InsertChild owner shift (localIdx - resultSizeL) newChild
+            l, r'
+        // Special case of 31/32 must also be considered here. Custom test for that one.
+
+    member this.InsertAndSplitNode owner shift localIdx newChild =
+        let thisSize = this.NodeSize
+        let half = thisSize >>> 1
+        let shouldInsertIntoLeft = localIdx < half
+        let lArr, rNode = this.SplitAndKeepNRight owner shift (thisSize - half)
+        if shouldInsertIntoLeft then
+            let lArr' = lArr |> Array.copyAndInsertAt localIdx newChild
+            let lNode = RRBNode<'T>.MkNode owner shift lArr'
+            lNode, rNode
+        else
+            let lNode  = RRBNode<'T>.MkNode owner shift lArr
+            let rNode' = rNode.InsertChild owner shift (localIdx - half) newChild
+            lNode, rNode'
 
     override this.UpdatedTree owner shift treeIdx newItem =
         let localIdx, child, nextIdx = this.IndexesAndChild shift treeIdx
@@ -518,38 +576,37 @@ PrependNChildrenS n seq<ch> seq<sz>
         match insertResult with
         | SimpleInsertion newChild ->
             SimpleInsertion (this.UpdateChildSRel owner shift localIdx newChild 1 :> RRBNode<'T>)
-        | SlidItemsLeft (newLeft, newChild) ->
-            // Always update the *right* child first, then the left: that way the size table adjustments will be correct
-            let newNode = this.UpdateChildSAbs owner shift localIdx newChild (newChild.TreeSize (down shift))
-            SimpleInsertion (newNode.UpdateChildSAbs owner shift (localIdx - 1) newLeft (newLeft.TreeSize (down shift)) :> RRBNode<'T>)
+        | SlidItemsLeft (newLeftChild, newChild) ->
+            let node' = this.UpdateChildSAbs owner shift (localIdx - 1) newLeftChild (newLeftChild.TreeSize (down shift))
+            SimpleInsertion (node'.UpdateChildSAbs owner shift localIdx newChild (newChild.TreeSize (down shift)) :> RRBNode<'T>)
             // TODO: Do I need an "Update two child items at once" function? What about the size table? We should be able to manage the size table more cleverly in RelaxedNodes.
-        | SlidItemsRight (newChild, newRight) ->
+        | SlidItemsRight (newChild, newRightChild) ->
             let newNode = this.UpdateChildSAbs owner shift localIdx newChild (newChild.TreeSize (down shift))
-            SimpleInsertion (newNode.UpdateChildSAbs owner shift (localIdx + 1) newRight (newRight.TreeSize (down shift)) :> RRBNode<'T>)
+            SimpleInsertion (newNode.UpdateChildSAbs owner shift (localIdx + 1) newRightChild (newRightChild.TreeSize (down shift)) :> RRBNode<'T>)
             // TODO: Comments from SlidItemsLeft re size table apply here too.
-        | SplitNode (newChild, newRight) ->
+        | SplitNode (newLeftChild, newRightChild) ->
             if this.NodeSize < Literals.blockSize then
-                let newNode = this.InsertedChild owner shift (localIdx + 1) newRight (newRight.TreeSize (down shift))
-                SimpleInsertion (newNode.UpdateChildSAbs owner shift localIdx newChild (newChild.TreeSize (down shift)) :> RRBNode<'T>)
+                let newNode = this.UpdateChildSAbs owner shift localIdx newLeftChild (newLeftChild.TreeSize (down shift))
+                SimpleInsertion (newNode.InsertChild owner shift (localIdx + 1) newRightChild :> RRBNode<'T>)
             else
                 let localIdx, _, _ = this.IndexesAndChild shift treeIdx
                 match (parentOpt, idxOfNodeInParent) with
                 | Some parent, idx when idx > 0 && parent.Children.[idx - 1].NodeSize < Literals.blockSize ->
                     // Room in the left sibling
                     let leftSib = parent.Children.[idx - 1] :?> RRBFullNode<'T>
-                    let newNode = this.UpdateChildSAbs owner shift localIdx newChild (newChild.TreeSize (down shift))
-                    let newLeft, newRight = newNode.InsertAndSlideChildrenLeft owner shift (localIdx + 1) newRight leftSib
+                    let newNode = this.UpdateChildSAbs owner shift localIdx newLeftChild (newLeftChild.TreeSize (down shift))
+                    let newLeft, newRight = newNode.InsertAndSlideChildrenLeft owner shift (localIdx + 1) newRightChild leftSib
                     SlidItemsLeft (newLeft :> RRBNode<'T>, newRight :> RRBNode<'T>)
                 | Some parent, idx when idx < (parent.NodeSize - 1) && parent.Children.[idx + 1].NodeSize < Literals.blockSize ->
                     // Room in the right sibling
                     let rightSib = parent.Children.[idx + 1] :?> RRBFullNode<'T>
-                    let newNode = this.UpdateChildSAbs owner shift localIdx newChild (newChild.TreeSize (down shift))
-                    let newLeft, newRight = newNode.InsertAndSlideChildrenRight owner shift (localIdx + 1) newRight rightSib
+                    let newNode = this.UpdateChildSAbs owner shift localIdx newLeftChild (newLeftChild.TreeSize (down shift))
+                    let newLeft, newRight = newNode.InsertAndSlideChildrenRight owner shift (localIdx + 1) newRightChild rightSib
                     SlidItemsRight (newLeft :> RRBNode<'T>, newRight :> RRBNode<'T>)
                 | _ ->
                     // No room left or right, so split
-                    let newNode = this.UpdateChildSAbs owner shift localIdx newChild (newChild.TreeSize (down shift))
-                    let newLeft, newRight = newNode.InsertAndSplitNode owner shift localIdx newRight
+                    let newNode = this.UpdateChildSAbs owner shift localIdx newLeftChild (newLeftChild.TreeSize (down shift))
+                    let newLeft, newRight = newNode.InsertAndSplitNode owner shift localIdx newRightChild
                     SplitNode (newLeft :> RRBNode<'T>, newRight :> RRBNode<'T>)
 
     // abstract member AppendChild : OwnerToken -> int -> RRBNode<'T> -> int -> RRBFullNode<'T>
@@ -561,26 +618,6 @@ PrependNChildrenS n seq<ch> seq<sz>
     //     else
     //         // Last item wasn't full, so this is going to become a relaxed node
     //         RRBNode<'T>.MkNode owner shift newChildren
-
-    abstract member InsertedChild : OwnerToken -> int -> int -> RRBNode<'T> -> int -> RRBFullNode<'T>
-    default this.InsertedChild owner shift localIdx newChild childSize =
-        if localIdx = this.NodeSize then
-            this.AppendChildS owner shift newChild childSize
-        else
-            let fullSize = 1 <<< shift
-            let newChildren = this.Children |> Array.copyAndInsertAt localIdx newChild
-            if childSize = fullSize then
-                // Only way this could be wrong is if we were inserting at the end, i.e. appending, and that's taken care of by "if localIdx = this.NodeSize" above
-                RRBNode<'T>.MkFullNode owner newChildren
-            else
-                // Full node means that all but last child were max size, so we only have to call TreeSize once
-                let sizeTable = Array.zeroCreate (this.NodeSize + 1)
-                let mutable cumulativeSize = 0
-                for i = 0 to this.NodeSize - 1 do
-                    cumulativeSize <- cumulativeSize + (if i = localIdx then childSize else fullSize)
-                    sizeTable.[i] <- cumulativeSize
-                sizeTable.[this.NodeSize] <- cumulativeSize + this.LastChild.TreeSize (down shift)
-                RRBNode<'T>.MkNodeKnownSize owner shift newChildren sizeTable
 
     member this.RemoveLastLeaf owner shift =
         // EXPAND: This needs an implementation in expanded nodes, where we expand the new last child after shrinking the child we return
@@ -605,12 +642,17 @@ PrependNChildrenS n seq<ch> seq<sz>
                 else this.UpdateChildSAbs owner shift (this.NodeSize - 1) newLastChild (newLastChild.TreeSize (down shift))
             leaf, newNode
 
+    member this.PopLastLeaf owner shift = this.RemoveLastLeaf owner shift // TODO: Replace all occurrences of "RemoveLastLeaf" in RRBVector code with "PopLastLeaf"
+
     // --- REBALANCING ---
 
+    // TODO: Switch this up to use our new low-level functions where appropriate.
+    // TODO: We might need one more low-level: ExpandLastChildIfNeeded, which is a no-op in compact nodes but does something in expanded nodes.
+
     member this.Rebalance (owner : OwnerToken) (shift : int) =
-        let items = this.Children |> Seq.ofArray
-        let sizes = items |> Seq.map (fun node -> node.NodeSize)
         let len = this.NodeSize
+        let items = this.Children |> Seq.ofArray
+        let sizes = items |> Seq.truncate len |> Seq.map (fun node -> node.NodeSize)
         let idx, mergeLen = findMergeCandidates sizes len
         let sizeReduction = 1  // When we start using findMergeCandidatesTwoPasses, this will be part of the above line as a 3-tuple, not a 2-tuple
         let newLen = len - sizeReduction
