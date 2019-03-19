@@ -631,7 +631,7 @@ PrependNChildrenS n seq<ch> seq<sz>
 #if DEBUG
                 failwith <| sprintf "RemoveLastLeaf was called on an empty node at shift %d" shift
 #else
-                RRBLeafNode(owner, Array.empty), this  // TODO: Should be able to eliminate this branch, I hope
+                RRBLeafNode(owner, Array.empty), this :> RRBNode<'T>  // TODO: Should be able to eliminate this branch, I hope
 #endif
             else
                 let leaf = this.LastChild :?> RRBLeafNode<'T>
