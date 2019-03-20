@@ -89,9 +89,12 @@ module Array =
 
     let fillFromEnumerator (e : System.Collections.Generic.IEnumerator<'T>) (idx : int) (len : int) (arr : 'T []) =
         let mutable i = idx
-        while i < len && e.MoveNext() do
+        let mutable j = 0
+        let lenArr = arr.Length
+        while i < lenArr && j < len && e.MoveNext() do
             arr.[i] <- e.Current
             i <- i + 1
+            j <- j + 1
 
     let fill2FromEnumerator (e : System.Collections.Generic.IEnumerator<'T>) (idx : int) (len : int) (arrL : 'T []) (arrR : 'T []) =
         let lenL = arrL.Length
@@ -156,9 +159,10 @@ module Array =
                     let arr = Array.zeroCreate lenPerArray
                     fillFromEnumerator e 0 lenPerArray arr
                     yield arr
-                let arr = Array.zeroCreate remainder
-                fillFromEnumerator e 0 remainder arr
-                yield arr
+                if remainder > 0 then
+                    let arr = Array.zeroCreate remainder
+                    fillFromEnumerator e 0 remainder arr
+                    yield arr
             }
 
     let createManyFromSeq (s : 'T seq) (totalLen : int) (lenPerArray : int) =

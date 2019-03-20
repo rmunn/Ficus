@@ -812,8 +812,7 @@ PrependNChildrenS n seq<ch> seq<sz>
             let arrR = Array.zeroCreate lenR
             Array.fill2FromEnumerator items 0 idx arrL arrR
             let mergedChildrenSeq = this.ApplyRebalancePlanNewApi owner shift sizes (idx, mergeLen, sizeReduction) items
-            let mergedChildrenArr = mergedChildrenSeq |> Array.ofSeq  // DEBUG
-            Array.fill2FromSeq mergedChildrenArr idx (mergeLen - sizeReduction) arrL arrR  // DEBUG: back to Seq instead of Arr when done
+            Array.fill2FromSeq mergedChildrenSeq idx (mergeLen - sizeReduction) arrL arrR
             Array.fill2FromEnumerator items (idx + mergeLen - sizeReduction) newLen arrL arrR
             RRBNode<'T>.MkNode owner shift arrL, (RRBNode<'T>.MkNode owner shift arrR |> Some)
 
