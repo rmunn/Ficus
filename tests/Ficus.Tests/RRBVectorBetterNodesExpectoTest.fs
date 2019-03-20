@@ -691,7 +691,7 @@ let appendAndPrependChildrenPropertyTests =
         checkProperties Literals.blockSizeShift result "Result"
         Expect.equal result.NodeSize (node.NodeSize + n) "Node after append should have N more items"
         let actualLeafArrays = result.Children |> Array.truncate result.NodeSize |> Array.map (fun leaf -> (leaf :?> RRBLeafNode<int>).Items)
-        Expect.sequenceEqual actualLeafArrays expectedLeafArrays "Leaves should have been placed in the correct locations"
+        Expect.equal actualLeafArrays expectedLeafArrays "Leaves should have been placed in the correct locations"
 
     testProp "AppendNChildrenS on a generated node" <| fun (IsolatedShortNode node : IsolatedShortNode<int>) (newLeaves : RRBLeafNode<int> []) ->
         let remaining = Literals.blockSize - node.NodeSize
@@ -707,7 +707,7 @@ let appendAndPrependChildrenPropertyTests =
         checkProperties Literals.blockSizeShift result "Result"
         Expect.equal result.NodeSize (node.NodeSize + n) "Node after prepend should have N more items"
         let actualLeafArrays = result.Children |> Array.truncate result.NodeSize |> Array.map (fun leaf -> (leaf :?> RRBLeafNode<int>).Items)
-        Expect.sequenceEqual actualLeafArrays expectedLeafArrays "Leaves should have been placed in the correct locations"
+        Expect.equal actualLeafArrays expectedLeafArrays "Leaves should have been placed in the correct locations"
 
     testProp "PrependNChildren on a generated node" <| fun (IsolatedShortNode node : IsolatedShortNode<int>) (newLeaves : RRBLeafNode<int> []) ->
         let remaining = Literals.blockSize - node.NodeSize
@@ -722,7 +722,7 @@ let appendAndPrependChildrenPropertyTests =
         checkProperties Literals.blockSizeShift result "Result"
         Expect.equal result.NodeSize (node.NodeSize + n) "Node after prepend should have N more items"
         let actualLeafArrays = result.Children |> Array.truncate result.NodeSize |> Array.map (fun leaf -> (leaf :?> RRBLeafNode<int>).Items)
-        Expect.sequenceEqual actualLeafArrays expectedLeafArrays "Leaves should have been placed in the correct locations"
+        Expect.equal actualLeafArrays expectedLeafArrays "Leaves should have been placed in the correct locations"
 
     testProp "PrependNChildrenS on a generated node" <| fun (IsolatedShortNode node : IsolatedShortNode<int>) (newLeaves : RRBLeafNode<int> []) ->
         let remaining = Literals.blockSize - node.NodeSize
@@ -738,7 +738,7 @@ let appendAndPrependChildrenPropertyTests =
         checkProperties Literals.blockSizeShift result "Result"
         Expect.equal result.NodeSize (node.NodeSize + n) "Node after prepend should have N more items"
         let actualLeafArrays = result.Children |> Array.truncate result.NodeSize |> Array.map (fun leaf -> (leaf :?> RRBLeafNode<int>).Items)
-        Expect.sequenceEqual actualLeafArrays expectedLeafArrays "Leaves should have been placed in the correct locations"
+        Expect.equal actualLeafArrays expectedLeafArrays "Leaves should have been placed in the correct locations"
   ]
 
 let twigItems (node : RRBNode<'T>) =
@@ -791,7 +791,7 @@ let doRebalance2Test shift (nodeL : RRBNode<'T>) (nodeR : RRBNode<'T>) =
 
 
 let rebalanceTestsWIP =
-  ftestList "WIP: Rebalance tests" [
+  testList "WIP: Rebalance tests" [
     testProp "Try this" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         doRebalance2Test Literals.blockSizeShift nodeL nodeR
   ]
