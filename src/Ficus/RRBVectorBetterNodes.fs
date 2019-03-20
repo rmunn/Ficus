@@ -61,16 +61,16 @@ module RRBMath =
         sizes |> Array.smallestRunGreaterThan (byte Literals.blockSize)
 
     // TODO: At some point, uncomment this version and test whether it is more efficient
-    // let findMergeCandidatesTwoPasses (sizeSeq : #seq<int>) len =
-    //     use e = sizeSeq.GetEnumerator()
-    //     let sizes = Array.init len (fun _ -> byte (if e.MoveNext() then Literals.blockSize - e.Current else 0))
-    //     let idx1, len1 = sizes |> smallestRunGreaterThan (byte Literals.blockSize)
-    //     let idx2, len2 = sizes |> smallestRunGreaterThan (byte (Literals.blockSize <<< 1))
-    //     // Drop two slots if we can do so in less than twice the work needed to drop a single slot
-    //     if len2 < (len1 * 2) then
-    //         idx2, len2, 2
-    //     else
-    //         idx1, len1, 1
+    let findMergeCandidatesTwoPasses (sizeSeq : #seq<int>) len =
+        use e = sizeSeq.GetEnumerator()
+        let sizes = Array.init len (fun _ -> byte (if e.MoveNext() then Literals.blockSize - e.Current else 0))
+        let idx1, len1 = sizes |> Array.smallestRunGreaterThan (byte Literals.blockSize)
+        let idx2, len2 = sizes |> Array.smallestRunGreaterThan (byte (Literals.blockSize <<< 1))
+        // Drop two slots if we can do so in less than twice the work needed to drop a single slot
+        if len2 < (len1 * 2) then
+            idx2, len2, 2
+        else
+            idx1, len1, 1
 
 
 open RRBMath
@@ -173,7 +173,7 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
             0
         else
             ((this.NodeSize - 1) <<< shift) + this.LastChild.TreeSize (down shift)
-    override this.SlotCount = children |> Array.sumBy (fun child -> child.NodeSize)
+    override this.SlotCount = this.Children |> Array.sumBy (fun child -> child.NodeSize)
     override this.TwigSlotCount =
         // Just as with TreeSize, we can skip calculating all but the rightmost node
         if this.NodeSize = 0 then 0 else ((this.NodeSize - 1) <<< Literals.blockSizeShift) + this.LastChild.NodeSize
@@ -213,7 +213,7 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
 
     member this.IndexesAndChild shift treeIdx =
         let localIdx = radixIndex shift treeIdx
-        let child = children.[localIdx]
+        let child = this.Children.[localIdx]
         let antimask = ~~~(Literals.blockIndexMask <<< shift)
         let nextTreeIdx = treeIdx &&& antimask
         localIdx, child, nextTreeIdx
@@ -688,26 +688,33 @@ PrependNChildrenS n seq<ch> seq<sz>
         else
             let childrenList = childrenSeq |> List.ofSeq
             failwith <| sprintf "Made a miscalculation somewhere; total slots %d yielded an array count of %d which, added to the size reduction %d, should have equaled merge length %d but didn't. Merge start was %d (and merge length was %d), and children to merge were %A" totalSlots arrayCount sizeReduction mergeLen mergeStart mergeLen childrenList
+        if mergeStart + mergeLen - sizeReduction > Literals.blockSize then
+            match secondDestArrOpt with
+            | None ->
+                let childrenList = childrenSeq |> List.ofSeq
+                failwith <| sprintf "Merge start %d and merge length %d (and size reduction %d) would spill onto a second array, but no second array was given; children to merge were %A" mergeStart mergeLen sizeReduction childrenList
+            | Some _ -> ()
 #endif
         let arrays = List.init arrayCount (fun _ -> Array.zeroCreate Literals.blockSize)
         let mutable curArray = List.head arrays
         let mutable rest = List.tail arrays
         let mutable curIdx = 0
         let mutable resultIdx = mergeStart
+        let mutable curDestArr = if resultIdx < Literals.blockSize then destArr else secondDestArrOpt.Value
         let mutable finished = false
         let grandChildrenSeq = childrenToBalance |> Seq.collect getGrandChildren
         use sourceEnum = grandChildrenSeq.GetEnumerator()
-        while not finished do
+        while not (sourceEnum.MoveNext()) && not finished do
             curArray.[curIdx] <- sourceEnum.Current
             curIdx <- curIdx + 1
             if curIdx >= Literals.blockSize then
-                let node = mkNode curArray
-                destArr.[resultIdx] <- node
+                curDestArr.[resultIdx] <- mkNode curArray
                 resultIdx <- resultIdx + 1
+                if resultIdx >= Literals.blockSize then curDestArr <- secondDestArrOpt.Value
                 curArray <- List.head rest
                 rest <- List.tail rest
                 if rest |> List.isEmpty then finished <- true
-            if not (sourceEnum.MoveNext()) then finished <- true
+            // if not (sourceEnum.MoveNext()) then finished <- true
         if remainingSize = 0 then
             () // No leftovers
         else
@@ -717,13 +724,7 @@ PrependNChildrenS n seq<ch> seq<sz>
             while i < remainingSize && sourceEnum.MoveNext() do  // TODO: Do we need to do MoveNext() here? Or at the end of the while loop? Tests will find out for us.
                 remainingArray.[i] <- sourceEnum.Current
                 i <- i + 1
-            // TODO: Still have to deal with running past the first array and landing in the second
-        // This part belongs in the calling code
-        // if Array.length result <= Literals.blockSize then
-        //     (result |> mkNode, None)
-        // else
-        //     let l, r = result |> Array.splitAt Literals.blockSize
-        //     (l |> mkNode, r |> mkNode |> Some)
+            curDestArr.[resultIdx] <- mkNode remainingArray
 
     member this.ApplyRebalancePlan owner shift (mergeStart, mergeLen, sizeReduction) childrenSeq destArr secondDestArrOpt =
         if shift > Literals.blockSizeShift then
@@ -749,17 +750,104 @@ PrependNChildrenS n seq<ch> seq<sz>
             if not (isSameObj newNode this) then
                 Array.blit this.Children 0 newNode.Children 0 idx
             // Consolidated section
-            this.ConsolidateChildren owner shift idx mergeLen newNode.Children
+            this.ApplyRebalancePlan owner shift (idx, mergeLen, sizeReduction) items newNode.Children None
             // Remnant
             Array.blit this.Children (idx + mergeLen) newNode.Children (idx + mergeLen - sizeReduction) (len - idx)
             this.SetNodeSize newLen  // This allows expanded nodes to zero out the appropriate parts, so that garbage collection can happen on anything that was shifted
             // TODO: No, it doesn't! Not anymore. Now we should be using the SplitAndKeepNLeft, etc., functions instead of doing this stuff manually in high-level functions like Rebalance
-            newNode, None
+            newNode :> RRBNode<'T>, None
         else
-            let newItems = Array.zeroCreate newLen
-            Array.blit this.Children 0 newItems 0 idx
-            // TODO: Write the rest of this -- must figure out where the split is
-            this, None  // TODO: Change this line to be "left, right" once I write the rest of the if branch correctly
+            let newItemsL = Array.zeroCreate Literals.blockSize
+            let newItemsR = Array.zeroCreate (newLen - Literals.blockSize)
+            if idx < Literals.blockSize then
+                // Split is after merge start
+                Array.blit this.Children 0 newItemsL 0 idx
+                this.ApplyRebalancePlan owner shift (idx, mergeLen, sizeReduction) items newItemsL (Some newItemsR)
+                let newSrcIdx = idx + mergeLen
+                let newDestIdx = idx + mergeLen - sizeReduction
+                if newSrcIdx < Literals.blockSize && newDestIdx < Literals.blockSize then
+                    Array.blit this.Children newSrcIdx newItemsL newDestIdx (Literals.blockSize - newSrcIdx)
+                elif newSrcIdx >= Literals.blockSize && newDestIdx < Literals.blockSize then
+                    // What to do here?
+                    Array.blit right.Children (newSrcIdx - Literals.blockSize) newItemsL newDestIdx (Literals.blockSize - newDestIdx)
+                    Array.blit right.Children (Literals.blockSize - newDestIdx) newItemsR 0 (right.NodeSize - (Literals.blockSize - newDestIdx))
+                    // TODO: Need a second blit into newItemsR
+                // TODO: Need two more elif blocks, for the other two truth table possibilities
+            let nodeL = RRBNode<'T>.MkNode owner shift newItemsL
+            let nodeR = RRBNode<'T>.MkNode owner shift newItemsR
+            nodeL, (Some nodeR)  // TODO: Change this line to be "left, right" once I write the rest of the if branch correctly
+
+    member this.Rebalance2Plus1 (owner : OwnerToken) (shift : int) (middle : RRBLeafNode<'T> option) (right : RRBFullNode<'T>) =
+#if DEBUG
+        if middle.IsSome && shift <> Literals.blockSizeShift then
+            failwith <| sprintf "Rebalancing two nodes plus a middle leaf is only allowed at twig level. Instead, parameters were shift=%d, middle=%A, right=%A" shift middle.Value right
+#endif
+        let totalLength, childrenSeq =
+            match middle with
+            | None -> this.NodeSize + right.NodeSize, Seq.append (this.Children |> Seq.truncate this.NodeSize) (right.Children |> Seq.truncate right.NodeSize)
+            | Some leaf -> this.NodeSize + 1 + right.NodeSize, seq {
+                yield! (this.Children  |> Seq.truncate this.NodeSize)
+                yield leaf
+                yield! (right.Children |> Seq.truncate right.NodeSize)
+            }
+        let sizes = childrenSeq |> Seq.map (fun node -> node.NodeSize)
+        // let idx, mergeLen = findMergeCandidates sizes len
+        // let sizeReduction = 1
+        let idx, mergeLen, sizeReduction = findMergeCandidatesTwoPasses sizes totalLength
+        let newLen = totalLength - sizeReduction
+        let mutable i = 0
+        // The below could be called RebalanceImpl or something, and be common code between Rebalance and Rebalance2
+        use items = childrenSeq.GetEnumerator()
+        if newLen <= Literals.blockSize then
+            let arr = Array.zeroCreate<RRBNode<'T>> newLen
+            arr |> Array.fillFromEnumerator items 0 idx
+            let mergedChildrenSeq = this.ApplyRebalancePlanNewApi owner shift sizes (idx, mergeLen, sizeReduction) items
+            arr |> Array.fillFromSeq mergedChildrenSeq idx (mergeLen - sizeReduction)
+            arr |> Array.fillFromEnumerator items (idx + mergeLen - sizeReduction) newLen
+            RRBNode<'T>.MkNode owner shift arr, None
+        else
+            let lenL = Literals.blockSize
+            let lenR = newLen - lenL
+            let arrL = Array.zeroCreate lenL
+            let arrR = Array.zeroCreate lenR
+            Array.fill2FromEnumerator items 0 idx arrL arrR
+            let mergedChildrenSeq = this.ApplyRebalancePlanNewApi owner shift sizes (idx, mergeLen, sizeReduction) items
+            let mergedChildrenArr = mergedChildrenSeq |> Array.ofSeq  // DEBUG
+            Array.fill2FromSeq mergedChildrenArr idx (mergeLen - sizeReduction) arrL arrR  // DEBUG: back to Seq instead of Arr when done
+            Array.fill2FromEnumerator items (idx + mergeLen - sizeReduction) newLen arrL arrR
+            RRBNode<'T>.MkNode owner shift arrL, (RRBNode<'T>.MkNode owner shift arrR |> Some)
+
+    // abstract member ApplyRebalancePlanImplNewApi<'C> : int seq -> (int * int * int) -> System.Collections.Generic.IEnumerator<RRBNode<'T>> -> (RRBNode<'T> -> 'C[]) -> ('C [] -> RRBNode<'T>) -> RRBNode<'T> seq
+    // TODO: Figure out parameters I need, then adjust signature
+    // Destination array is supposed to be pre-populated with the items that aren't shifted.
+    member this.ApplyRebalancePlanImplNewApi<'C> sizes (mergeStart, mergeLen, sizeReduction) (childrenEnum : System.Collections.Generic.IEnumerator<RRBNode<'T>>) (getGrandChildren : RRBNode<'T> -> 'C []) (mkNode : 'C [] -> RRBNode<'T>) =
+        let totalSlots = sizes |> Seq.skip mergeStart |> Seq.truncate mergeLen |> Seq.sum
+#if DEBUG
+        let arrayCount = totalSlots / Literals.blockSize
+        let remainingSize = totalSlots % Literals.blockSize
+        if arrayCount + (if remainingSize = 0 then 0 else 1) + sizeReduction <> mergeLen
+        then
+            let childrenArr : RRBNode<'T> [] = Array.createFromEnumerator childrenEnum mergeLen
+            failwith <| sprintf "Made a miscalculation somewhere; total slots %d yielded an array count of %d which, added to the size reduction %d, should have equaled merge length %d but didn't. Children to merge were %A" totalSlots arrayCount sizeReduction mergeLen childrenArr
+#endif
+        let grandChildrenSeq : 'C seq = // childrenToBalance |> Seq.collect getGrandChildren
+            seq {
+                while childrenEnum.MoveNext() do
+                    let child = childrenEnum.Current
+                    yield! (getGrandChildren child)
+            }
+        let arraysSeq = Array.createManyFromSeq grandChildrenSeq totalSlots Literals.blockSize
+        let nodesSeq = arraysSeq |> Seq.map mkNode
+        nodesSeq
+
+    member this.ApplyRebalancePlanNewApi owner shift sizes (mergeStart, mergeLen, sizeReduction) childrenEnum =
+        if shift > Literals.blockSizeShift then
+            this.ApplyRebalancePlanImplNewApi<RRBNode<'T>> sizes (mergeStart, mergeLen, sizeReduction) childrenEnum (fun (node : RRBNode<'T>) -> (node :?> RRBFullNode<'T>).Children) (RRBNode<'T>.MkNode owner shift)
+        else
+            this.ApplyRebalancePlanImplNewApi<'T> sizes (mergeStart, mergeLen, sizeReduction) childrenEnum (fun (leaf : RRBNode<'T>) -> (leaf :?> RRBLeafNode<'T>).Items) (RRBNode<'T>.MkLeaf owner)
+
+
+
 
     member this.ConsolidateChildren (owner : OwnerToken) (shift : int) (idx : int) (mergeLen : int) (destChildren : RRBNode<'T>[]) =
         if shift <= Literals.blockSizeShift then
@@ -1057,6 +1145,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
 
     member val CurrentLength : int = defaultArg realSize (Array.length children) with get, set
     override this.NodeSize = this.CurrentLength
+    override this.SlotCount = this.Children |> Seq.take this.NodeSize |> Seq.sumBy (fun child -> child.NodeSize)
 
     member this.StringRepr : string = sprintf "length=%d, children=%A" this.NodeSize this.Children  // TODO: Determine whether to use `this.Children |> Array.truncate this.NodeSize` here
 
@@ -1410,6 +1499,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
 
     member val CurrentLength : int = defaultArg realSize (Array.length children) with get, set
     override this.NodeSize = this.CurrentLength
+    override this.SlotCount = this.Children |> Seq.take this.NodeSize |> Seq.sumBy (fun child -> child.NodeSize)
 
     member this.StringRepr : string = sprintf "length=%d, sizetable=%A, children=%A" this.NodeSize this.SizeTable this.Children  // TODO: Determine whether to use `this.Children |> Array.truncate this.NodeSize` here
 

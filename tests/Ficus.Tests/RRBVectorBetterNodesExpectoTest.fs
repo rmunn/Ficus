@@ -26,9 +26,18 @@ let logger = Log.create "Expecto"
 
 // === Generators ===
 
-let mkArr n = [| 1..n |]
-let mkLeaf n = RRBLeafNode(nullOwner, mkArr n)
-let fullLeaf = mkLeaf Literals.blockSize
+let mkCounter() =
+    let mutable i = 0
+    fun () ->
+        i <- i + 1
+        i
+
+let mkSimpleArr n = [| 1..n |]
+let mkArr counter n = Array.init n (fun _ -> counter())
+let mkSimpleLeaf n = RRBLeafNode(nullOwner, mkSimpleArr n)
+let mkLeaf counter n = RRBLeafNode(nullOwner, mkArr counter n)
+let fullSimpleLeaf = mkSimpleLeaf Literals.blockSize
+let fullLeaf counter () = mkLeaf counter Literals.blockSize
 
 type NodeKind =
     | Full
@@ -43,17 +52,25 @@ let nodeKind (node : RRBNode<'T>) =
     | :? RRBRelaxedNode<'T> -> Relaxed
     | _ -> Full
 
-let genLeaf =
+let genSimpleLeaf =
     Gen.oneof [ Gen.constant Literals.blockSize ; Gen.choose (Literals.blockSize / 2, Literals.blockSize) ]
-    |> Gen.map mkLeaf
+    |> Gen.map mkSimpleLeaf
 
-let genLeaves = Gen.nonEmptyListOf genLeaf |> Gen.map Array.ofList
+let genLeaf counter =
+    Gen.oneof [ Gen.constant Literals.blockSize ; Gen.choose (Literals.blockSize / 2, Literals.blockSize) ]
+    |> Gen.map (mkLeaf counter)
 
-let genFullLeaves = Gen.nonEmptyListOf (Gen.constant fullLeaf) |> Gen.map Array.ofList
+let genLeaves =
+    let counter = mkCounter()
+    Gen.nonEmptyListOf (genLeaf counter) |> Gen.map Array.ofList
+
+let genFullLeaves =
+    let counter = mkCounter()
+    Gen.nonEmptyListOf (Gen.fresh (fullLeaf counter)) |> Gen.map Array.ofList
 
 let genFullLeavesExceptLast =
     let allButLast = Gen.sized <| fun s -> Gen.resize (s - 1 |> max 0) genFullLeaves
-    let lastLeaf = genLeaf |> Gen.map Array.singleton
+    let lastLeaf = genLeaf (mkCounter()) |> Gen.map Array.singleton
     Gen.zip allButLast lastLeaf |> Gen.map (fun (a1,a2) -> Array.append a1 a2)
 
 let genLeavesForOneFullNode n =
@@ -130,7 +147,7 @@ type MyGenerators =
             override x.Generator = genTree |> Gen.map (fun node -> RootNode (node :?> RRBFullNode<int>)) }
     static member arbLeaf() =
         { new Arbitrary<LeafNode<int>>() with
-            override x.Generator = genLeaf |> Gen.map LeafNode }
+            override x.Generator = let counter = mkCounter() in genLeaf counter |> Gen.map LeafNode }
     static member arbLeaves() =
         { new Arbitrary<RRBLeafNode<int> []>() with
             override x.Generator = genLeaves }
@@ -153,7 +170,8 @@ let ftestProp replay name fn = ftestPropertyWithConfig replay { FsCheckConfig.de
 
 
 let mkManualNodeA (leafSizes : int []) =
-    leafSizes |> Array.truncate Literals.blockSize |> Array.map (mkLeaf >> fun leaf -> leaf :> RRBNode<int>) |> mkRelaxedNode
+    let counter = mkCounter()
+    leafSizes |> Array.truncate Literals.blockSize |> Array.map (mkLeaf counter >> fun leaf -> leaf :> RRBNode<int>) |> mkRelaxedNode
 
 let mkManualNode (leafSizes : int list) =
     leafSizes |> Array.ofList |> mkManualNodeA
@@ -391,6 +409,7 @@ let inputDataForAppendTests : (int list * int * ExpectedResult * string) list =
   ]
 
 let mkAppendTests (leafSizes, newLeafSize, expectedResult, namePart) =
+    let counter = mkCounter()
     let nodeDesc = match expectedResult with Full -> "completely full" | Relaxed -> "nearly-full"
     let leafDesc = if newLeafSize = Literals.blockSize then "full" else "non-full"
     let isWhat = match expectedResult with Full -> isFull | Relaxed -> isRelaxed
@@ -400,7 +419,7 @@ let mkAppendTests (leafSizes, newLeafSize, expectedResult, namePart) =
         let test = fun _ ->
             let node = mkManualNode leafSizes :?> RRBFullNode<int>
             checkProperties Literals.blockSizeShift node "Starting node"
-            let newChild = mkLeaf newLeafSize
+            let newChild = mkLeaf counter newLeafSize
             let result =
                 if fname = "AppendChild" then
                     node.AppendChild nullOwner Literals.blockSizeShift newChild
@@ -425,14 +444,14 @@ let appendPropertyTests =
   testList "Append property tests" [
     testProp "AppendChild on a generated node" <| fun (IsolatedShortNode node) ->
         checkProperties Literals.blockSizeShift node "Starting node"
-        let newChild = mkLeaf (M-2)
+        let newChild = mkSimpleLeaf (M-2)
         let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
         checkProperties Literals.blockSizeShift result "Result"
         result.NodeSize = node.NodeSize + 1
 
     testProp "AppendChildS on a generated node" <| fun (IsolatedShortNode node) ->
         checkProperties Literals.blockSizeShift node "Starting node"
-        let newChild = mkLeaf (M-2)
+        let newChild = mkSimpleLeaf (M-2)
         let result = node.AppendChildS nullOwner Literals.blockSizeShift newChild (M-2)
         checkProperties Literals.blockSizeShift result "Result"
         result.NodeSize = node.NodeSize + 1
@@ -497,7 +516,7 @@ let mkInsertTests (leafSizes, insertPos, newLeafSize, expectedResult, namePart) 
         let test = fun _ ->
             let node = mkManualNode leafSizes :?> RRBFullNode<int>
             checkProperties Literals.blockSizeShift node "Starting node"
-            let newChild = mkLeaf newLeafSize
+            let newChild = mkSimpleLeaf newLeafSize
             let result =
                 if fname = "InsertChild" then
                     node.InsertChild nullOwner Literals.blockSizeShift insertPos newChild
@@ -523,7 +542,7 @@ let insertPropertyTests =
     testProp "InsertChild on a generated node" <| fun (IsolatedShortNode node) (NonNegativeInt idx) ->
         let idx = idx % (node.NodeSize + 1)
         checkProperties Literals.blockSizeShift node "Starting node"
-        let newChild = mkLeaf (M-2)
+        let newChild = mkSimpleLeaf (M-2)
         let result = node.InsertChild nullOwner Literals.blockSizeShift idx newChild
         checkProperties Literals.blockSizeShift result "Result"
         result.NodeSize = node.NodeSize + 1
@@ -531,7 +550,7 @@ let insertPropertyTests =
     testProp "InsertChildS on a generated node" <| fun (IsolatedShortNode node) (NonNegativeInt idx) ->
         let idx = idx % (node.NodeSize + 1)
         checkProperties Literals.blockSizeShift node "Starting node"
-        let newChild = mkLeaf (M-2)
+        let newChild = mkSimpleLeaf (M-2)
         let result = node.InsertChildS nullOwner Literals.blockSizeShift idx newChild (M-2)
         checkProperties Literals.blockSizeShift result "Result"
         result.NodeSize = node.NodeSize + 1
@@ -560,7 +579,7 @@ let updatePropertyTests =
     testProp "UpdateChild on a generated node" <| fun (IsolatedNode node) (NonNegativeInt idx) ->
         let idx = idx % node.NodeSize
         let oldLeaf = node.Children.[idx]
-        let newLeaf = mkLeaf (oldLeaf.NodeSize)
+        let newLeaf = mkSimpleLeaf (oldLeaf.NodeSize)
         checkProperties Literals.blockSizeShift node "Starting node"
         let result = node.UpdateChild nullOwner Literals.blockSizeShift idx newLeaf
         checkProperties Literals.blockSizeShift result "Result"
@@ -722,6 +741,62 @@ let appendAndPrependChildrenPropertyTests =
         Expect.sequenceEqual actualLeafArrays expectedLeafArrays "Leaves should have been placed in the correct locations"
   ]
 
+let twigItems (node : RRBNode<'T>) =
+    (node :?> RRBFullNode<'T>).Children |> Seq.truncate node.NodeSize |> Seq.cast<RRBLeafNode<'T>> |> Seq.collect (fun leaf -> leaf.Items)
+
+let rec nodeItems shift (node : RRBNode<'T>) =
+    if shift <= Literals.blockSizeShift then twigItems node else
+    (node :?> RRBFullNode<'T>).Children |> Seq.truncate node.NodeSize |> Seq.cast<RRBFullNode<'T>> |> Seq.collect (nodeItems (shift - Literals.blockSizeShift))
+
+let doRebalance2Test shift (nodeL : RRBNode<'T>) (nodeR : RRBNode<'T>) =
+    let slotCountL = if shift <= Literals.blockSize then nodeL.TwigSlotCount else nodeL.SlotCount
+    let slotCountR = if shift <= Literals.blockSize then nodeR.TwigSlotCount else nodeR.SlotCount
+    let totalSize = nodeL.NodeSize + nodeR.NodeSize
+    let minSize = (slotCountL + slotCountR - 1) / Literals.blockSize + 1
+    let needsRebalancing = totalSize - minSize > Literals.radixSearchErrorMax
+    needsRebalancing ==> lazy (
+        logger.debug (
+            eventX "Input L: {node}"
+            >> setField "node" (sprintf "%A" nodeL)
+        )
+        logger.debug (
+            eventX "Input R: {node}"
+            >> setField "node" (sprintf "%A" nodeR)
+        )
+        let newL, newR = (nodeL :?> RRBFullNode<'T>).Rebalance2Plus1 nullOwner shift None (nodeR :?> RRBFullNode<'T>)
+        logger.debug (
+            eventX "Result L: {node}"
+            >> setField "node" (sprintf "%A" nodeL)
+        )
+        match newR with
+        | None ->
+            logger.debug (
+                eventX "Result R: None"
+            )
+            Expect.isLessThanOrEqual minSize Literals.blockSize "If both nodes add up to a NodeSize of M or less, should end up with just one node at the end"
+            Expect.isLessThanOrEqual newL.NodeSize Literals.blockSize "After rebalancing, left node should be at most M items long"
+            Expect.sequenceEqual (Seq.append (nodeItems shift nodeL) (nodeItems shift nodeR)) (nodeItems shift newL) "Order of items should not change during rebalance"
+            checkProperties shift newL "Newly-rebalanced merged node"
+        | Some nodeR' ->
+            logger.debug (
+                eventX "Result R: {node}"
+                >> setField "node" (sprintf "%A" nodeR')
+            )
+            Expect.sequenceEqual (Seq.append (nodeItems shift nodeL) (nodeItems shift nodeR)) (Seq.append (nodeItems shift newL) (nodeItems shift nodeR')) "Order of items should not change during rebalance"
+            Expect.equal newL.NodeSize Literals.blockSize "After rebalancing, if a right node exists then left node should be exactly M items long"
+            checkProperties shift newL "Newly-rebalanced left node"
+            checkProperties shift nodeR' "Newly-rebalanced right node"
+        // TODO: Probably want more here
+    )
+
+
+let rebalanceTestsWIP =
+  ftestList "WIP: Rebalance tests" [
+    ftestProp (1379971660, 296573301) "Try this" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+        doRebalance2Test Literals.blockSizeShift nodeL nodeR
+  ]
+
+
 // logger.debug (
 //     eventX "Result: {node}"
 //     >> setField "node" (sprintf "%A" result)
@@ -736,4 +811,5 @@ let tests =
     updatePropertyTests
     keepPropertyTests
     splitAndKeepPropertyTests
+    rebalanceTestsWIP
   ]

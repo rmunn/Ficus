@@ -87,6 +87,83 @@ module Array =
     let inline copyAndSetLast newItem oldArr =
         copyAndSet (Array.length oldArr - 1) newItem oldArr
 
+    let fillFromEnumerator (e : System.Collections.Generic.IEnumerator<'T>) (idx : int) (len : int) (arr : 'T []) =
+        let mutable i = idx
+        while i < len && e.MoveNext() do
+            arr.[i] <- e.Current
+            i <- i + 1
+
+    let fill2FromEnumerator (e : System.Collections.Generic.IEnumerator<'T>) (idx : int) (len : int) (arrL : 'T []) (arrR : 'T []) =
+        let lenL = arrL.Length
+        // TODO: If we want better error-checking, uncomment next three lines and use lenToFill instead of len in the "while j < len" part
+        // let lenR = arrR.Length
+        // let totalLen = lenL + lenR
+        // let lenToFill = min len totalLen
+        let mutable i = idx
+        let mutable j = 0
+        let mutable fillingLeft = true
+        while j < len && e.MoveNext() do
+            if fillingLeft && i >= lenL then
+                fillingLeft <- false
+                i <- i - lenL
+            if fillingLeft then
+                arrL.[i] <- e.Current
+            else
+                arrR.[i] <- e.Current
+            i <- i + 1
+            j <- j + 1
+
+    let fillFromSeq (s : 'T seq) (idx : int) (len : int) (arr : 'T []) =
+        arr |> fillFromEnumerator (s.GetEnumerator()) idx len
+
+    let fill2FromSeq (s : 'T seq) idx len arrL arrR =
+        fill2FromEnumerator (s.GetEnumerator()) idx len arrL arrR
+
+    let createFromEnumerator (e : System.Collections.Generic.IEnumerator<'T>) (len : int) =
+        let arr = Array.zeroCreate len
+        arr |> fillFromEnumerator e 0 len
+        arr
+
+    let create2FromEnumerator (e : System.Collections.Generic.IEnumerator<'T>) (lenL : int) (lenR : int) =
+        let arrL = Array.zeroCreate lenL
+        let arrR = Array.zeroCreate lenR
+        fill2FromEnumerator e 0 (lenL+lenR) arrL arrR
+        arrL, arrR
+
+    let createFromSeq (s : 'T seq) (len : int) =
+        let arr = Array.zeroCreate len
+        arr |> fillFromSeq s 0 len
+        arr
+
+    let create2FromSeq (s : 'T seq) (lenL : int) (lenR : int) =
+        let arrL = Array.zeroCreate lenL
+        let arrR = Array.zeroCreate lenR
+        fill2FromSeq s 0 (lenL+lenR) arrL arrR
+        arrL, arrR
+
+    let createManyFromEnumerator (e : System.Collections.Generic.IEnumerator<'T>) (totalLen : int) (lenPerArray : int) =
+        let arrayCount = totalLen / lenPerArray
+        let remainder = totalLen % lenPerArray
+        if arrayCount <= 0 then
+            seq {
+                let arr = Array.zeroCreate remainder
+                fillFromEnumerator e 0 remainder arr
+                yield arr
+            }
+        else
+            seq {
+                for i = 1 to arrayCount do
+                    let arr = Array.zeroCreate lenPerArray
+                    fillFromEnumerator e 0 lenPerArray arr
+                    yield arr
+                let arr = Array.zeroCreate remainder
+                fillFromEnumerator e 0 remainder arr
+                yield arr
+            }
+
+    let createManyFromSeq (s : 'T seq) (totalLen : int) (lenPerArray : int) =
+        createManyFromEnumerator (s.GetEnumerator()) totalLen lenPerArray
+
     // Like Array.append left right |> Array.splitAt splitIdx, but without creating an intermediate array
     let appendAndSplitAt splitIdx left right =
         let lenL = Array.length left
