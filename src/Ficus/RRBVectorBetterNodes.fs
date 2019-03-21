@@ -129,12 +129,15 @@ type RRBNode<'T>(ownerToken : OwnerToken) =
         isSameObj owner ownerToken && not (isNull !ownerToken)
         // Note that this test is NOT "if owner = owner".
 
-    static member CreateSizeTableS (shift : int) (array:RRBNode<'T>[]) (len : int) : int[] =
-        let sizeTable = Array.zeroCreate len
+    static member PopulateSizeTableS (shift : int) (array:RRBNode<'T>[]) (len : int) (sizeTable : int[]) =
         let mutable total = 0
         for i = 0 to len - 1 do
             total <- total + (array.[i]).TreeSize (down shift)
             sizeTable.[i] <- total
+
+    static member CreateSizeTableS (shift : int) (array:RRBNode<'T>[]) (len : int) : int[] =
+        let sizeTable = Array.zeroCreate len
+        RRBNode<'T>.PopulateSizeTableS shift array len sizeTable
         sizeTable
 
     static member CreateSizeTable (shift : int) (array:RRBNode<'T>[]) : int[] =
@@ -685,22 +688,33 @@ PrependNChildrenS n seq<ch> seq<sz>
         let newLen = totalLength - sizeReduction
         use items = childrenSeq.GetEnumerator()
         if newLen <= Literals.blockSize then
-            let arr = Array.zeroCreate<RRBNode<'T>> newLen  // TODO: This is one of the only things that needs to be changed in expanded nodes. Make a new function for this bit
+            let arr = this.MkArrayForRebalance owner shift newLen
             arr |> Array.fillFromEnumerator items 0 idx
             let mergedChildrenSeq = this.ApplyRebalancePlan owner shift sizes (idx, mergeLen, sizeReduction) items
             arr |> Array.fillFromSeq mergedChildrenSeq idx (mergeLen - sizeReduction)
             arr |> Array.fillFromEnumerator items (idx + mergeLen - sizeReduction) newLen
-            RRBNode<'T>.MkNode owner shift arr, None
+            this.MkNodeForRebalance owner shift arr newLen true, None
         else
             let lenL = Literals.blockSize
             let lenR = newLen - lenL
-            let arrL = Array.zeroCreate lenL  // TODO: This almost doesn't need to be changed in expanded nodes, but we do need to just return this.Children here. Make a new function for this bit
+            let arrL = this.MkArrayForRebalance owner shift lenL
             let arrR = Array.zeroCreate lenR
             Array.fill2FromEnumerator items 0 idx arrL arrR
             let mergedChildrenSeq = this.ApplyRebalancePlan owner shift sizes (idx, mergeLen, sizeReduction) items
             Array.fill2FromSeq mergedChildrenSeq idx (mergeLen - sizeReduction) arrL arrR
             Array.fill2FromEnumerator items (idx + mergeLen - sizeReduction) newLen arrL arrR
-            RRBNode<'T>.MkNode owner shift arrL, (RRBNode<'T>.MkNode owner shift arrR |> Some)
+            this.MkNodeForRebalance owner shift arrL lenL false, (this.MkNodeForRebalance owner shift arrR lenR true |> Some)
+            // TODO: Rethink how we handle expanding these nodes, because we'll want to treat a vector append differently from a rebalance after removing a single item
+
+    abstract member MkArrayForRebalance : OwnerToken -> int -> int -> RRBNode<'T> []
+    default this.MkArrayForRebalance owner shift length =
+        // In expanded nodes, this will return "this.Children" -- and MkNodeForRebalance will "zero out" its remaining children if its size shrank (which it should)
+        Array.zeroCreate length
+
+    abstract member MkNodeForRebalance : OwnerToken -> int -> RRBNode<'T> [] -> int -> bool -> RRBNode<'T>
+    default this.MkNodeForRebalance owner shift arr len shouldExpand =
+        // In expanded nodes, this will return "this" -- but first setting the length and zeroing out any remaining children since the length probably shrank
+        RRBNode<'T>.MkNode owner shift arr
 
     member this.ApplyRebalancePlanImpl<'C> sizes (mergeStart, mergeLen, sizeReduction) (childrenEnum : System.Collections.Generic.IEnumerator<RRBNode<'T>>) (getGrandChildren : RRBNode<'T> -> 'C []) (mkNode : 'C [] -> RRBNode<'T>) =
         let totalSlots = sizes |> Seq.skip mergeStart |> Seq.truncate mergeLen |> Seq.sum
@@ -1325,6 +1339,23 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
 
     // ===== END of NODE MANIPULATION functions =====
 
+    override this.MkArrayForRebalance owner shift length =
+        // if this.IsEditableBy owner then this.Children else Array.zeroCreate length  // Real implementation
+        this.Children  // DEBUG: Implementation for unit testing the rebalance algorithm quickly
+
+    override this.MkNodeForRebalance owner shift arr len shouldExpand =
+        // DEBUG: Implementation for unit testing the rebalance algorithm quickly. For real implementation, uncomment the if-else block below
+        if isSameObj arr this.Children (* && this.IsEditableBy owner *) then
+            for i = len to Literals.blockSize - 1 do
+                this.Children.[i] <- null
+            this.SetNodeSize len
+            let result = (if shouldExpand then this.Expand owner else this.Shrink owner) :?> RRBFullNode<'T>
+            result.ToRelaxedNodeIfNeeded shift
+        else
+            let result = RRBNode<'T>.MkNode owner shift arr
+            if shouldExpand then result.Expand owner else result.Shrink owner
+
+
     // override this.InsertAndSlideChildrenLeft owner shift localIdx newChild leftSibling =
     //     failwith "Not implemented"
 
@@ -1640,6 +1671,25 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         node' :> RRBNode<'T>
 
     // ===== END of NODE MANIPULATION functions =====
+
+    override this.MkArrayForRebalance owner shift length =
+        if this.IsEditableBy owner then this.Children else Array.zeroCreate length  // Real implementation
+        this.Children  // DEBUG: Implementation for unit testing the rebalance algorithm quickly
+
+    override this.MkNodeForRebalance owner shift arr len shouldExpand =
+        // DEBUG: Implementation for unit testing the rebalance algorithm quickly. For real implementation, uncomment the if-else block below
+        if isSameObj arr this.Children (* && this.IsEditableBy owner *) then
+            for i = len to Literals.blockSize - 1 do
+                this.Children.[i] <- null
+                this.SizeTable.[i] <- 0
+            this.SetNodeSize len
+            RRBNode<'T>.PopulateSizeTableS shift this.Children len this.SizeTable
+            let result = (if shouldExpand then this.Expand owner else this.Shrink owner) :?> RRBRelaxedNode<'T>
+            result.ToFullNodeIfNeeded shift
+        else
+            let result = RRBNode<'T>.MkNode owner shift arr
+            if shouldExpand then result.Expand owner else result.Shrink owner
+
 
 
 

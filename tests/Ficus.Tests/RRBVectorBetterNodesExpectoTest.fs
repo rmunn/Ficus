@@ -794,7 +794,7 @@ let doRebalance2Test shift (nodeL : RRBNode<'T>) (nodeR : RRBNode<'T>) =
 
 let rebalanceTestsWIP =
   testList "WIP: Rebalance tests" [
-    ftestProp (1060886659, 296573756) "Try this" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+    testProp "Try this" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         doRebalance2Test Literals.blockSizeShift nodeL nodeR
   ]
 
