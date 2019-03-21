@@ -1340,12 +1340,10 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
     // ===== END of NODE MANIPULATION functions =====
 
     override this.MkArrayForRebalance owner shift length =
-        // if this.IsEditableBy owner then this.Children else Array.zeroCreate length  // Real implementation
-        this.Children  // DEBUG: Implementation for unit testing the rebalance algorithm quickly
+        if this.IsEditableBy owner then this.Children else Array.zeroCreate length
 
     override this.MkNodeForRebalance owner shift arr len shouldExpand =
-        // DEBUG: Implementation for unit testing the rebalance algorithm quickly. For real implementation, uncomment the if-else block below
-        if isSameObj arr this.Children (* && this.IsEditableBy owner *) then
+        if isSameObj arr this.Children && this.IsEditableBy owner then
             for i = len to Literals.blockSize - 1 do
                 this.Children.[i] <- null
             this.SetNodeSize len
@@ -1673,12 +1671,10 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
     // ===== END of NODE MANIPULATION functions =====
 
     override this.MkArrayForRebalance owner shift length =
-        if this.IsEditableBy owner then this.Children else Array.zeroCreate length  // Real implementation
-        this.Children  // DEBUG: Implementation for unit testing the rebalance algorithm quickly
+        if this.IsEditableBy owner then this.Children else Array.zeroCreate length
 
     override this.MkNodeForRebalance owner shift arr len shouldExpand =
-        // DEBUG: Implementation for unit testing the rebalance algorithm quickly. For real implementation, uncomment the if-else block below
-        if isSameObj arr this.Children (* && this.IsEditableBy owner *) then
+        if isSameObj arr this.Children && this.IsEditableBy owner then
             for i = len to Literals.blockSize - 1 do
                 this.Children.[i] <- null
                 this.SizeTable.[i] <- 0
