@@ -693,7 +693,7 @@ PrependNChildrenS n seq<ch> seq<sz>
             let mergedChildrenSeq = this.ApplyRebalancePlan owner shift sizes (idx, mergeLen, sizeReduction) items
             arr |> Array.fillFromSeq mergedChildrenSeq idx (mergeLen - sizeReduction)
             arr |> Array.fillFromEnumerator items (idx + mergeLen - sizeReduction) newLen
-            this.MkNodeForRebalance owner shift arr newLen true, None
+            this.MkNodeForRebalance owner shift arr newLen, None
         else
             let lenL = Literals.blockSize
             let lenR = newLen - lenL
@@ -703,16 +703,15 @@ PrependNChildrenS n seq<ch> seq<sz>
             let mergedChildrenSeq = this.ApplyRebalancePlan owner shift sizes (idx, mergeLen, sizeReduction) items
             Array.fill2FromSeq mergedChildrenSeq idx (mergeLen - sizeReduction) arrL arrR
             Array.fill2FromEnumerator items (idx + mergeLen - sizeReduction) newLen arrL arrR
-            this.MkNodeForRebalance owner shift arrL lenL false, (this.MkNodeForRebalance owner shift arrR lenR true |> Some)
-            // TODO: Rethink how we handle expanding these nodes, because we'll want to treat a vector append differently from a rebalance after removing a single item
+            this.MkNodeForRebalance owner shift arrL lenL, (this.MkNodeForRebalance owner shift arrR lenR |> Some)
 
     abstract member MkArrayForRebalance : OwnerToken -> int -> int -> RRBNode<'T> []
     default this.MkArrayForRebalance owner shift length =
         // In expanded nodes, this will return "this.Children" -- and MkNodeForRebalance will "zero out" its remaining children if its size shrank (which it should)
         Array.zeroCreate length
 
-    abstract member MkNodeForRebalance : OwnerToken -> int -> RRBNode<'T> [] -> int -> bool -> RRBNode<'T>
-    default this.MkNodeForRebalance owner shift arr len shouldExpand =
+    abstract member MkNodeForRebalance : OwnerToken -> int -> RRBNode<'T> [] -> int -> RRBNode<'T>
+    default this.MkNodeForRebalance owner shift arr len =
         // In expanded nodes, this will return "this" -- but first setting the length and zeroing out any remaining children since the length probably shrank
         RRBNode<'T>.MkNode owner shift arr
 
@@ -1342,16 +1341,14 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
     override this.MkArrayForRebalance owner shift length =
         if this.IsEditableBy owner then this.Children else Array.zeroCreate length
 
-    override this.MkNodeForRebalance owner shift arr len shouldExpand =
+    override this.MkNodeForRebalance owner shift arr len =
         if isSameObj arr this.Children && this.IsEditableBy owner then
-            for i = len to Literals.blockSize - 1 do
-                this.Children.[i] <- null
+            for i = len to this.NodeSize - 1 do
+                arr.[i] <- null
             this.SetNodeSize len
-            let result = (if shouldExpand then this.Expand owner else this.Shrink owner) :?> RRBFullNode<'T>
-            result.ToRelaxedNodeIfNeeded shift
+            this.ToRelaxedNodeIfNeeded shift
         else
-            let result = RRBNode<'T>.MkNode owner shift arr
-            if shouldExpand then result.Expand owner else result.Shrink owner
+            RRBNode<'T>.MkNode owner shift arr
 
 
     // override this.InsertAndSlideChildrenLeft owner shift localIdx newChild leftSibling =
@@ -1673,18 +1670,16 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
     override this.MkArrayForRebalance owner shift length =
         if this.IsEditableBy owner then this.Children else Array.zeroCreate length
 
-    override this.MkNodeForRebalance owner shift arr len shouldExpand =
+    override this.MkNodeForRebalance owner shift arr len =
         if isSameObj arr this.Children && this.IsEditableBy owner then
-            for i = len to Literals.blockSize - 1 do
-                this.Children.[i] <- null
+            for i = len to this.NodeSize - 1 do
+                arr.[i] <- null
                 this.SizeTable.[i] <- 0
             this.SetNodeSize len
             RRBNode<'T>.PopulateSizeTableS shift this.Children len this.SizeTable
-            let result = (if shouldExpand then this.Expand owner else this.Shrink owner) :?> RRBRelaxedNode<'T>
-            result.ToFullNodeIfNeeded shift
+            this.ToFullNodeIfNeeded shift
         else
-            let result = RRBNode<'T>.MkNode owner shift arr
-            if shouldExpand then result.Expand owner else result.Shrink owner
+            RRBNode<'T>.MkNode owner shift arr
 
 
 
