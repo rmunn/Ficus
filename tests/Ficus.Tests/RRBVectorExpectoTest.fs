@@ -120,14 +120,14 @@ let compareVecToArray v arr =
 let doJoinTest v1 v2 =
     RRBVectorProps.checkProperties v1 "v1 in join test"
     RRBVectorProps.checkProperties v2 "v2 in join test"
-    let arr1 = RRBVector.toArray v1
-    let arr2 = RRBVector.toArray v2
+    let s1 = RRBVector.toSeq v1
+    let s2 = RRBVector.toSeq v2
     let joined = RRBVector.append v1 v2
     let joined' = RRBVector.append v2 v1
     RRBVectorProps.checkProperties joined "Joined vector"
     RRBVectorProps.checkProperties joined' "Opposite-joined vector"
-    Expect.equal (RRBVector.toArray joined) (Array.append arr1 arr2) "Joined vectors did not equal equivalent appended arrays"
-    Expect.equal (RRBVector.toArray joined') (Array.append arr2 arr1) "Opposite-joined vectors did not equal equivalent appended arrays"
+    Expect.sequenceEqual (RRBVector.toSeq joined) (Seq.append s1 s2) "Joined vectors did not sequenceEqual equivalent appended seqs"
+    Expect.sequenceEqual (RRBVector.toSeq joined') (Seq.append s2 s1) "Opposite-joined vectors did not sequenceEqual equivalent appended seqs"
 
 let doSplitTest vec i =
     let repr = RRBVecGen.vecToTreeReprStr vec
@@ -156,7 +156,7 @@ module Expect =
         Expect.equal (v1.Length) (v2.Length) <| sprintf "Vectors should be equal but had different lengths: expected %d and got %d\n%s" v1.Length v2.Length msg
         for i = 0 to v1.Length - 1 do
             Expect.equal (v1.Item i) (v2.Item i) <| sprintf "Not equal at idx %d: expected %A and got %A\n%s" i (v1.Item i) (v2.Item i) msg
-        Expect.equal (RRBVector.toArray v1) (RRBVector.toArray v2) msg
+        Expect.sequenceEqual (RRBVector.toSeq v1) (RRBVector.toSeq v2) msg
 
     let vecEqualArr (v : RRBVector<'T>) (a : 'T []) msg =
         for i = 0 to v.Length - 1 do
@@ -1006,12 +1006,12 @@ let splitJoinTests =
     testProp "vecTake" <| fun (VecPlusArrAndIdx (v,a,i)) ->
         let sliced = v.Take i
         RRBVectorProps.checkProperties sliced "Sliced vector"
-        Expect.equal (RRBVector.toArray sliced) (Array.truncate i a) "Sliced things didn't match"
+        Expect.sequenceEqual (RRBVector.toArray sliced) (Array.truncate i a) "Sliced things didn't match"
 
     testProp "vecSkip" <| fun (VecPlusArrAndIdx (v,a,i)) ->
         let sliced = v.Skip i
         RRBVectorProps.checkProperties sliced "Sliced vector"
-        Expect.equal (RRBVector.toArray sliced) (Array.skip i a) "Sliced things didn't match"
+        Expect.sequenceEqual (RRBVector.toArray sliced) (Array.skip i a) "Sliced things didn't match"
   ]
 
 let manualInsertTestWithVec idx item vec =
@@ -1019,7 +1019,7 @@ let manualInsertTestWithVec idx item vec =
     let expected = a |> Array.copyAndInsertAt idx item
     let actual = vec |> RRBVector.insert idx item
     RRBVectorProps.checkProperties actual "Vector after insertion"
-    Expect.equal (actual |> RRBVector.toArray) expected (sprintf "Inserting %A at %d should have produced identical results" item idx)
+    Expect.sequenceEqual (actual |> RRBVector.toSeq) expected (sprintf "Inserting %A at %d should have produced identical results" item idx)
 
 let manualInsertTest idx item treeRepr =
     RRBVecGen.treeReprStrToVec treeRepr |> manualInsertTestWithVec idx item
@@ -1030,14 +1030,14 @@ let insertTests =
         let expected = a |> Array.copyAndInsertAt i 512
         let v' = v |> RRBVector.insert i 512
         RRBVectorProps.checkProperties v' (sprintf "Vector with insertion at %d" i)
-        Expect.equal (v' |> RRBVector.toArray) expected "insert did not insert the right value"
+        Expect.sequenceEqual (v' |> RRBVector.toSeq) (expected |> Array.toSeq) "insert did not insert the right value"
     )
     testPropMed "insert into random vectors" (fun (vec : RRBVector<int>) (idx : int) ->
         let i = (abs idx) % (RRBVector.length vec + 1)
         let expected = vec |> RRBVector.toArray |> Array.copyAndInsertAt i 512
         let vec' = vec |> RRBVector.insert i 512
         RRBVectorProps.checkProperties vec' (sprintf "Vector with insertion at %d" i)
-        Expect.equal (vec' |> RRBVector.toArray) expected "insert did not insert the right value"
+        Expect.sequenceEqual (vec' |> RRBVector.toSeq) (expected |> Array.toSeq) "insert did not insert the right value"
     )
 
     // Specifically-constructed tests
@@ -1353,13 +1353,13 @@ let nodeVecGenerationTests =
     testProp "Tree from array" <| fun (arr:int[]) ->
         let expected = arr
         let actual = RRBVector.ofArray arr
-        Expect.equal (RRBVector.toArray actual) expected "Tree did not get built properly from array"
+        Expect.sequenceEqual (RRBVector.toSeq actual) expected "Tree did not get built properly from array"
 
     testProp "Tree from seq" <| fun (arr:int[]) ->
         let expected = arr
         let s = arr |> Seq.ofArray
         let actual = s |> RRBVector.ofSeq
-        Expect.equal (RRBVector.toArray actual) expected "Tree did not get built properly from array"
+        Expect.sequenceEqual (RRBVector.toSeq actual) expected "Tree did not get built properly from array"
   ]
 
 let longRunningTests =
@@ -1374,8 +1374,8 @@ let longRunningTests =
         let r2 = RRBVecGen.vecToTreeReprStr v2
         RRBVectorProps.checkProperties joined (sprintf "Joined vector from %A and %A" r1 r2)
         RRBVectorProps.checkProperties joined' (sprintf "Opposite-joined vector from %A and %A" r2 r1)
-        Expect.vecEqualArr joined (Array.append a1 a2) "Joined vectors did not equal equivalent appended arrays"
-        Expect.vecEqualArr joined' (Array.append a2 a1) "Opposite-joined vectors did not equal equivalent appended arrays"
+        Expect.vecEqualArr joined (Array.append a1 a2) "Joined vectors did not sequenceEqual equivalent appended arrays"
+        Expect.vecEqualArr joined' (Array.append a2 a1) "Opposite-joined vectors did not sequenceEqual equivalent appended arrays"
 
     // joining two unrelated vectors is equivalent to list-appending their list equivalents passed in 00:02:44.0550000
     ftestProp (796556019, 296483453) "joining two unrelated vectors is equivalent to list-appending their list equivalents" <| fun (v1 : RRBVector<int>) (v2 : RRBVector<int>) ->
@@ -1387,8 +1387,8 @@ let longRunningTests =
         let r2 = RRBVecGen.vecToTreeReprStr v2
         RRBVectorProps.checkProperties joined (sprintf "Joined vector from %A and %A" r1 r2)
         RRBVectorProps.checkProperties joined' (sprintf "Opposite-joined vector from %A and %A" r2 r1)
-        Expect.equal (joined) (List.append l1 l2) "Joined vectors did not equal equivalent appended lists"
-        Expect.equal (joined') (List.append l2 l1) "Opposite-joined vectors did not equal equivalent appended lists"
+        Expect.sequenceEqual (joined) (List.append l1 l2) "Joined vectors did not sequenceEqual equivalent appended lists"
+        Expect.sequenceEqual (joined') (List.append l2 l1) "Opposite-joined vectors did not sequenceEqual equivalent appended lists"
 
     // joining two unrelated vectors is equivalent to seq-appending their seq equivalents passed in 00:04:09.4570000
     ftestProp (812315557, 296483453) "joining two unrelated vectors is equivalent to seq-appending their seq equivalents" <| fun (v1 : RRBVector<int>) (v2 : RRBVector<int>) ->
@@ -1400,8 +1400,8 @@ let longRunningTests =
         let r2 = RRBVecGen.vecToTreeReprStr v2
         RRBVectorProps.checkProperties joined (sprintf "Joined vector from %A and %A" r1 r2)
         RRBVectorProps.checkProperties joined' (sprintf "Opposite-joined vector from %A and %A" r2 r1)
-        Expect.equal (joined |> RRBVector.toArray) (Seq.append s1 s2 |> Array.ofSeq) "Joined vectors did not equal equivalent appended seqs"
-        Expect.equal (joined' |> RRBVector.toArray) (Seq.append s2 s1 |> Array.ofSeq) "Opposite-joined vectors did not equal equivalent appended seqs"
+        Expect.sequenceEqual (joined) (Seq.append s1 s2) "Joined vectors did not sequenceEqual equivalent appended seqs"
+        Expect.sequenceEqual (joined') (Seq.append s2 s1) "Opposite-joined vectors did not sequenceEqual equivalent appended seqs"
 
     // TODO: Decide whether we need all three of those
 
