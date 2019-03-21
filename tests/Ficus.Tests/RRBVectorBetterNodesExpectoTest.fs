@@ -763,6 +763,8 @@ let doRebalance2Test shift (nodeL : RRBNode<'T>) (nodeR : RRBNode<'T>) =
         //     eventX "Input R: {node}"
         //     >> setField "node" (sprintf "%A" nodeR)
         // )
+        // Need to do this before the rebalance, because after the rebalance the original nodeL may be invalid if it was an expanded node
+        let expected = Seq.append (nodeItems shift nodeL) (nodeItems shift nodeR) |> Array.ofSeq
         let newL, newR = (nodeL :?> RRBFullNode<'T>).Rebalance2Plus1 nullOwner shift None (nodeR :?> RRBFullNode<'T>)
         // logger.debug (
         //     eventX "Result L: {node}"
@@ -775,14 +777,14 @@ let doRebalance2Test shift (nodeL : RRBNode<'T>) (nodeR : RRBNode<'T>) =
             // )
             Expect.isLessThanOrEqual minSize Literals.blockSize "If both nodes add up to a NodeSize of M or less, should end up with just one node at the end"
             Expect.isLessThanOrEqual newL.NodeSize Literals.blockSize "After rebalancing, left node should be at most M items long"
-            Expect.equal (Seq.append (nodeItems shift nodeL) (nodeItems shift nodeR) |> Array.ofSeq) (nodeItems shift newL |> Array.ofSeq) "Order of items should not change during rebalance"
+            Expect.equal (nodeItems shift newL |> Array.ofSeq) expected "Order of items should not change during rebalance"
             checkProperties shift newL "Newly-rebalanced merged node"
         | Some nodeR' ->
             // logger.debug (
             //     eventX "Result R: {node}"
             //     >> setField "node" (sprintf "%A" nodeR')
             // )
-            Expect.equal (Seq.append (nodeItems shift nodeL) (nodeItems shift nodeR) |> Array.ofSeq) (Seq.append (nodeItems shift newL) (nodeItems shift nodeR') |> Array.ofSeq) "Order of items should not change during rebalance"
+            Expect.equal (Seq.append (nodeItems shift newL) (nodeItems shift nodeR') |> Array.ofSeq) expected "Order of items should not change during rebalance"
             Expect.equal newL.NodeSize Literals.blockSize "After rebalancing, if a right node exists then left node should be exactly M items long"
             checkProperties shift newL "Newly-rebalanced left node"
             checkProperties shift nodeR' "Newly-rebalanced right node"
@@ -792,7 +794,7 @@ let doRebalance2Test shift (nodeL : RRBNode<'T>) (nodeR : RRBNode<'T>) =
 
 let rebalanceTestsWIP =
   testList "WIP: Rebalance tests" [
-    testProp "Try this" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+    ftestProp (1060886659, 296573756) "Try this" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         doRebalance2Test Literals.blockSizeShift nodeL nodeR
   ]
 
