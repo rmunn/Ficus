@@ -749,41 +749,22 @@ let rec nodeItems shift (node : RRBNode<'T>) =
     (node :?> RRBFullNode<'T>).Children |> Seq.truncate node.NodeSize |> Seq.cast<RRBFullNode<'T>> |> Seq.collect (nodeItems (shift - Literals.blockSizeShift))
 
 let doRebalance2Test shift (nodeL : RRBNode<'T>) (nodeR : RRBNode<'T>) =
-    let slotCountL = if shift <= Literals.blockSize then nodeL.TwigSlotCount else nodeL.SlotCount
-    let slotCountR = if shift <= Literals.blockSize then nodeR.TwigSlotCount else nodeR.SlotCount
+    let slotCountL = if shift <= Literals.blockSizeShift then nodeL.TwigSlotCount else nodeL.SlotCount
+    let slotCountR = if shift <= Literals.blockSizeShift then nodeR.TwigSlotCount else nodeR.SlotCount
     let totalSize = nodeL.NodeSize + nodeR.NodeSize
     let minSize = (slotCountL + slotCountR - 1) / Literals.blockSize + 1
     let needsRebalancing = totalSize - minSize > Literals.radixSearchErrorMax
     needsRebalancing ==> lazy (
-        // logger.debug (
-        //     eventX "Input L: {node}"
-        //     >> setField "node" (sprintf "%A" nodeL)
-        // )
-        // logger.debug (
-        //     eventX "Input R: {node}"
-        //     >> setField "node" (sprintf "%A" nodeR)
-        // )
         // Need to do this before the rebalance, because after the rebalance the original nodeL may be invalid if it was an expanded node
         let expected = Seq.append (nodeItems shift nodeL) (nodeItems shift nodeR) |> Array.ofSeq
         let newL, newR = (nodeL :?> RRBFullNode<'T>).Rebalance2Plus1 nullOwner shift None (nodeR :?> RRBFullNode<'T>)
-        // logger.debug (
-        //     eventX "Result L: {node}"
-        //     >> setField "node" (sprintf "%A" newL)
-        // )
         match newR with
         | None ->
-            // logger.debug (
-            //     eventX "Result R: None"
-            // )
             Expect.isLessThanOrEqual minSize Literals.blockSize "If both nodes add up to a NodeSize of M or less, should end up with just one node at the end"
             Expect.isLessThanOrEqual newL.NodeSize Literals.blockSize "After rebalancing, left node should be at most M items long"
             Expect.equal (nodeItems shift newL |> Array.ofSeq) expected "Order of items should not change during rebalance"
             checkProperties shift newL "Newly-rebalanced merged node"
         | Some nodeR' ->
-            // logger.debug (
-            //     eventX "Result R: {node}"
-            //     >> setField "node" (sprintf "%A" nodeR')
-            // )
             Expect.equal (Seq.append (nodeItems shift newL) (nodeItems shift nodeR') |> Array.ofSeq) expected "Order of items should not change during rebalance"
             Expect.equal newL.NodeSize Literals.blockSize "After rebalancing, if a right node exists then left node should be exactly M items long"
             checkProperties shift newL "Newly-rebalanced left node"
@@ -794,8 +775,33 @@ let doRebalance2Test shift (nodeL : RRBNode<'T>) (nodeR : RRBNode<'T>) =
 
 let rebalanceTestsWIP =
   testList "WIP: Rebalance tests" [
-    testProp "Try this" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+    testProp (*541726758, 296574446*) (*1359582396, 296574428*) "Try this" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         doRebalance2Test Literals.blockSizeShift nodeL nodeR
+
+    testProp "NeedsRebalancing function uses correct formula" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+        let shift = Literals.blockSizeShift
+        let slotCountL = if shift <= Literals.blockSizeShift then nodeL.TwigSlotCount else nodeL.SlotCount
+        let slotCountR = if shift <= Literals.blockSizeShift then nodeR.TwigSlotCount else nodeR.SlotCount
+        let totalSize = nodeL.NodeSize + nodeR.NodeSize
+        let minSize = (slotCountL + slotCountR - 1) / Literals.blockSize + 1
+        let needsRebalancing = totalSize - minSize > Literals.radixSearchErrorMax
+        Expect.equal (nodeL.NeedsRebalance2 shift nodeR) needsRebalancing <| sprintf "NeedsRebalancing was wrong for left %A and right %A" nodeL nodeR
+
+    testProp (*500188920, 296574447*) (*801697697, 296574440*) "Concat test" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+        // Need to do this before the concatenation, because after the concatenation the original nodeL may be invalid if it was an expanded node
+        let shift = Literals.blockSizeShift
+        let expected = Seq.append (nodeItems shift nodeL) (nodeItems shift nodeR) |> Array.ofSeq
+        let newL, newR = (nodeL :?> RRBFullNode<'T>).ConcatNodes nullOwner shift (nodeR :?> RRBFullNode<'T>)
+        match newR with
+        | None ->
+            Expect.isLessThanOrEqual newL.NodeSize Literals.blockSize "After concating, left node should be at most M items long"
+            Expect.equal (nodeItems shift newL |> Array.ofSeq) expected "Order of items should not change during concatenate"
+            checkProperties shift newL "Newly-concatenated merged node"
+        | Some nodeR' ->
+            Expect.equal (Seq.append (nodeItems shift newL) (nodeItems shift nodeR') |> Array.ofSeq) expected "Order of items should not change during concatenate"
+            Expect.equal newL.NodeSize Literals.blockSize "After concating, if a right node exists then left node should be exactly M items long"
+            checkProperties shift newL "Newly-concatenated left node"
+            checkProperties shift nodeR' "Newly-concatenated right node"
   ]
 
 
@@ -806,6 +812,7 @@ let rebalanceTestsWIP =
 
 let tests =
   testList "Basic node tests" [
+    rebalanceTestsWIP
     appendAndPrependChildrenPropertyTests  // Put this first since it's so long
     appendPropertyTests
     insertPropertyTests
@@ -813,5 +820,4 @@ let tests =
     updatePropertyTests
     keepPropertyTests
     splitAndKeepPropertyTests
-    rebalanceTestsWIP
   ]

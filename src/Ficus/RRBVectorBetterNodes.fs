@@ -67,7 +67,8 @@ module RRBMath =
         let idx1, len1 = sizes |> Array.smallestRunGreaterThan (byte Literals.blockSize)
         let idx2, len2 = sizes |> Array.smallestRunGreaterThan (byte (Literals.blockSize <<< 1))
         // Drop two slots if we can do so in less than twice the work needed to drop a single slot
-        if len2 < (len1 * 2) then
+        // if len2 < (len1 * 2) then  // TODO: Uncomment this one once we're done testing the rebalance algorithm
+        if len2 < (len1 * 2) && len2 < 1000 && idx2 >= 0 then  // DEBUG: While testing the rebalance algorithm, we need this because smallestRunGreaterThan will return (-1, 999999) for "bad" runs
             idx2, len2, 2
         else
             idx1, len1, 1
@@ -154,6 +155,24 @@ type RRBNode<'T>(ownerToken : OwnerToken) =
 
     abstract member UpdatedTree : OwnerToken -> int -> int -> 'T -> RRBNode<'T>  // Params: owner shift treeIdx newItem
     abstract member InsertedTree : OwnerToken -> int -> int -> 'T -> RRBFullNode<'T> option -> int -> SlideResult<RRBNode<'T>>  // Params: owner shift treeIdx (item : 'T) (parentOpt : Node option) idxOfNodeInParent
+    abstract member RemovedItem : OwnerToken -> int -> bool -> int -> 'T * RRBNode<'T>  // TODO: Rename to RemovedTree for consistency??
+
+    member this.NeedsRebalance shift =
+        let slots = if shift > Literals.blockSize then this.SlotCount else this.TwigSlotCount
+        slots <= ((this.NodeSize - Literals.eMaxPlusOne) <<< Literals.blockSizeShift)
+
+    member this.NeedsRebalance2 shift (right : RRBNode<'T>) =
+        let slots = if shift > Literals.blockSize then this.SlotCount + right.SlotCount else this.TwigSlotCount + right.TwigSlotCount
+        slots <= ((this.NodeSize + right.NodeSize - Literals.eMaxPlusOne) <<< Literals.blockSizeShift)
+
+    member this.NeedsRebalance2PlusLeaf shift (leaf : 'T[]) (right : RRBNode<'T>) =
+#if DEBUG
+        if shift <> Literals.blockSize then
+            failwith <| sprintf "NeedsRebalance2PlusLeaf may only be called at the twig level (shift %d), and it was instead called at with shift %d" Literals.blockSizeShift shift
+#endif
+        let slots = this.TwigSlotCount + leaf.Length + right.TwigSlotCount
+        slots <= ((this.NodeSize + 1 + right.NodeSize - Literals.eMaxPlusOne) <<< Literals.blockSizeShift)
+        // TODO: Once unit testing is solid, remove the "shift" parameter since it should always be Literals.blockSizeShift
 
 
 and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
@@ -486,12 +505,16 @@ PrependNChildrenS n seq<ch> seq<sz>
         Array.init count (fun idx -> if idx = lastIdx then fullSize * idx + this.Children.[idx].TreeSize (down shift) else fullSize * (idx + 1))
 
     member this.SlideChildrenLeft owner shift n (leftSibling : RRBFullNode<'T>) =
-        let (l, lS), this' = this.SplitAndKeepNRightS owner shift n
+        if n = 0 then leftSibling :> RRBNode<'T>, this :> RRBNode<'T> else
+        let keepCnt = this.NodeSize - n
+        let (l, lS), this' = this.SplitAndKeepNRightS owner shift keepCnt
         let leftSibling' = leftSibling.AppendNChildrenS owner shift n l lS
         leftSibling', this'
 
     member this.SlideChildrenRight owner shift n (rightSibling : RRBFullNode<'T>) =
-        let this', (r, rS) = this.SplitAndKeepNLeftS owner shift n
+        if n = 0 then this :> RRBNode<'T>, rightSibling :> RRBNode<'T> else
+        let keepCnt = this.NodeSize - n
+        let this', (r, rS) = this.SplitAndKeepNLeftS owner shift keepCnt
         let rightSibling' = rightSibling.PrependNChildrenS owner shift n r rS
         this', rightSibling'
 
@@ -616,26 +639,27 @@ PrependNChildrenS n seq<ch> seq<sz>
                     let newLeft, newRight = newNode.InsertAndSplitNode owner shift localIdx newRightChild
                     SplitNode (newLeft, newRight)
 
-    // abstract member AppendChild : OwnerToken -> int -> RRBNode<'T> -> int -> RRBFullNode<'T>
-    // default this.AppendChild owner shift newChild childSize =
-    //     let newChildren = this.Children |> Array.copyAndAppend newChild
-    //     // Full nodes are allowed to have their last item be non-full, so we have to check that
-    //     if this.FullNodeIsTrulyFull shift then
-    //         RRBNode<'T>.MkFullNode owner newChildren
-    //     else
-    //         // Last item wasn't full, so this is going to become a relaxed node
-    //         RRBNode<'T>.MkNode owner shift newChildren
+    override this.RemovedItem owner shift shouldCheckForRebalancing treeIdx =
+        let localIdx, child, nextTreeIdx = this.IndexesAndChild shift treeIdx
+        let item, child' = child.RemovedItem owner (down shift) shouldCheckForRebalancing nextTreeIdx
+        let node' =
+            if child'.NodeSize <= 0 then
+                this.RemoveChild owner shift localIdx
+            else
+                this.UpdateChildSRel owner shift localIdx child' -1
+        if shouldCheckForRebalancing && false then  // TODO: Replace "false" with something that checks the need for a rebalance. TODO: Write that function
+            item, (node' :?> RRBFullNode<'T>).Rebalance owner shift
+            // TODO: Decide whether we need to deal with expanding the node here or not.
+        else
+            item, node'
+
 
     member this.RemoveLastLeaf owner shift =
         // EXPAND: This needs an implementation in expanded nodes, where we expand the new last child after shrinking the child we return
         if shift <= Literals.blockSizeShift then
             // Children are leaves
             if this.NodeSize = 0 then
-#if DEBUG
-                failwith <| sprintf "RemoveLastLeaf was called on an empty node at shift %d" shift
-#else
-                RRBLeafNode(owner, Array.empty), this :> RRBNode<'T>  // TODO: Should be able to eliminate this branch, I hope
-#endif
+                failwith <| sprintf "RemoveLastLeaf was called on an empty node at shift %d" shift  // TODO: Remove this once unit testing is complete
             else
                 let leaf = this.LastChild :?> RRBLeafNode<'T>
                 let newNode = this.RemoveLastChild owner shift // Popping the last entry from a FullNode can't ever turn it into an RRBNode.
@@ -651,6 +675,12 @@ PrependNChildrenS n seq<ch> seq<sz>
 
     member this.PopLastLeaf owner shift = this.RemoveLastLeaf owner shift // TODO: Replace all occurrences of "RemoveLastLeaf" in RRBVector code with "PopLastLeaf"
 
+    // TODO: Also need functions to add a new leaf at the end of the tree, and to prepend a leaf at the *beginning* of the tree.
+    // Prepending a leaf is used in appending two vectors; if the left vector is leaf-only, or a root+leaf sapling, then we'll just prepend one or two leaves, then rebalance the leftmost twig.
+    // Appending a leaf is used when the tail is already full while appending an item to the vector. And the reason for the invariant (the last leaf is full if its parent is full) is so that
+    // when you append a full leaf, which happens all the time, you can count on not having to convert the full node above it to a relaxed node. (If the last leaf had NOT been full, then
+    // you could have had M;M;M;M-2 and had a full node, but add a full leaf and you get M;M;M;M-2;M which must be a relaxed node).
+
     // --- REBALANCING ---
 
     // TODO: We might need one more low-level function to use in here: ExpandLastChildIfNeeded, which is a no-op in compact nodes but does something in expanded nodes.
@@ -660,7 +690,7 @@ PrependNChildrenS n seq<ch> seq<sz>
     member this.Rebalance (owner : OwnerToken) (shift : int) =
         let childrenSeq = this.Children |> Seq.truncate this.NodeSize
         let len = this.NodeSize
-        this.RebalanceImpl owner shift len childrenSeq
+        this.RebalanceImpl owner shift len childrenSeq |> fst
 
     member this.Rebalance2 (owner : OwnerToken) (shift : int) (right : RRBFullNode<'T>) =
         this.Rebalance2Plus1 owner shift None right
@@ -740,6 +770,25 @@ PrependNChildrenS n seq<ch> seq<sz>
             this.ApplyRebalancePlanImpl<RRBNode<'T>> sizes (mergeStart, mergeLen, sizeReduction) childrenEnum (fun (node : RRBNode<'T>) -> (node :?> RRBFullNode<'T>).Children) (RRBNode<'T>.MkNode owner shift)
         else
             this.ApplyRebalancePlanImpl<'T> sizes (mergeStart, mergeLen, sizeReduction) childrenEnum (fun (leaf : RRBNode<'T>) -> (leaf :?> RRBLeafNode<'T>).Items) (RRBNode<'T>.MkLeaf owner)
+
+    member this.ConcatNodes owner shift (right : RRBFullNode<'T>) =
+        let needsRebalance = this.NeedsRebalance2 shift right  // Do this before AppendNChildren in case of extended nodes
+        if this.NodeSize + right.NodeSize <= Literals.blockSize then
+            let node' =
+                if right :? RRBRelaxedNode<'T>
+                then this.AppendNChildrenS owner shift right.NodeSize right.Children (right :?> RRBRelaxedNode<'T>).SizeTable
+                else this.AppendNChildren  owner shift right.NodeSize right.Children
+            let result = if needsRebalance then (node' :?> RRBFullNode<'T>).Rebalance owner shift else node'
+            result, None
+        else
+            if needsRebalance
+            then this.Rebalance2 owner shift right
+            elif this.NodeSize = Literals.blockSize then
+                this :> RRBNode<'T>, Some (right :> RRBNode<'T>)  // If left is already full, save time by not rewriting any nodes
+            else
+                let l, r = right.SlideChildrenLeft owner shift (Literals.blockSize - this.NodeSize) this
+                l, Some r
+    // That will form part of the MergeTrees logic, which will be used in concatenating vectors.
 
 
 and [<StructuredFormatDisplay("RelaxedNode({StringRepr})")>] RRBRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], sizeTable : int[]) =
@@ -1771,5 +1820,13 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBLeafNode<'T>(ownerToken : Own
                 let newRight = this.LeafNodeWithItems owner newRightItems
                 SplitNode (newLeft, newRight)
 
-    member this.RemoveLastItem owner =
-        this.Items |> Array.copyAndPop |> RRBNode<'T>.MkLeaf owner
+    member this.PopLastItem owner =
+        let resultItem = this.Items |> Array.last
+        let resultLeaf = this.Items |> Array.copyAndPop |> RRBNode<'T>.MkLeaf owner
+        resultItem, resultLeaf
+
+    // TODO: Consider whether this.RemovedItem should mirror PopLastItem or not. There's not nearly as much demand for RemoveAndReturn from the middle of a list as there is to pop the last item.
+    override this.RemovedItem owner shift shouldCheckForRebalancing localIdx =
+        let resultItem = this.Items.[localIdx]
+        let resultLeaf = Array.copyAndRemoveAt localIdx this.Items |> RRBNode<'T>.MkLeaf owner
+        resultItem, resultLeaf
