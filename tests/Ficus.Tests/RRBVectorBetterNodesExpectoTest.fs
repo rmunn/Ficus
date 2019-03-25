@@ -791,7 +791,7 @@ let rebalanceTestsWIP =
         // Need to do this before the concatenation, because after the concatenation the original nodeL may be invalid if it was an expanded node
         let shift = Literals.blockSizeShift
         let expected = Seq.append (nodeItems shift nodeL) (nodeItems shift nodeR) |> Array.ofSeq
-        let newL, newR = (nodeL :?> RRBFullNode<'T>).ConcatNodes nullOwner shift (nodeR :?> RRBFullNode<'T>)
+        let newL, newR = nodeL.ConcatNodes nullOwner shift nodeR
         match newR with
         | None ->
             Expect.isLessThanOrEqual newL.NodeSize Literals.blockSize "After concating, left node should be at most M items long"
@@ -802,6 +802,23 @@ let rebalanceTestsWIP =
             Expect.equal newL.NodeSize Literals.blockSize "After concating, if a right node exists then left node should be exactly M items long"
             checkProperties shift newL "Newly-concatenated left node"
             checkProperties shift nodeR' "Newly-concatenated right node"
+
+    ftestProp (1489117831, 296575371) "Concat-with-leaf test" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (LeafNode leaf : LeafNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+        // Need to do this before the concatenation, because after the concatenation the original nodeL may be invalid if it was an expanded node
+        let shift = Literals.blockSizeShift
+        let expected = Seq.concat [nodeItems shift nodeL; leaf.Items |> Seq.ofArray; nodeItems shift nodeR] |> Array.ofSeq
+        if nodeL.HasRoomToMergeTheTail leaf.NodeSize nodeR then
+            let newL, newR = nodeL.ConcatTwigsPlusLeaf nullOwner shift leaf nodeR
+            match newR with
+            | None ->
+                Expect.isLessThanOrEqual newL.NodeSize Literals.blockSize "After concating, left node should be at most M items long"
+                Expect.equal (nodeItems shift newL |> Array.ofSeq) expected "Order of items should not change during concatenate"
+                checkProperties shift newL "Newly-concatenated merged node"
+            | Some nodeR' ->
+                Expect.equal (Seq.append (nodeItems shift newL) (nodeItems shift nodeR') |> Array.ofSeq) expected "Order of items should not change during concatenate"
+                Expect.equal newL.NodeSize Literals.blockSize "After concating, if a right node exists then left node should be exactly M items long"
+                checkProperties shift newL "Newly-concatenated left node"
+                checkProperties shift nodeR' "Newly-concatenated right node"
   ]
 
 

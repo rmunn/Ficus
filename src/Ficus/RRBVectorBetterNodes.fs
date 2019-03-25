@@ -790,6 +790,54 @@ PrependNChildrenS n seq<ch> seq<sz>
                 l, Some r
     // That will form part of the MergeTrees logic, which will be used in concatenating vectors.
 
+    member this.ConcatTwigsPlusLeaf owner shift (middle : RRBLeafNode<'T>) (right : RRBFullNode<'T>) =
+        // Usually used when concatenating two vectors, where `middle` will be the tail of the left vector
+        // Will ONLY be called when there's room to merge in the middle leaf, whether directly or by rebalancing
+#if DEBUG
+        if shift <> Literals.blockSizeShift then
+            failwith <| sprintf "ConcatTwigsPlusLeaf called with shift <> Literals.blockSizeShift (%d); shift called with was %d instead. Left was %A, middle was %A, and right was %A" Literals.blockSizeShift shift this middle right
+        if not (this.HasRoomToMergeTheTail middle.NodeSize right) then
+            failwith <| sprintf "ConcatTwigsPlusLeaf should only be called when there is room to merge the tail, but there wasn't in this call. Left was %A, middle was %A, and right was %A" this middle right
+#endif
+        let needsRebalance = this.NeedsRebalance2PlusLeaf shift (middle.Items) right  // Do this before AppendNChildren in case of extended nodes
+        if this.NodeSize + 1 + right.NodeSize <= Literals.blockSize then
+            let node' = this.AppendChild owner shift middle
+            let node'' =
+                if right :? RRBRelaxedNode<'T>
+                then (node' :?> RRBFullNode<'T>).AppendNChildrenS owner shift right.NodeSize right.Children (right :?> RRBRelaxedNode<'T>).SizeTable
+                else (node' :?> RRBFullNode<'T>).AppendNChildren  owner shift right.NodeSize right.Children
+            let result = if needsRebalance then (node'' :?> RRBFullNode<'T>).Rebalance owner shift else node''
+            result, None
+        else
+            if needsRebalance
+            then this.Rebalance2Plus1 owner shift (Some middle) right
+            elif this.NodeSize = Literals.blockSize - 1 then
+                // Save time by not rewriting right node
+                let node' = this.AppendChild owner shift middle
+                node', Some (right :> RRBNode<'T>)
+            elif this.NodeSize = Literals.blockSize && right.NodeSize < Literals.blockSize then
+                // Save time by not rewriting left (this) node
+                let right' = right.InsertChild owner shift 0 middle
+                this :> RRBNode<'T>, Some right'
+#if DEBUG
+            elif this.NodeSize = Literals.blockSize && right.NodeSize = Literals.blockSize then
+                failwith <| sprintf "ConcatTwigsPlusLeaf should only be called when there is room to merge the tail, and HasRoomToMergeTheTail reported true. Since left and right were both full, that should mean that the tail was mergeable because a rebalance was possible... but we didn't rebalance. This resulted in a tail merge that wasn't actually possible. Must find out why. Left was %A, middle was %A, and right was %A" this middle right
+#endif
+            else
+                let node' = this.AppendChild owner shift middle
+                let l, r = right.SlideChildrenLeft owner shift (Literals.blockSize - node'.NodeSize) (node' :?> RRBFullNode<'T>)
+                // TODO: Consider whether a SlideChildrenLeftPlusOne method is worth writing, to avoid having to make an intermediate node here via AppendChild
+                l, Some r
+
+    member inline this.HasRoomToMergeTheTail tailLength (right : RRBFullNode<'T>) =
+        this.NodeSize  < Literals.blockSize
+     || right.NodeSize < Literals.blockSize
+     || this.TwigSlotCount  + tailLength <= Literals.blockSize * (Literals.blockSize - Literals.eMaxPlusOne)
+     || right.TwigSlotCount + tailLength <= Literals.blockSize * (Literals.blockSize - Literals.eMaxPlusOne)
+     // NOTE: When that was "blockSize - 1", the math didn't work when we enforce the "Must have an error greater than 2" rule.
+     // One situation where this failed was if the left node was totally full (1024 items) and the right node was
+     // [32; 25; 32; 27; 32; 28; 32; 30; 32; 31; 32; 16; 32; 32; 29; 32; 32; 32; 32; 28; 22; 17; 32; 24; 32; 28; 32; 27; 32; 31; 32; 23]
+     // That's 930 leaves in the right node, but 32 * 29 = 928 so the error only counts as 2, not 3. So Rebalance2Plus1 was never called, and the tail didn't actually have room.
 
 and [<StructuredFormatDisplay("RelaxedNode({StringRepr})")>] RRBRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], sizeTable : int[]) =
     inherit RRBFullNode<'T>(ownerToken, children)
@@ -1123,6 +1171,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         let oldSize = node'.NodeSize
         for i = oldSize - 1 downto localIdx do
             node'.Children.[i+1] <- node'.Children.[i]
+        node'.Children.[localIdx] <- newChild
         node'.SetNodeSize (oldSize + 1)
         if newChildSize = (1 <<< shift) then
             // Inserted a full child, so this is still a full node
