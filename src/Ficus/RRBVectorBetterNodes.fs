@@ -772,24 +772,18 @@ PrependNChildrenS n seq<ch> seq<sz>
             this.ApplyRebalancePlanImpl<'T> sizes (mergeStart, mergeLen, sizeReduction) childrenEnum (fun (leaf : RRBNode<'T>) -> (leaf :?> RRBLeafNode<'T>).Items) (RRBNode<'T>.MkLeaf owner)
 
     member this.ConcatNodes owner shift (right : RRBFullNode<'T>) =
-        let needsRebalance = this.NeedsRebalance2 shift right  // Do this before AppendNChildren in case of extended nodes
-        // TODO: Move the "if needsRebalance" below up into the top part of the if branch, then calculate node sizes as the second part of the if branch
-        if this.NodeSize + right.NodeSize <= Literals.blockSize then
-            // If we don't need to rebalance, we'll still combine the two nodes into one here, so the tree merge will be simpler at the higher-up level
-            if needsRebalance
-            then this.Rebalance2 owner shift right
-            else
-                let result =
-                    if right :? RRBRelaxedNode<'T>
-                    then this.AppendNChildrenS owner shift right.NodeSize right.Children (right :?> RRBRelaxedNode<'T>).SizeTable
-                    else this.AppendNChildren  owner shift right.NodeSize right.Children
-                result, None
+        if this.NeedsRebalance2 shift right
+        then this.Rebalance2 owner shift right
+        elif this.NodeSize + right.NodeSize > Literals.blockSize then
+            // Can't fit into a single node, so save time by not rewriting
+            this :> RRBNode<'T>, Some (right :> RRBNode<'T>)
         else
-            if needsRebalance
-            then this.Rebalance2 owner shift right
-            else
-                // If no rebalance needed, save time by not rewriting any nodes
-                this :> RRBNode<'T>, Some (right :> RRBNode<'T>)
+            let left' =
+                // Combine as efficiently as possible by re-using right node's size table if it exists
+                if right :? RRBRelaxedNode<'T>
+                then this.AppendNChildrenS owner shift right.NodeSize right.Children (right :?> RRBRelaxedNode<'T>).SizeTable
+                else this.AppendNChildren  owner shift right.NodeSize right.Children
+            left', None
     // That will form part of the MergeTrees logic, which will be used in concatenating vectors.
 
     member this.ConcatTwigsPlusLeaf owner shift (middle : RRBLeafNode<'T>) (right : RRBFullNode<'T>) =
@@ -801,44 +795,34 @@ PrependNChildrenS n seq<ch> seq<sz>
         if not (this.HasRoomToMergeTheTail shift middle right) then
             failwith <| sprintf "ConcatTwigsPlusLeaf should only be called when there is room to merge the tail, but there wasn't in this call. Left was %A, middle was %A, and right was %A" this middle right
 #endif
-        let needsRebalance = this.NeedsRebalance2PlusLeaf shift middle.NodeSize right  // Do this before AppendNChildren in case of extended nodes
-        // TODO: Move the "if needsRebalance" below up into the top part of the if branch, then calculate newLen and do "if newLen < blockSize" as the second part of the if branch
-        if this.NodeSize + 1 + right.NodeSize <= Literals.blockSize then
-            if needsRebalance
-            then this.Rebalance2Plus1 owner shift (Some middle) right
-            else
-                // TODO: Consider whether we might want to just NOT merge the two. If there's a 2-length node + a 3-length node, do we want a "2,3" up above? And would that end up rebalanced?
-                let newLen = this.NodeSize + 1 + right.NodeSize
-                let arr = this.MkArrayForRebalance owner shift newLen
-                let items = seq {
-                    yield! this.Children |> Seq.truncate this.NodeSize
-                    yield middle :> RRBNode<'T>
-                    yield! right.Children |> Seq.truncate right.NodeSize
-                }
-                arr |> Array.fillFromSeq items 0 newLen
-                this.MkNodeForRebalance owner shift arr newLen, None
+        if this.NeedsRebalance2PlusLeaf shift middle.NodeSize right then
+            this.Rebalance2Plus1 owner shift (Some middle) right
+        elif this.NodeSize + 1 + right.NodeSize <= Literals.blockSize then
+            // If we can compress into a single node, then the time spent rewriting the node is worth it
+            let newLen = this.NodeSize + 1 + right.NodeSize
+            let arr = this.MkArrayForRebalance owner shift newLen
+            let items = seq {
+                yield! this.Children |> Seq.truncate this.NodeSize
+                yield middle :> RRBNode<'T>
+                yield! right.Children |> Seq.truncate right.NodeSize
+            }
+            arr |> Array.fillFromSeq items 0 newLen
+            this.MkNodeForRebalance owner shift arr newLen, None
+        elif this.NodeSize < Literals.blockSize then
+            // Save time by not rewriting right node
+            let node' = this.AppendChild owner shift middle
+            node', Some (right :> RRBNode<'T>)
+        elif right.NodeSize < Literals.blockSize then
+            // Save time by not rewriting left node
+            let right' = right.InsertChild owner shift 0 middle
+            this :> RRBNode<'T>, Some right'
         else
-            if needsRebalance
-            then this.Rebalance2Plus1 owner shift (Some middle) right
-            elif this.NodeSize < Literals.blockSize then
-                // Save time by not rewriting right node
-                let node' = this.AppendChild owner shift middle
-                node', Some (right :> RRBNode<'T>)
-            elif right.NodeSize < Literals.blockSize then
-                // Save time by not rewriting left (this) node
-                let right' = right.InsertChild owner shift 0 middle
-                this :> RRBNode<'T>, Some right'
-            else
-                failwith <| sprintf "ConcatTwigsPlusLeaf should only be called when there is room to merge the tail, and HasRoomToMergeTheTail reported true. Since left and right were both full, that should mean that the tail was mergeable because a rebalance was possible... but we didn't rebalance. This resulted in a tail merge that wasn't actually possible. Must find out why. Left was %A, middle was %A, and right was %A" this middle right
+            failwith <| sprintf "ConcatTwigsPlusLeaf should only be called when there is room to merge the tail, and HasRoomToMergeTheTail reported true. Since left and right were both full, that should mean that the tail was mergeable because a rebalance was possible... but we didn't rebalance. This resulted in a tail merge that wasn't actually possible. Must find out why. Left was %A, middle was %A, and right was %A" this middle right
 
     member inline this.HasRoomToMergeTheTail shift (tail : RRBLeafNode<'T>) (right : RRBFullNode<'T>) =
         this.NodeSize  < Literals.blockSize
      || right.NodeSize < Literals.blockSize
      || this.NeedsRebalance2PlusLeaf shift tail.NodeSize right
-     // NOTE: When that was "blockSize - 1", the math didn't work when we enforce the "Must have an error greater than 2" rule.
-     // One situation where this failed was if the left node was totally full (1024 items) and the right node was
-     // [32; 25; 32; 27; 32; 28; 32; 30; 32; 31; 32; 16; 32; 32; 29; 32; 32; 32; 32; 28; 22; 17; 32; 24; 32; 28; 32; 27; 32; 31; 32; 23]
-     // That's 930 leaves in the right node, but 32 * 29 = 928 so the error only counts as 2, not 3. So Rebalance2Plus1 was never called, and the tail didn't actually have room.
 
 and [<StructuredFormatDisplay("RelaxedNode({StringRepr})")>] RRBRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], sizeTable : int[]) =
     inherit RRBFullNode<'T>(ownerToken, children)
