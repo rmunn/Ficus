@@ -165,12 +165,12 @@ type RRBNode<'T>(ownerToken : OwnerToken) =
         let slots = if shift > Literals.blockSize then this.SlotCount + right.SlotCount else this.TwigSlotCount + right.TwigSlotCount
         slots <= ((this.NodeSize + right.NodeSize - Literals.eMaxPlusOne) <<< Literals.blockSizeShift)
 
-    member this.NeedsRebalance2PlusLeaf shift (leaf : 'T[]) (right : RRBNode<'T>) =
+    member this.NeedsRebalance2PlusLeaf shift (leafLen : int) (right : RRBNode<'T>) =
 #if DEBUG
         if shift <> Literals.blockSize then
             failwith <| sprintf "NeedsRebalance2PlusLeaf may only be called at the twig level (shift %d), and it was instead called at with shift %d" Literals.blockSizeShift shift
 #endif
-        let slots = this.TwigSlotCount + leaf.Length + right.TwigSlotCount
+        let slots = this.TwigSlotCount + leafLen + right.TwigSlotCount
         slots <= ((this.NodeSize + 1 + right.NodeSize - Literals.eMaxPlusOne) <<< Literals.blockSizeShift)
         // TODO: Once unit testing is solid, remove the "shift" parameter since it should always be Literals.blockSizeShift
 
@@ -774,6 +774,7 @@ PrependNChildrenS n seq<ch> seq<sz>
     member this.ConcatNodes owner shift (right : RRBFullNode<'T>) =
         let needsRebalance = this.NeedsRebalance2 shift right  // Do this before AppendNChildren in case of extended nodes
         if this.NodeSize + right.NodeSize <= Literals.blockSize then
+            // TODO: Consider whether we should save time by not rewriting nodes: if needsRebalance is false, perhaps this should just be (this, Some right)?
             let node' =
                 if right :? RRBRelaxedNode<'T>
                 then this.AppendNChildrenS owner shift right.NodeSize right.Children (right :?> RRBRelaxedNode<'T>).SizeTable
@@ -783,11 +784,9 @@ PrependNChildrenS n seq<ch> seq<sz>
         else
             if needsRebalance
             then this.Rebalance2 owner shift right
-            elif this.NodeSize = Literals.blockSize then
-                this :> RRBNode<'T>, Some (right :> RRBNode<'T>)  // If left is already full, save time by not rewriting any nodes
             else
-                let l, r = right.SlideChildrenLeft owner shift (Literals.blockSize - this.NodeSize) this
-                l, Some r
+                // If no rebalance needed, save time by not rewriting any nodes
+                this :> RRBNode<'T>, Some (right :> RRBNode<'T>)
     // That will form part of the MergeTrees logic, which will be used in concatenating vectors.
 
     member this.ConcatTwigsPlusLeaf owner shift (middle : RRBLeafNode<'T>) (right : RRBFullNode<'T>) =
@@ -796,44 +795,43 @@ PrependNChildrenS n seq<ch> seq<sz>
 #if DEBUG
         if shift <> Literals.blockSizeShift then
             failwith <| sprintf "ConcatTwigsPlusLeaf called with shift <> Literals.blockSizeShift (%d); shift called with was %d instead. Left was %A, middle was %A, and right was %A" Literals.blockSizeShift shift this middle right
-        if not (this.HasRoomToMergeTheTail middle.NodeSize right) then
+        if not (this.HasRoomToMergeTheTail shift middle right) then
             failwith <| sprintf "ConcatTwigsPlusLeaf should only be called when there is room to merge the tail, but there wasn't in this call. Left was %A, middle was %A, and right was %A" this middle right
 #endif
-        let needsRebalance = this.NeedsRebalance2PlusLeaf shift (middle.Items) right  // Do this before AppendNChildren in case of extended nodes
+        let needsRebalance = this.NeedsRebalance2PlusLeaf shift middle.NodeSize right  // Do this before AppendNChildren in case of extended nodes
+        // TODO: Move the "if needsRebalance" below up into the top part of the if branch, then calculate newLen and do "if newLen < blockSize" as the second part of the if branch
         if this.NodeSize + 1 + right.NodeSize <= Literals.blockSize then
-            let node' = this.AppendChild owner shift middle
-            let node'' =
-                if right :? RRBRelaxedNode<'T>
-                then (node' :?> RRBFullNode<'T>).AppendNChildrenS owner shift right.NodeSize right.Children (right :?> RRBRelaxedNode<'T>).SizeTable
-                else (node' :?> RRBFullNode<'T>).AppendNChildren  owner shift right.NodeSize right.Children
-            let result = if needsRebalance then (node'' :?> RRBFullNode<'T>).Rebalance owner shift else node''
-            result, None
+            if needsRebalance
+            then this.Rebalance2Plus1 owner shift (Some middle) right
+            else
+                // TODO: Consider whether we might want to just NOT merge the two. If there's a 2-length node + a 3-length node, do we want a "2,3" up above? And would that end up rebalanced?
+                let newLen = this.NodeSize + 1 + right.NodeSize
+                let arr = this.MkArrayForRebalance owner shift newLen
+                let items = seq {
+                    yield! this.Children |> Seq.truncate this.NodeSize
+                    yield middle :> RRBNode<'T>
+                    yield! right.Children |> Seq.truncate right.NodeSize
+                }
+                arr |> Array.fillFromSeq items 0 newLen
+                this.MkNodeForRebalance owner shift arr newLen, None
         else
             if needsRebalance
             then this.Rebalance2Plus1 owner shift (Some middle) right
-            elif this.NodeSize = Literals.blockSize - 1 then
+            elif this.NodeSize < Literals.blockSize then
                 // Save time by not rewriting right node
                 let node' = this.AppendChild owner shift middle
                 node', Some (right :> RRBNode<'T>)
-            elif this.NodeSize = Literals.blockSize && right.NodeSize < Literals.blockSize then
+            elif right.NodeSize < Literals.blockSize then
                 // Save time by not rewriting left (this) node
                 let right' = right.InsertChild owner shift 0 middle
                 this :> RRBNode<'T>, Some right'
-#if DEBUG
-            elif this.NodeSize = Literals.blockSize && right.NodeSize = Literals.blockSize then
-                failwith <| sprintf "ConcatTwigsPlusLeaf should only be called when there is room to merge the tail, and HasRoomToMergeTheTail reported true. Since left and right were both full, that should mean that the tail was mergeable because a rebalance was possible... but we didn't rebalance. This resulted in a tail merge that wasn't actually possible. Must find out why. Left was %A, middle was %A, and right was %A" this middle right
-#endif
             else
-                let node' = this.AppendChild owner shift middle
-                let l, r = right.SlideChildrenLeft owner shift (Literals.blockSize - node'.NodeSize) (node' :?> RRBFullNode<'T>)
-                // TODO: Consider whether a SlideChildrenLeftPlusOne method is worth writing, to avoid having to make an intermediate node here via AppendChild
-                l, Some r
+                failwith <| sprintf "ConcatTwigsPlusLeaf should only be called when there is room to merge the tail, and HasRoomToMergeTheTail reported true. Since left and right were both full, that should mean that the tail was mergeable because a rebalance was possible... but we didn't rebalance. This resulted in a tail merge that wasn't actually possible. Must find out why. Left was %A, middle was %A, and right was %A" this middle right
 
-    member inline this.HasRoomToMergeTheTail tailLength (right : RRBFullNode<'T>) =
+    member inline this.HasRoomToMergeTheTail shift (tail : RRBLeafNode<'T>) (right : RRBFullNode<'T>) =
         this.NodeSize  < Literals.blockSize
      || right.NodeSize < Literals.blockSize
-     || this.TwigSlotCount  + tailLength <= Literals.blockSize * (Literals.blockSize - Literals.eMaxPlusOne)
-     || right.TwigSlotCount + tailLength <= Literals.blockSize * (Literals.blockSize - Literals.eMaxPlusOne)
+     || this.NeedsRebalance2PlusLeaf shift tail.NodeSize right
      // NOTE: When that was "blockSize - 1", the math didn't work when we enforce the "Must have an error greater than 2" rule.
      // One situation where this failed was if the left node was totally full (1024 items) and the right node was
      // [32; 25; 32; 27; 32; 28; 32; 30; 32; 31; 32; 16; 32; 32; 29; 32; 32; 32; 32; 28; 22; 17; 32; 24; 32; 28; 32; 27; 32; 31; 32; 23]

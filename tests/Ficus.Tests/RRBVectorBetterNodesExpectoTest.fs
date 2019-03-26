@@ -799,15 +799,18 @@ let rebalanceTestsWIP =
             checkProperties shift newL "Newly-concatenated merged node"
         | Some nodeR' ->
             Expect.equal (Seq.append (nodeItems shift newL) (nodeItems shift nodeR') |> Array.ofSeq) expected "Order of items should not change during concatenate"
-            Expect.equal newL.NodeSize Literals.blockSize "After concating, if a right node exists then left node should be exactly M items long"
+            let totalOldSize = nodeL.NodeSize + nodeR.NodeSize
+            let validNewSizes = if nodeL.NeedsRebalance2 shift nodeR then [totalOldSize - 2; totalOldSize - 1] else [totalOldSize]
+            let totalNewSize = newL.NodeSize + nodeR'.NodeSize
+            Expect.contains validNewSizes totalNewSize "After concating, the total size should either be the same, or go down by just one or two items"
             checkProperties shift newL "Newly-concatenated left node"
             checkProperties shift nodeR' "Newly-concatenated right node"
 
-    ftestProp (1489117831, 296575371) "Concat-with-leaf test" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (LeafNode leaf : LeafNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+    testProp (*1489117831, 296575371*) "Concat-with-leaf test" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (LeafNode leaf : LeafNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         // Need to do this before the concatenation, because after the concatenation the original nodeL may be invalid if it was an expanded node
         let shift = Literals.blockSizeShift
         let expected = Seq.concat [nodeItems shift nodeL; leaf.Items |> Seq.ofArray; nodeItems shift nodeR] |> Array.ofSeq
-        if nodeL.HasRoomToMergeTheTail leaf.NodeSize nodeR then
+        if nodeL.HasRoomToMergeTheTail shift leaf nodeR then
             let newL, newR = nodeL.ConcatTwigsPlusLeaf nullOwner shift leaf nodeR
             match newR with
             | None ->
@@ -816,7 +819,10 @@ let rebalanceTestsWIP =
                 checkProperties shift newL "Newly-concatenated merged node"
             | Some nodeR' ->
                 Expect.equal (Seq.append (nodeItems shift newL) (nodeItems shift nodeR') |> Array.ofSeq) expected "Order of items should not change during concatenate"
-                Expect.equal newL.NodeSize Literals.blockSize "After concating, if a right node exists then left node should be exactly M items long"
+                let totalOldSize = nodeL.NodeSize + 1 + nodeR.NodeSize
+                let validNewSizes = if nodeL.NeedsRebalance2PlusLeaf shift leaf.NodeSize nodeR then [totalOldSize - 2; totalOldSize - 1] else [totalOldSize]
+                let totalNewSize = newL.NodeSize + nodeR'.NodeSize
+                Expect.contains validNewSizes totalNewSize "After concating, the total size should either be the same, or go down by just one or two items"
                 checkProperties shift newL "Newly-concatenated left node"
                 checkProperties shift nodeR' "Newly-concatenated right node"
   ]
