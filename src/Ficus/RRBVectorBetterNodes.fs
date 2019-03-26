@@ -773,14 +773,17 @@ PrependNChildrenS n seq<ch> seq<sz>
 
     member this.ConcatNodes owner shift (right : RRBFullNode<'T>) =
         let needsRebalance = this.NeedsRebalance2 shift right  // Do this before AppendNChildren in case of extended nodes
+        // TODO: Move the "if needsRebalance" below up into the top part of the if branch, then calculate node sizes as the second part of the if branch
         if this.NodeSize + right.NodeSize <= Literals.blockSize then
-            // TODO: Consider whether we should save time by not rewriting nodes: if needsRebalance is false, perhaps this should just be (this, Some right)?
-            let node' =
-                if right :? RRBRelaxedNode<'T>
-                then this.AppendNChildrenS owner shift right.NodeSize right.Children (right :?> RRBRelaxedNode<'T>).SizeTable
-                else this.AppendNChildren  owner shift right.NodeSize right.Children
-            let result = if needsRebalance then (node' :?> RRBFullNode<'T>).Rebalance owner shift else node'
-            result, None
+            // If we don't need to rebalance, we'll still combine the two nodes into one here, so the tree merge will be simpler at the higher-up level
+            if needsRebalance
+            then this.Rebalance2 owner shift right
+            else
+                let result =
+                    if right :? RRBRelaxedNode<'T>
+                    then this.AppendNChildrenS owner shift right.NodeSize right.Children (right :?> RRBRelaxedNode<'T>).SizeTable
+                    else this.AppendNChildren  owner shift right.NodeSize right.Children
+                result, None
         else
             if needsRebalance
             then this.Rebalance2 owner shift right
