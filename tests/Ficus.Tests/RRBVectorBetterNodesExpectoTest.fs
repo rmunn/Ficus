@@ -89,32 +89,41 @@ let genLeavesForMultipleRelaxedNodes =
     genLeaves
     |> Gen.map (fun leaves -> leaves |> Array.chunkBySize Literals.blockSize |> Array.map (Array.map (fun l -> l :> RRBNode<int>)))
 
-let mkFullNode children = RRBNode<int>.MkFullNode nullOwner children
-let mkExpandedFullNode children = RRBExpandedFullNode<int>(nullOwner, children) :> RRBNode<int>
-let mkRelaxedNode children = RRBNode<int>.MkNode nullOwner Literals.blockSizeShift children
-let mkExpandedRelaxedNode children =
+let mkFullTwig children = RRBNode<int>.MkFullNode nullOwner children
+let mkExpandedFullTwig children = RRBExpandedFullNode<int>(nullOwner, children) :> RRBNode<int>
+let mkRelaxedTwig children = RRBNode<int>.MkNode nullOwner Literals.blockSizeShift children
+let mkExpandedRelaxedTwig children =
     let sizeTable = RRBNode<int>.CreateSizeTable Literals.blockSizeShift children
     if isSizeTableFullAtShift Literals.blockSizeShift sizeTable sizeTable.Length
     then RRBExpandedFullNode<int>(nullOwner, children) :> RRBNode<int>
     else RRBExpandedRelaxedNode<int>(nullOwner, children, sizeTable) :> RRBNode<int>
 
-let genFullNode n = genLeavesForOneFullNode n |> Gen.map mkFullNode
-let genExpandedFullNode n = genLeavesForOneFullNode n |> Gen.map mkExpandedFullNode
-let genRelaxedNode n = genLeavesForOneRelaxedNode n |> Gen.map mkRelaxedNode
-let genExpandedRelaxedNode n = genLeavesForOneRelaxedNode n |> Gen.map mkExpandedRelaxedNode
+let mkFullNode shift children = RRBNode<int>.MkFullNode nullOwner children
+let mkExpandedFullNode shift children = RRBExpandedFullNode<int>(nullOwner, children) :> RRBNode<int>
+let mkRelaxedNode shift children = RRBNode<int>.MkNode nullOwner shift children
+let mkExpandedRelaxedNode shift children =
+    let sizeTable = RRBNode<int>.CreateSizeTable shift children
+    if isSizeTableFullAtShift shift sizeTable sizeTable.Length
+    then RRBExpandedFullNode<int>(nullOwner, children) :> RRBNode<int>
+    else RRBExpandedRelaxedNode<int>(nullOwner, children, sizeTable) :> RRBNode<int>
+
+let genFullNode n = genLeavesForOneFullNode n |> Gen.map mkFullTwig
+let genExpandedFullNode n = genLeavesForOneFullNode n |> Gen.map mkExpandedFullTwig
+let genRelaxedNode n = genLeavesForOneRelaxedNode n |> Gen.map mkRelaxedTwig
+let genExpandedRelaxedNode n = genLeavesForOneRelaxedNode n |> Gen.map mkExpandedRelaxedTwig
 
 let genNode = Gen.oneof [ genFullNode Literals.blockSize; genExpandedFullNode Literals.blockSize; genRelaxedNode Literals.blockSize; genExpandedRelaxedNode Literals.blockSize ]
 let genShortNode = Gen.oneof [ genFullNode (Literals.blockSize - 1); genExpandedFullNode (Literals.blockSize - 1); genRelaxedNode (Literals.blockSize - 1); genExpandedRelaxedNode (Literals.blockSize  - 1)]
 
 let genSmallFullTree =
     genLeavesForMultipleFullNodes
-    |> Gen.map (fun leafChunks -> leafChunks |> Array.map mkFullNode)
-    |> Gen.map (fun nodes -> if nodes.Length = 1 then Array.exactlyOne nodes else mkFullNode nodes)
+    |> Gen.map (fun leafChunks -> leafChunks |> Array.truncate Literals.blockSize |> Array.map mkFullTwig)
+    |> Gen.map (fun nodes -> if nodes.Length = 1 then Array.exactlyOne nodes else mkFullNode (2 * Literals.blockSizeShift) nodes)
 
 let genSmallRelaxedTree =
     genLeavesForMultipleRelaxedNodes
-    |> Gen.map (fun leafChunks -> leafChunks |> Array.map mkRelaxedNode)
-    |> Gen.map (fun nodes -> if nodes.Length = 1 then Array.exactlyOne nodes else mkRelaxedNode nodes)
+    |> Gen.map (fun leafChunks -> leafChunks |> Array.truncate Literals.blockSize |> Array.map mkRelaxedTwig)
+    |> Gen.map (fun nodes -> if nodes.Length = 1 then Array.exactlyOne nodes else mkRelaxedNode (2 * Literals.blockSizeShift) nodes)
 
 let toTransient (root : RRBNode<'T>) =
     let newToken = mkOwnerToken()
@@ -133,6 +142,12 @@ let genTransientSmallFullTree = genSmallFullTree |> Gen.map toTransient
 let genTransientSmallRelaxedTree = genSmallRelaxedTree |> Gen.map toTransient
 
 let genTree = Gen.oneof [ genSmallFullTree; genTransientSmallFullTree; genSmallRelaxedTree; genTransientSmallRelaxedTree ]
+            //   |> Gen.map (fun node ->
+            //     logger.debug (
+            //         eventX "Generated node: {node}"
+            //         >> setField "node" (sprintf "%A" node)
+            //     )
+            //     node)
 
 type IsolatedNode<'T> = IsolatedNode of RRBFullNode<'T>
 type IsolatedShortNode<'T> = IsolatedShortNode of RRBFullNode<'T>
@@ -171,7 +186,7 @@ let ftestProp replay name fn = ftestPropertyWithConfig replay { FsCheckConfig.de
 
 let mkManualNodeA (leafSizes : int []) =
     let counter = mkCounter()
-    leafSizes |> Array.truncate Literals.blockSize |> Array.map (mkLeaf counter >> fun leaf -> leaf :> RRBNode<int>) |> mkRelaxedNode
+    leafSizes |> Array.truncate Literals.blockSize |> Array.map (mkLeaf counter >> fun leaf -> leaf :> RRBNode<int>) |> mkRelaxedTwig
 
 let mkManualNode (leafSizes : int list) =
     leafSizes |> Array.ofList |> mkManualNodeA
@@ -195,6 +210,11 @@ let isNotTwig (node : RRBNode<'T>) = not (isTwig node)
 let rec itemCount shift (node : RRBNode<'T>) =
     if shift <= 0 then node.NodeSize
     else children node |> Seq.sumBy (itemCount (down shift))
+
+let rec height (node : RRBNode<'T>) =
+    if isEmpty node || isLeaf node
+    then 0
+    else 1 + height (node :?> RRBFullNode<'T>).FirstChild
 
 type Fullness = CompletelyFull | FullEnough | NotFull   // Used in node properties
 
@@ -788,8 +808,8 @@ let rebalanceTestsWIP =
         Expect.equal (nodeL.NeedsRebalance2 shift nodeR) needsRebalancing <| sprintf "NeedsRebalancing was wrong for left %A and right %A" nodeL nodeR
 
     testProp (*500188920, 296574447*) (*801697697, 296574440*) "Concat test" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
-        // Need to do this before the concatenation, because after the concatenation the original nodeL may be invalid if it was an expanded node
         let shift = Literals.blockSizeShift
+        // Need to do this before the concatenation, because after the concatenation the original nodeL may be invalid if it was an expanded node
         let expected = Seq.append (nodeItems shift nodeL) (nodeItems shift nodeR) |> Array.ofSeq
         let newL, newR = nodeL.ConcatNodes nullOwner shift nodeR
         match newR with
@@ -807,8 +827,8 @@ let rebalanceTestsWIP =
             checkProperties shift nodeR' "Newly-concatenated right node"
 
     testProp (*1489117831, 296575371*) "Concat-with-leaf test" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (LeafNode leaf : LeafNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
-        // Need to do this before the concatenation, because after the concatenation the original nodeL may be invalid if it was an expanded node
         let shift = Literals.blockSizeShift
+        // Need to do this before the concatenation, because after the concatenation the original nodeL may be invalid if it was an expanded node
         let expected = Seq.concat [nodeItems shift nodeL; leaf.Items |> Seq.ofArray; nodeItems shift nodeR] |> Array.ofSeq
         if nodeL.HasRoomToMergeTheTail shift leaf nodeR then
             let newL, newR = nodeL.ConcatTwigsPlusLeaf nullOwner shift leaf nodeR
@@ -827,6 +847,48 @@ let rebalanceTestsWIP =
                 checkProperties shift nodeR' "Newly-concatenated right node"
   ]
 
+let mergeTreeTestsWIP =
+  ftestList "WIP: Rebalance tests" [
+    testProp "Merging twigs" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+        let shift = Literals.blockSizeShift
+        let expected = Seq.concat [nodeItems shift nodeL; nodeItems shift nodeR] |> Array.ofSeq
+        let newL, newR = nodeL.MergeTree nullOwner shift None shift nodeR
+        match newR with
+        | None ->
+            Expect.isLessThanOrEqual newL.NodeSize Literals.blockSize "After merging, left node should be at most M items long"
+            Expect.equal (nodeItems shift newL |> Array.ofSeq) expected "Order of items should not change during merge"
+            checkProperties shift newL "Newly merged node"
+        | Some nodeR' ->
+            Expect.equal (Seq.append (nodeItems shift newL) (nodeItems shift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
+            let totalOldSize = nodeL.NodeSize + nodeR.NodeSize
+            let validNewSizes = if nodeL.NeedsRebalance2 shift nodeR then [totalOldSize - 2; totalOldSize - 1] else [totalOldSize]
+            let totalNewSize = newL.NodeSize + nodeR'.NodeSize
+            Expect.contains validNewSizes totalNewSize "After merging, the total size should either be the same, or go down by just one or two items"
+            checkProperties shift newL "Newly merged left node"
+            checkProperties shift nodeR' "Newly merged right node"
+
+    ftestProp (1667443237, 296576485) "Merging left twig with right tree" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (RootNode nodeR : RootNode<int>) ->
+        let shiftL = Literals.blockSizeShift
+        let shiftR = Literals.blockSizeShift * (height nodeR)
+        if shiftR > Literals.blockSizeShift then
+            logger.debug (
+                eventX "Suspect node: {node}"
+                >> setField "node" (sprintf "%A" nodeR)
+            )
+        checkProperties shiftL nodeL "Original left node"
+        checkProperties shiftR nodeR "Original right node"
+        let expected = Seq.concat [nodeItems shiftL nodeL; nodeItems shiftR nodeR] |> Array.ofSeq
+        let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR
+        let newShift = max shiftL shiftR
+        match newR with
+        | None ->
+            Expect.equal (nodeItems newShift newL |> Array.ofSeq) expected "Order of items should not change during merge"
+            checkProperties newShift newL "Newly merged node"
+        | Some nodeR' ->
+            Expect.equal (Seq.append (nodeItems newShift newL) (nodeItems newShift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
+            checkProperties newShift newL "Newly merged left node"
+            checkProperties newShift nodeR' "Newly merged right node"
+  ]
 
 // logger.debug (
 //     eventX "Result: {node}"
@@ -835,6 +897,7 @@ let rebalanceTestsWIP =
 
 let tests =
   testList "Basic node tests" [
+    mergeTreeTestsWIP
     rebalanceTestsWIP
     appendAndPrependChildrenPropertyTests  // Put this first since it's so long
     appendPropertyTests

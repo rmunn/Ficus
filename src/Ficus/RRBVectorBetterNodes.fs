@@ -824,6 +824,91 @@ PrependNChildrenS n seq<ch> seq<sz>
      || right.NodeSize < Literals.blockSize
      || this.NeedsRebalance2PlusLeaf shift tail.NodeSize right
 
+    member this.MergeTree owner shift (tailOpt : RRBLeafNode<'T> option) rightShift (right : RRBFullNode<'T>) =
+        if shift = Literals.blockSizeShift && rightShift = Literals.blockSizeShift then
+            match tailOpt with
+            | None -> this.ConcatNodes owner shift right
+            | Some tail -> this.ConcatTwigsPlusLeaf owner shift tail right
+        elif shift = rightShift then
+            let childL = this.LastChild :?> RRBFullNode<'T>
+            let childR = right.FirstChild :?> RRBFullNode<'T>
+            match childL.MergeTree owner (down shift) tailOpt (down rightShift) childR with
+            | child', None ->
+                let parentL = this.UpdateChild owner shift (this.NodeSize - 1) child'
+                if right.NodeSize > 1 then
+                    let parentR = right.RemoveChild owner shift 0
+                    parentL, Some parentR
+                else
+                    parentL, None
+            | childL', Some childR' ->
+                let parentL = this.UpdateChild owner shift (this.NodeSize - 1) childL'
+                let parentR = right.UpdateChild owner shift 0 childR'
+                parentL, Some parentR
+        elif shift < rightShift then
+            let childR = right.FirstChild :?> RRBFullNode<'T>
+            match this.MergeTree owner shift tailOpt (down rightShift) childR with
+            | child', None ->
+                let parentR = right.UpdateChild owner shift 0 child'
+                parentR, None  // TODO: Test this
+            | childL', Some childR' ->
+                let parentL = (childL' :?> RRBFullNode<'T>).NewParent owner (up shift) None
+                let parentR = right.UpdateChild owner shift 0 childR'
+                parentL, Some parentR
+        else // shift > rightShift
+            let childL = this.LastChild :?> RRBFullNode<'T>
+            match this.MergeTree owner (down shift) tailOpt rightShift right with
+            | child', None ->
+                let parentL = this.UpdateChild owner shift (this.NodeSize - 1) child'
+                parentL, None  // TODO: Test this
+            | childL', Some childR' ->
+                let parentL = this.UpdateChild owner shift (this.NodeSize - 1) childL'
+                let parentR = (childR' :?> RRBFullNode<'T>).NewParent owner (up rightShift) None
+                parentL, Some parentR
+
+    // TODO: Write "member this.NewParent" for other types of nodes (relaxed, etc.)
+    abstract member NewParent : OwnerToken -> int -> RRBNode<'T> option -> RRBNode<'T>
+    default this.NewParent owner upShift rightSibling =
+        let arr =
+            match rightSibling with
+            | None -> [|this :> RRBNode<'T>|]
+            | Some right -> [|this :> RRBNode<'T>; right|]
+        RRBNode<'T>.MkNode owner upShift arr
+(*
+
+    let setOrRemoveFirstChild<'T> thread shift newChild parentArray =
+        if newChild |> Array.isEmpty
+        then parentArray |> Array.copyAndRemoveFirst
+        else parentArray |> Array.copyAndSet 0 (NodeCreation.mkRRBNode<'T> thread (down shift) newChild |> box)
+
+    let setOrRemoveLastChild<'T> thread shift newChild parentArray =
+        if newChild |> Array.isEmpty
+        then parentArray |> Array.copyAndPop
+        else parentArray |> Array.copyAndSetLast (NodeCreation.mkRRBNode<'T> thread (down shift) newChild |> box)
+
+    let rec mergeTree thread aShift (a:Node) bShift (b:Node) (tail : 'T[]) =
+        if aShift <= Literals.blockSizeShift && bShift <= Literals.blockSizeShift then
+            // At twig level on both nodes
+            mergeWithTail thread aShift a tail b
+        else
+            if aShift < bShift then
+                let aR, bL = mergeTree thread aShift a (down bShift) (b |> getChildNode 0) tail
+                let a' = if aR |> Array.isEmpty then [||] else [|NodeCreation.mkRRBNode<'T> thread (down bShift) aR |> box|]
+                let b' = b.Children |> setOrRemoveFirstChild<'T> thread bShift bL
+                mergeArrays<'T> thread bShift a' b'
+            elif aShift > bShift then
+                let aR, bL = mergeTree thread (down aShift) (getLastChildNode a) bShift b tail
+                let a' = a.Children |> setOrRemoveLastChild<'T>  thread aShift aR
+                let b' = if bL |> Array.isEmpty then [||] else [|NodeCreation.mkRRBNode<'T> thread (down aShift) bL |> box|]
+                mergeArrays<'T> thread aShift a' b'
+            else
+                let aR,  bL  = getLastChildNode a, b |> getChildNode 0
+                let aR', bL' = mergeTree thread (down aShift) aR (down bShift) bL tail
+                let a' = a.Children |> setOrRemoveLastChild<'T>  thread aShift aR'
+                let b' = b.Children |> setOrRemoveFirstChild<'T> thread bShift bL'
+                mergeArrays<'T> thread aShift a' b'
+
+*)
+
 and [<StructuredFormatDisplay("RelaxedNode({StringRepr})")>] RRBRelaxedNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[], sizeTable : int[]) =
     inherit RRBFullNode<'T>(ownerToken, children)
 
