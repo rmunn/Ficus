@@ -893,6 +893,8 @@ let mergeTreeTestsWIP =
         // Current failure has to do with a FullNode root with two children: left is a FullNode of length 24 (but not *totally* full since it's not length 32) and right is a relaxed node.
         // The top node, being a FullNode, is counting its TreeSize as (32 * full node of down shift), which isn't actually right. TODO: Consider whether newly-made parent should actually
         // be a full node (I think it shouldn't), and if not, how do we detect this scenario at node creation time?
+
+        // TODO: Write some individual tests with the failures from src/Ficus/test-failures-2019-03-27.txt as a guideline.
   ]
 
 // logger.debug (

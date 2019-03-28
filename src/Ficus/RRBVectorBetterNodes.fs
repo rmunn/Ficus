@@ -233,7 +233,8 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
             else RRBRelaxedNode<'T>(ownerToken, children, sizeTable) :> RRBNode<'T>
             // TODO: Check if expanded nodes need to override this
 
-    member this.IndexesAndChild shift treeIdx =
+    abstract member IndexesAndChild : int -> int -> int * RRBNode<'T> * int
+    default this.IndexesAndChild shift treeIdx =
         let localIdx = radixIndex shift treeIdx
         let child = this.Children.[localIdx]
         let antimask = ~~~(Literals.blockIndexMask <<< shift)
@@ -954,6 +955,14 @@ and [<StructuredFormatDisplay("RelaxedNode({StringRepr})")>] RRBRelaxedNode<'T>(
         if RRBMath.isSizeTableFullAtShift shift sizeTable sizeTable.Length
         then RRBFullNode<'T>(this.Owner, this.Children) :> RRBNode<'T>
         else this :> RRBNode<'T>
+
+    override this.IndexesAndChild shift treeIdx =
+        let mutable localIdx = radixIndex shift treeIdx
+        while this.SizeTable.[localIdx] <= treeIdx do
+            localIdx <- localIdx + 1
+        let child = this.Children.[localIdx]
+        let nextTreeIdx = if localIdx = 0 then treeIdx else treeIdx - this.SizeTable.[localIdx - 1]
+        localIdx, child, nextTreeIdx
 
     // ===== NODE MANIPULATION =====
     // These low-level functions only create new nodes (or modify an expanded node), without doing any bounds checking.

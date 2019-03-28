@@ -1,0 +1,103 @@
+Failed after 87 tests. Parameters:
+	IsolatedNode
+  ExpandedRelaxedNode(length=32, sizetable=[|30; 55; 78; 103; 122; 154; 173; 205; 237; 269; 301; 330; 352; 383; 409; 441;
+  473; 505; 529; 561; 584; 610; 640; 662; 693; 725; 757; 777; 798; 830; 858; 890|], children=[|L30; L25; L23; L25; L19; L32; L19; L32; L32; L32; L32; L29; L22; L31; L26; L32;
+  L32; L32; L24; L32; L23; L26; L30; L22; L31; L32; L32; L20; L21; L32; L28; L32|]) RootNode
+  FullNode(length=2, children=[|FullNode(length=32, children=[|L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32;
+  L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32|]);
+  FullNode(length=6, children=[|L32; L32; L32; L32; L32; L32|])|])
+Result:
+	Exception
+  Expecto.AssertException: Newly merged right node with shift=10 and root=FullNode(length=2, children=[|FullNode(length=31, children=[|L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32;
+  L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32|]);
+  FullNode(length=6, children=[|L32; L32; L32; L32; L32; L32|])|])
+failed the following RRBVector invariants:
+["The tree size of any node should match the total number of items its descendent leaves contain";
+ "The size table of any tree node should match the cumulative tree sizes of its children"]
+
+
+Failed after 42 tests. Parameters:
+	IsolatedNode
+  RelaxedNode(length=22, sizetable=[|32; 50; 82; 109; 141; 173; 191; 223; 243; 275; 296; 328; 351; 383; 407; 439;
+  455; 487; 511; 543; 575; 607|], children=[|L32; L18; L32; L27; L32; L32; L18; L32; L20; L32; L21; L32; L23; L32; L24; L32;
+  L16; L32; L24; L32; L32; L32|]) RootNode
+  ExpandedRelaxedNode(length=18, sizetable=[|32; 64; 95; 127; 149; 181; 204; 236; 261; 293; 319; 351; 379; 411; 431; 463;
+  484; 516; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0|], children=[|L32; L32; L31; L32; L22; L32; L23; L32; L25; L32; L26; L32; L28; L32; L20; L32;
+  L21; L32; null; null; null; null; null; null; null; null; null; null; null;
+  null; null; null|])
+Result:
+	Exception
+  Expecto.AssertException: Newly rooted merged tree with shift=5 and root=RelaxedNode(length=2, sizetable=[|926; 1123|], children=[|RelaxedNode(length=32, sizetable=[|32; 50; 82; 109; 141; 173; 205; 237; 269; 296; 328; 351; 383; 407; 439; 455;
+  487; 511; 543; 575; 607; 639; 671; 702; 734; 756; 788; 811; 843; 868; 900; 926|], children=[|L32; L18; L32; L27; L32; L32; L32; L32; L32; L27; L32; L23; L32; L24; L32; L16;
+  L32; L24; L32; L32; L32; L32; L32; L31; L32; L22; L32; L23; L32; L25; L32; L26|]);
+  RelaxedNode(length=7, sizetable=[|32; 60; 92; 112; 144; 165; 197|], children=[|L32; L28; L32; L20; L32; L21; L32|])|])
+failed the following RRBVector invariants:
+["All twigs should be at height 1";
+ "The tree size of any node should match the total number of items its descendent leaves contain";
+ "The tree size of any leaf should equal its node size";
+ "All nodes at shift 0 should be leaves";
+ "The shift of a vector should always be the height from the root to the leaves, multiplied by Literals.blockSizeShift"]
+
+
+Failed after 44 tests. Parameters:
+	IsolatedNode
+  RelaxedNode(length=17, sizetable=[|16; 33; 65; 92; 124; 140; 172; 204; 236; 258; 290; 313; 342; 374; 406; 438;
+  470|], children=[|L16; L17; L32; L27; L32; L16; L32; L32; L32; L22; L32; L23; L29; L32; L32; L32;
+  L32|]) RootNode
+  ExpandedFullNode(length=19, children=[|L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32;
+  L32; L32; L32; null; null; null; null; null; null; null; null; null; null;
+  null; null; null|])
+Result:
+	Exception
+  Expecto.AssertException: Newly rooted merged tree with shift=10 and root=RelaxedNode(length=2, sizetable=[|470; 1078|], children=[|RelaxedNode(length=17, sizetable=[|16; 33; 65; 92; 124; 140; 172; 204; 236; 258; 290; 313; 342; 374; 406; 438;
+  470|], children=[|L16; L17; L32; L27; L32; L16; L32; L32; L32; L22; L32; L23; L29; L32; L32; L32;
+  L32|]);
+  ExpandedFullNode(length=19, children=[|L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32;
+  L32; L32; L32; null; null; null; null; null; null; null; null; null; null;
+  null; null; null|])|])
+failed the following RRBVector invariants:
+["ExpandedNodes (and ExpandedRRBNodes) should not appear in a tree whose root is not an expanded node variant"]
+
+
+Failed after 55 tests. Parameters:
+	IsolatedNode
+  ExpandedFullNode(length=24, children=[|L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32;
+  L32; L32; L32; L32; L32; L32; L32; L32; null; null; null; null; null; null;
+  null; null|]) RootNode
+  RelaxedNode(length=10, sizetable=[|32; 64; 92; 124; 153; 185; 216; 248; 271; 303|], children=[|L32; L32; L28; L32; L29; L32; L31; L32; L23; L32|])
+Result:
+	Exception
+  Expecto.AssertException: Newly rooted merged tree with shift=10 and root=ExpandedFullNode(length=2, children=[|FullNode(length=24, children=[|L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32;
+  L32; L32; L32; L32; L32; L32; L32; L32|]);
+  ExpandedRelaxedNode(length=10, sizetable=[|32; 64; 92; 124; 153; 185; 216; 248; 271; 303; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0;
+  0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0|], children=[|L32; L32; L28; L32; L29; L32; L31; L32; L23; L32; null; null; null; null; null;
+  null; null; null; null; null; null; null; null; null; null; null; null; null;
+  null; null; null; null|]);
+  null; null; null; null; null; null; null; null; null; null; null; null; null;
+  null; null; null; null; null; null; null; null; null; null; null; null; null;
+  null; null; null; null|])
+failed the following RRBVector invariants:
+["The tree size of any node should match the total number of items its descendent leaves contain";
+ "The size table of any tree node should match the cumulative tree sizes of its children"]
+
+
+Failed after 76 tests. Parameters:
+	IsolatedNode FullNode(length=2, children=[|L32; L32|]) RootNode
+  ExpandedFullNode(length=2, children=[|FullNode(length=32, children=[|L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32;
+  L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32|]);
+  ExpandedFullNode(length=2, children=[|L32; L32; null; null; null; null; null; null; null; null; null; null; null;
+  null; null; null; null; null; null; null; null; null; null; null; null; null;
+  null; null; null; null; null; null|]);
+  null; null; null; null; null; null; null; null; null; null; null; null; null;
+  null; null; null; null; null; null; null; null; null; null; null; null; null;
+  null; null; null; null|])
+Result:
+	Exception
+  Expecto.AssertException: Newly rooted merged tree with shift=15 and root=RelaxedNode(length=2, sizetable=[|64; 1152|], children=[|FullNode(length=1, children=[|FullNode(length=2, children=[|L32; L32|])|]);
+  FullNode(length=2, children=[|FullNode(length=32, children=[|L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32;
+  L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32|]);
+  ExpandedFullNode(length=2, children=[|L32; L32; null; null; null; null; null; null; null; null; null; null; null;
+  null; null; null; null; null; null; null; null; null; null; null; null; null;
+  null; null; null; null; null; null|])|])|])
+failed the following RRBVector invariants:
+["ExpandedNodes (and ExpandedRRBNodes) should not appear in a tree whose root is not an expanded node variant"]
