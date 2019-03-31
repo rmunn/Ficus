@@ -838,13 +838,13 @@ PrependNChildrenS n seq<ch> seq<sz>
                 let parentL = this.UpdateChild owner shift (this.NodeSize - 1) child'
                 if right.NodeSize > 1 then
                     let parentR = right.RemoveChild owner shift 0
-                    parentL, Some parentR
+                    (parentL :?> RRBFullNode<'T>).ConcatNodes owner shift (parentR :?> RRBFullNode<'T>)
                 else
                     parentL, None
             | childL', Some childR' ->
                 let parentL = this.UpdateChild owner shift (this.NodeSize - 1) childL'
                 let parentR = right.UpdateChild owner shift 0 childR'
-                parentL, Some parentR
+                (parentL :?> RRBFullNode<'T>).ConcatNodes owner shift (parentR :?> RRBFullNode<'T>)
         elif shift < rightShift then
             let childR = right.FirstChild :?> RRBFullNode<'T>
             match this.MergeTree owner shift tailOpt (down rightShift) childR with
@@ -852,9 +852,9 @@ PrependNChildrenS n seq<ch> seq<sz>
                 let parentR = right.UpdateChild owner shift 0 child'
                 parentR, None  // TODO: Test this
             | childL', Some childR' ->
-                let parentL = (childL' :?> RRBFullNode<'T>).NewParent owner (up shift) None
+                let parentL = (childL' :?> RRBFullNode<'T>).NewParent owner (down shift) None
                 let parentR = right.UpdateChild owner shift 0 childR'
-                parentL, Some parentR
+                (parentL :?> RRBFullNode<'T>).ConcatNodes owner rightShift (parentR :?> RRBFullNode<'T>)
         else // shift > rightShift
             let childL = this.LastChild :?> RRBFullNode<'T>
             match this.MergeTree owner (down shift) tailOpt rightShift right with
@@ -863,19 +863,17 @@ PrependNChildrenS n seq<ch> seq<sz>
                 parentL, None  // TODO: Test this
             | childL', Some childR' ->
                 let parentL = this.UpdateChild owner shift (this.NodeSize - 1) childL'
-                let parentR = (childR' :?> RRBFullNode<'T>).NewParent owner (up rightShift) None
-                parentL, Some parentR
+                let parentR = (childR' :?> RRBFullNode<'T>).NewParent owner (down rightShift) None
+                (parentL :?> RRBFullNode<'T>).ConcatNodes owner shift (parentR :?> RRBFullNode<'T>)
 
     // TODO: Write "member this.NewParent" for other types of nodes (because expanded nodes will want to create an expanded parent)
     abstract member NewParent : OwnerToken -> int -> RRBNode<'T> option -> RRBNode<'T>
-    default this.NewParent owner upShift rightSibling =
+    default this.NewParent owner shift rightSibling =
         let arr =
             match rightSibling with
             | None -> [|this.Shrink owner|]
             | Some right -> [|this.Shrink owner; right.Shrink owner|]
-        let result = RRBNode<'T>.MkNode owner upShift arr
-        printfn "Made node %A in default" result
-        result
+        RRBNode<'T>.MkNode owner (up shift) arr
 (*
 
     let setOrRemoveFirstChild<'T> thread shift newChild parentArray =
@@ -1539,7 +1537,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
     // override this.InsertAndSplitNode owner shift localIdx newChild =
     //     failwith "Not implemented"
 
-    override this.NewParent owner upShift rightSibling =
+    override this.NewParent owner shift rightSibling =
         let arr = Array.zeroCreate<RRBNode<'T>> Literals.blockSize
         let size =
             match rightSibling with
@@ -1550,13 +1548,13 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
                 arr.[0] <- this.Shrink owner
                 arr.[1] <- right.Expand owner
                 2
-        if this.NodeSize = Literals.blockSize then
+        if this.NodeSize = Literals.blockSize && this.FullNodeIsTrulyFull shift then
             RRBExpandedFullNode<'T>(owner, arr, size) :> RRBNode<'T>
         else
             // TODO: Write RRBExpandedRelaxedNode.Create owner arr size (where it makes its own size table)
             let sizeTable = Array.zeroCreate Literals.blockSize
-            sizeTable.[0] <- this.TreeSize (down upShift)
-            if rightSibling.IsSome then sizeTable.[1] <- sizeTable.[0] + rightSibling.Value.TreeSize (down upShift)  // TODO: That's ugly; use RRBExpandedRelaxedNode.Create instead
+            sizeTable.[0] <- this.TreeSize shift
+            if rightSibling.IsSome then sizeTable.[1] <- sizeTable.[0] + rightSibling.Value.TreeSize shift  // TODO: That's ugly; use RRBExpandedRelaxedNode.Create instead
             RRBExpandedRelaxedNode<'T>(owner, arr, sizeTable, size) :> RRBNode<'T>
 
 
@@ -1880,7 +1878,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         else
             RRBNode<'T>.MkNode owner shift arr
 
-    override this.NewParent owner upShift rightSibling =
+    override this.NewParent owner shift rightSibling =
         let arr = Array.zeroCreate<RRBNode<'T>> Literals.blockSize
         let sizeTable = Array.zeroCreate<int> Literals.blockSize
         let size =
@@ -1893,7 +1891,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
                 arr.[0] <- this.Shrink owner
                 sizeTable.[0] <- this.SizeTable.[this.NodeSize - 1]
                 arr.[1] <- right.Expand owner
-                sizeTable.[1] <- right.TreeSize (down upShift)
+                sizeTable.[1] <- right.TreeSize shift
                 2
         RRBExpandedRelaxedNode<'T>(owner, arr, sizeTable, size) :> RRBNode<'T>
 

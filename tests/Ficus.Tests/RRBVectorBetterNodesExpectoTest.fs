@@ -886,7 +886,7 @@ let mergeTreeTestsWIP =
             checkProperties newShift newL "Newly merged node"
         | Some nodeR' ->
             Expect.equal (Seq.append (nodeItems newShift newL) (nodeItems newShift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
-            let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner (up newShift) newR
+            let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift newR
             checkProperties (up newShift) parent "Newly rooted merged tree"
             // checkProperties newShift newL "Newly merged left node"
             // checkProperties newShift nodeR' "Newly merged right node"
@@ -895,6 +895,33 @@ let mergeTreeTestsWIP =
         // be a full node (I think it shouldn't), and if not, how do we detect this scenario at node creation time?
 
         // TODO: Write some individual tests with the failures from src/Ficus/test-failures-2019-03-27.txt as a guideline.
+
+    ftestCase "Left full twig, right height-2 tree with one fullish, relaxed node and final very short, full node" <| fun _ ->
+        let counter = mkCounter()
+        let L = Array.replicate 32 32
+        let R1 = [|32; 32; 31; 26; 32; 28; 18; 31; 32; 16; 32; 32; 32; 28; 32; 24; 32; 32; 32; 29; 25; 27; 32; 32; 32; 32; 32; 32; 32; 30; 32; 28|]
+        let R2 = [|32; 32; 32; 32|]
+        let shift = Literals.blockSizeShift
+        let nodeL =   L |> Array.map (mkLeaf counter >> fun node -> node :> RRBNode<int>) |> RRBNode<int>.MkNode nullOwner shift
+        let nodeR1 = R1 |> Array.map (mkLeaf counter >> fun node -> node :> RRBNode<int>) |> RRBNode<int>.MkNode nullOwner shift
+        let nodeR2 = R2 |> Array.map (mkLeaf counter >> fun node -> node :> RRBNode<int>) |> RRBNode<int>.MkNode nullOwner shift
+        let nodeR = RRBNode<int>.MkNode nullOwner (shift * 2) [|nodeR1; nodeR2|]
+        let origCombined = Seq.append (nodeItems shift nodeL) (nodeItems (shift * 2) nodeR) |> Array.ofSeq
+        let newL, newR = (nodeL :?> RRBFullNode<int>).MergeTree nullOwner shift None (shift * 2) (nodeR :?> RRBFullNode<int>)
+        let arrL' = newL |> nodeItems (shift * 2)
+        match newR with
+        | Some nodeR ->
+            let arrR' = nodeR |> nodeItems (shift * 2)
+            let arrCombined = Seq.append arrL' arrR' |> Array.ofSeq
+            Expect.equal arrCombined origCombined "Order of items should not change during merge"
+            checkProperties (shift * 2) newL "Newly merged node"
+            checkProperties (shift * 2) nodeR "Newly merged node"
+            let newRoot = (newL :?> RRBFullNode<int>).NewParent nullOwner (shift * 2) (Some nodeR)
+            checkProperties (shift * 3) newRoot "Newly merged node"
+        | None ->
+            Expect.equal (arrL' |> Array.ofSeq) origCombined "Order of items should not change during merge"
+            checkProperties (shift * 2) newL "Newly merged node"
+
   ]
 
 // logger.debug (
