@@ -240,8 +240,10 @@ let nodeProperties = [
         check shift root
 
     "The tree size of any node should match the total number of items its descendent leaves contain", fun (shift : int) (root : RRBNode<'T>) ->
-        let check shift (node : RRBNode<'T>) =
-            node |> itemCount shift = node.TreeSize shift
+        let rec check shift (node : RRBNode<'T>) =
+            if shift <= Literals.blockSize
+            then node |> itemCount shift = node.TreeSize shift
+            else node |> itemCount shift = node.TreeSize shift && children node |> Seq.forall (check (down shift))
         check shift root
 
     "The tree size of any leaf should equal its node size", fun (shift : int) (root : RRBNode<'T>) ->
@@ -329,25 +331,25 @@ let nodeProperties = [
             if isLeaf node then acc else (node :?> RRBFullNode<'T>).FirstChild |> height (acc+1)
         (height 0 root) * Literals.blockSizeShift = shift
 
-    "ExpandedNodes (and ExpandedRRBNodes) should not appear in a tree whose root is not an expanded node variant", fun (shift : int) (root : RRBNode<'T>) ->
-        let isExpanded (child : RRBNode<'T>) = (child :? RRBExpandedFullNode<'T>) || (child :? RRBExpandedRelaxedNode<'T>)
-        let rec check shift (node : RRBNode<'T>) =
-            if shift <= 0 then true
-            elif isExpanded node then false
-            else children node |> Seq.forall (check (down shift))
-        if isExpanded root then true else check shift root
+    // "ExpandedNodes (and ExpandedRRBNodes) should not appear in a tree whose root is not an expanded node variant", fun (shift : int) (root : RRBNode<'T>) ->
+    //     let isExpanded (child : RRBNode<'T>) = (child :? RRBExpandedFullNode<'T>) || (child :? RRBExpandedRelaxedNode<'T>)
+    //     let rec check shift (node : RRBNode<'T>) =
+    //         if shift <= 0 then true
+    //         elif isExpanded node then false
+    //         else children node |> Seq.forall (check (down shift))
+    //     if isExpanded root then true else check shift root
 
-    "If a tree's root is an expanded Node variant, its right spine should contain expanded nodes but nothing else should", fun (shift : int) (root : RRBNode<'T>) ->
-        let isExpanded (child : RRBNode<'T>) = (child :? RRBExpandedFullNode<'T>) || (child :? RRBExpandedRelaxedNode<'T>)
-        let rec check shift isLast (node : RRBNode<'T>) =
-            if shift <= 0 then true
-            elif isExpanded node && not isLast then false
-            elif isLast && not (isExpanded node) then false
-            else
-                let checkResultForAllButLast = children node |> Seq.take (node.NodeSize - 1) |> Seq.forall (check (down shift) false)
-                let checkResultForLastChild = children node |> Seq.skip (node.NodeSize - 1) |> Seq.head |> check (down shift) true
-                checkResultForAllButLast && checkResultForLastChild
-        if isExpanded root then check shift true root else true
+    // "If a tree's root is an expanded Node variant, its right spine should contain expanded nodes but nothing else should", fun (shift : int) (root : RRBNode<'T>) ->
+    //     let isExpanded (child : RRBNode<'T>) = (child :? RRBExpandedFullNode<'T>) || (child :? RRBExpandedRelaxedNode<'T>)
+    //     let rec check shift isLast (node : RRBNode<'T>) =
+    //         if shift <= 0 then true
+    //         elif isExpanded node && not isLast then false
+    //         elif isLast && not (isExpanded node) then false
+    //         else
+    //             let checkResultForAllButLast = children node |> Seq.take (node.NodeSize - 1) |> Seq.forall (check (down shift) false)
+    //             let checkResultForLastChild = children node |> Seq.skip (node.NodeSize - 1) |> Seq.head |> check (down shift) true
+    //             checkResultForAllButLast && checkResultForLastChild
+    //     if isExpanded root then check shift true root else true
 
     "ExpandedNodes (and ExpandedRRBNodes) should have exactly as much data in their children & size tables as their node size indicates", fun (shift : int) (root : RRBNode<'T>) ->
         let isExpanded (child : RRBNode<'T>) = (child :? RRBExpandedFullNode<'T>) || (child :? RRBExpandedRelaxedNode<'T>)
@@ -871,7 +873,7 @@ let doIndividualMergeTestLeftTwigRightTwoNodeTree L R1 R2 =
         checkProperties (shift * 2) newL "Newly merged node"
 
 let mergeTreeTestsWIP =
-  ftestList "WIP: Rebalance tests" [
+  testList "WIP: Rebalance tests" [
     testProp "Merging twigs" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         let shift = Literals.blockSizeShift
         let expected = Seq.concat [nodeItems shift nodeL; nodeItems shift nodeR] |> Array.ofSeq
@@ -890,7 +892,7 @@ let mergeTreeTestsWIP =
             checkProperties shift newL "Newly merged left node"
             checkProperties shift nodeR' "Newly merged right node"
 
-    ftestProp (1667443237, 296576485) "Merging left twig with right tree" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (RootNode nodeR : RootNode<int>) ->
+    testProp (*1667443237, 296576485*) (*472714474, 296577783*) "Merging left twig with right tree" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (RootNode nodeR : RootNode<int>) ->
         let shiftL = Literals.blockSizeShift
         let shiftR = Literals.blockSizeShift * (height nodeR)
         if shiftR > Literals.blockSizeShift then
@@ -919,17 +921,42 @@ let mergeTreeTestsWIP =
 
         // TODO: Write some individual tests with the failures from src/Ficus/test-failures-2019-03-27.txt as a guideline.
 
-    ftestCase "Left full twig, right height-2 tree with one fullish, relaxed node and final full node of size 4" <| fun _ ->
+    testCase "Left full twig, right height-2 tree with one fullish, relaxed node and final full node of size 4" <| fun _ ->
         let L = Array.replicate 32 32
         let R1 = [|32; 32; 31; 26; 32; 28; 18; 31; 32; 16; 32; 32; 32; 28; 32; 24; 32; 32; 32; 29; 25; 27; 32; 32; 32; 32; 32; 32; 32; 30; 32; 28|]
         let R2 = [|32; 32; 32; 32|]
         doIndividualMergeTestLeftTwigRightTwoNodeTree L R1 R2
 
-    ftestCase "Left full twig, right height-2 tree with one fullish, relaxed node and final relaxed node of size 5" <| fun _ ->
+    ftestCase "Left relaxed, halfish-full twig, right height-2 tree with one fullish, relaxed node and final relaxed node of size 5" <| fun _ ->
         let L = [|32; 27; 32; 29; 32; 30; 32; 22; 32; 16; 32; 25; 32; 27; 32; 28; 32; 32; 17; 32; 26; 32|]
         let R1 = [|32; 16; 32; 20; 32; 19; 32; 28; 32; 22; 19; 32; 21; 32; 22; 32; 24; 32; 25; 32; 17; 32; 28; 32; 20; 32; 22; 32; 23; 32; 32; 30|]
         let R2 = [|32; 31; 32; 16; 32|]
         doIndividualMergeTestLeftTwigRightTwoNodeTree L R1 R2
+
+// TODO: Another test case to write -- (472714474, 296577783) after 50 tests:
+// Failed after 50 tests. Parameters:
+//  IsolatedNode
+//   ExpandedRelaxedNode(length=21, sizetable=[|27; 53; 85; 117; 149; 181; 213; 235; 263; 295; 321; 353; 373; 405; 434; 466;
+//   496; 528; 560; 592; 608; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0|], children=[|L27; L26; L32; L32; L32; L32; L32; L22; L28; L32; L26; L32; L20; L32; L29; L32;
+//   L30; L32; L32; L32; L16; null; null; null; null; null; null; null; null; null;
+//   null; null|])
+//  RootNode
+//   FullNode(length=15, children=[|L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L23|])
+// Result:
+//  Exception
+//   Expecto.AssertException: Newly rooted merged tree with shift=10 and root=ExpandedRelaxedNode(length=2, sizetable=[|608; 471; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0;
+//   0; 0; 0; 0; 0; 0; 0|], children=[|RelaxedNode(length=21, sizetable=[|27; 53; 85; 117; 149; 181; 213; 235; 263; 295; 321; 353; 373; 405; 434; 466;
+//   496; 528; 560; 592; 608|], children=[|L27; L26; L32; L32; L32; L32; L32; L22; L28; L32; L26; L32; L20; L32; L29; L32;
+//   L30; L32; L32; L32; L16|]);
+//   ExpandedFullNode(length=15, children=[|L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L32; L23;
+//   null; null; null; null; null; null; null; null; null; null; null; null; null;
+//   null; null; null; null|]);
+//   null; null; null; null; null; null; null; null; null; null; null; null; null;
+//   null; null; null; null; null; null; null; null; null; null; null; null; null;
+//   null; null; null; null|])
+// failed the following RRBVector invariants:
+// ["The tree size of any node should match the total number of items its descendent leaves contain";
+//  "The size table of any tree node should match the cumulative tree sizes of its children"]
 
   ]
 
