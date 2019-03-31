@@ -847,6 +847,29 @@ let rebalanceTestsWIP =
                 checkProperties shift nodeR' "Newly-concatenated right node"
   ]
 
+let doIndividualMergeTestLeftTwigRightTwoNodeTree L R1 R2 =
+    let counter = mkCounter()
+    let shift = Literals.blockSizeShift
+    let nodeL =   L |> Array.map (mkLeaf counter >> fun node -> node :> RRBNode<int>) |> RRBNode<int>.MkNode nullOwner shift
+    let nodeR1 = R1 |> Array.map (mkLeaf counter >> fun node -> node :> RRBNode<int>) |> RRBNode<int>.MkNode nullOwner shift
+    let nodeR2 = R2 |> Array.map (mkLeaf counter >> fun node -> node :> RRBNode<int>) |> RRBNode<int>.MkNode nullOwner shift
+    let nodeR = RRBNode<int>.MkNode nullOwner (shift * 2) [|nodeR1; nodeR2|]
+    let origCombined = Seq.append (nodeItems shift nodeL) (nodeItems (shift * 2) nodeR) |> Array.ofSeq
+    let newL, newR = (nodeL :?> RRBFullNode<int>).MergeTree nullOwner shift None (shift * 2) (nodeR :?> RRBFullNode<int>)
+    let arrL' = newL |> nodeItems (shift * 2)
+    match newR with
+    | Some nodeR ->
+        let arrR' = nodeR |> nodeItems (shift * 2)
+        let arrCombined = Seq.append arrL' arrR' |> Array.ofSeq
+        Expect.equal arrCombined origCombined "Order of items should not change during merge"
+        checkProperties (shift * 2) newL "Newly merged node"
+        checkProperties (shift * 2) nodeR "Newly merged node"
+        let newRoot = (newL :?> RRBFullNode<int>).NewParent nullOwner (shift * 2) (Some nodeR)
+        checkProperties (shift * 3) newRoot "Newly merged node"
+    | None ->
+        Expect.equal (arrL' |> Array.ofSeq) origCombined "Order of items should not change during merge"
+        checkProperties (shift * 2) newL "Newly merged node"
+
 let mergeTreeTestsWIP =
   ftestList "WIP: Rebalance tests" [
     testProp "Merging twigs" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
@@ -896,31 +919,17 @@ let mergeTreeTestsWIP =
 
         // TODO: Write some individual tests with the failures from src/Ficus/test-failures-2019-03-27.txt as a guideline.
 
-    ftestCase "Left full twig, right height-2 tree with one fullish, relaxed node and final very short, full node" <| fun _ ->
-        let counter = mkCounter()
+    ftestCase "Left full twig, right height-2 tree with one fullish, relaxed node and final full node of size 4" <| fun _ ->
         let L = Array.replicate 32 32
         let R1 = [|32; 32; 31; 26; 32; 28; 18; 31; 32; 16; 32; 32; 32; 28; 32; 24; 32; 32; 32; 29; 25; 27; 32; 32; 32; 32; 32; 32; 32; 30; 32; 28|]
         let R2 = [|32; 32; 32; 32|]
-        let shift = Literals.blockSizeShift
-        let nodeL =   L |> Array.map (mkLeaf counter >> fun node -> node :> RRBNode<int>) |> RRBNode<int>.MkNode nullOwner shift
-        let nodeR1 = R1 |> Array.map (mkLeaf counter >> fun node -> node :> RRBNode<int>) |> RRBNode<int>.MkNode nullOwner shift
-        let nodeR2 = R2 |> Array.map (mkLeaf counter >> fun node -> node :> RRBNode<int>) |> RRBNode<int>.MkNode nullOwner shift
-        let nodeR = RRBNode<int>.MkNode nullOwner (shift * 2) [|nodeR1; nodeR2|]
-        let origCombined = Seq.append (nodeItems shift nodeL) (nodeItems (shift * 2) nodeR) |> Array.ofSeq
-        let newL, newR = (nodeL :?> RRBFullNode<int>).MergeTree nullOwner shift None (shift * 2) (nodeR :?> RRBFullNode<int>)
-        let arrL' = newL |> nodeItems (shift * 2)
-        match newR with
-        | Some nodeR ->
-            let arrR' = nodeR |> nodeItems (shift * 2)
-            let arrCombined = Seq.append arrL' arrR' |> Array.ofSeq
-            Expect.equal arrCombined origCombined "Order of items should not change during merge"
-            checkProperties (shift * 2) newL "Newly merged node"
-            checkProperties (shift * 2) nodeR "Newly merged node"
-            let newRoot = (newL :?> RRBFullNode<int>).NewParent nullOwner (shift * 2) (Some nodeR)
-            checkProperties (shift * 3) newRoot "Newly merged node"
-        | None ->
-            Expect.equal (arrL' |> Array.ofSeq) origCombined "Order of items should not change during merge"
-            checkProperties (shift * 2) newL "Newly merged node"
+        doIndividualMergeTestLeftTwigRightTwoNodeTree L R1 R2
+
+    ftestCase "Left full twig, right height-2 tree with one fullish, relaxed node and final relaxed node of size 5" <| fun _ ->
+        let L = [|32; 27; 32; 29; 32; 30; 32; 22; 32; 16; 32; 25; 32; 27; 32; 28; 32; 32; 17; 32; 26; 32|]
+        let R1 = [|32; 16; 32; 20; 32; 19; 32; 28; 32; 22; 19; 32; 21; 32; 22; 32; 24; 32; 25; 32; 17; 32; 28; 32; 20; 32; 22; 32; 23; 32; 32; 30|]
+        let R2 = [|32; 31; 32; 16; 32|]
+        doIndividualMergeTestLeftTwigRightTwoNodeTree L R1 R2
 
   ]
 
