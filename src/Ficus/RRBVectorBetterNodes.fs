@@ -857,7 +857,7 @@ PrependNChildrenS n seq<ch> seq<sz>
                 (parentL :?> RRBFullNode<'T>).ConcatNodes owner rightShift (parentR :?> RRBFullNode<'T>)
         else // shift > rightShift
             let childL = this.LastChild :?> RRBFullNode<'T>
-            match this.MergeTree owner (down shift) tailOpt rightShift right with
+            match childL.MergeTree owner (down shift) tailOpt rightShift right with
             | child', None ->
                 let parentL = this.UpdateChildSAbs owner shift (this.NodeSize - 1) child' (child'.TreeSize (down shift))
                 parentL, None  // TODO: Test this

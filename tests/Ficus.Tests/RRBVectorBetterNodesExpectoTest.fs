@@ -141,7 +141,7 @@ let genTransientSmallFullTree = genSmallFullTree |> Gen.map toTransient
 
 let genTransientSmallRelaxedTree = genSmallRelaxedTree |> Gen.map toTransient
 
-let genTree = Gen.oneof [ genSmallFullTree; genTransientSmallFullTree; genSmallRelaxedTree; genTransientSmallRelaxedTree ]
+let genSmallTree = Gen.oneof [ genSmallFullTree; genTransientSmallFullTree; genSmallRelaxedTree; genTransientSmallRelaxedTree ]
             //   |> Gen.map (fun node ->
             //     logger.debug (
             //         eventX "Generated node: {node}"
@@ -149,17 +149,109 @@ let genTree = Gen.oneof [ genSmallFullTree; genTransientSmallFullTree; genSmallR
             //     )
             //     node)
 
+let genShowSizedInt =
+    Gen.sized (fun s -> logger.debug(eventX "Generating item of size {n}" >> setField "n" s); Gen.choose(0,s))
+
+let genLeavesForLargeTrees n counter =
+    Gen.listOfLength n (genLeaf counter) |> Gen.map (Seq.cast<RRBNode<int>> >> Array.ofSeq)
+
+let genTwigForLargeTrees counter =
+    gen {
+        let! isFull = Gen.frequency [ 1, Gen.constant true; 3, Gen.constant false ]
+        let! leafCount = if isFull then Gen.constant Literals.blockSize else Gen.choose(Literals.blockSize / 2, Literals.blockSize)
+        let! leaves = genLeavesForLargeTrees leafCount counter
+        return RRBNode<int>.MkNode nullOwner Literals.blockSizeShift leaves
+    }
+
+let genBranchForLargeTrees counter =
+    gen {
+        let! isFull = Gen.frequency [ 1, Gen.constant true; 3, Gen.constant false ]
+        let! twigCount = if isFull then Gen.constant Literals.blockSize else Gen.choose(Literals.blockSize / 4, Literals.blockSize)
+        let! twigs = Gen.listOfLength twigCount (genTwigForLargeTrees counter)
+        return RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 2) (twigs |> Array.ofList)
+    }
+
+let genLimbForLargeTrees counter =
+    gen {
+        let! isFull = Gen.frequency [ 1, Gen.constant true; 3, Gen.constant false ]
+        let! branchCount = if isFull then Gen.constant Literals.blockSize else Gen.choose(Literals.blockSize / 8 |> max 1, Literals.blockSize)
+        let! branches = Gen.listOfLength branchCount (genBranchForLargeTrees counter)
+        return RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 3) (branches |> Array.ofList)
+    }
+
+let genTrunkForLargeTrees counter =
+    gen {
+        let! isFull = Gen.frequency [ 1, Gen.constant true; 3, Gen.constant false ]
+        let! limbCount = if isFull then Gen.constant Literals.blockSize else Gen.choose(Literals.blockSize / 16 |> max 1, Literals.blockSize)
+        let! limbs = Gen.listOfLength limbCount (genLimbForLargeTrees counter)
+        return RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 4) (limbs |> Array.ofList)
+    }
+
+let genLargePersistentTree =
+    // Size rules for large trees are:
+    // 1-8: multiply by 4 -> number of leaves
+    // 9-24: subtract 8 -> 1-16, then multiply by 2 -> 2-32 twigs (but since it's Gen.choose(1,x), that's anywhere between 1-2 to 1-32 twigs)
+    // 25-56: subtract 24 -> 1-32 branches (height 2)
+    // 57-88: subtract 56 -> 1-32 limbs (height 3)
+    // 89-100: subtract 88 -> 1-12 trunks (height 4)
+    Gen.sized (fun s ->
+        let counter = mkCounter()
+        logger.debug(eventX "Generating tree of size {n}" >> setField "n" s)
+        if s <= 8 then
+            let leafMax = s * 4  // Up to 32
+            gen {
+                let! n = Gen.choose(1, leafMax)
+                let! leaves = genLeavesForLargeTrees n counter
+                return mkRelaxedTwig leaves
+            }
+        elif s <= 24 then
+            let twigMax = (s - 8) * 2
+            gen {
+                let! n = Gen.choose(1, twigMax)
+                return! Gen.listOfLength n (genTwigForLargeTrees counter) |> Gen.map (Array.ofList >> RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 2))
+            }
+        elif s <= 56 then
+            let branchMax = s - 24
+            gen {
+                let! n = Gen.choose(1, branchMax)
+                return! Gen.listOfLength n (genBranchForLargeTrees counter) |> Gen.map (Array.ofList >> RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 3))
+            }
+        elif s <= 88 then
+            let limbMax = s - 56
+            gen {
+                let! n = Gen.choose(1, limbMax)
+                return! Gen.listOfLength n (genLimbForLargeTrees counter) |> Gen.map (Array.ofList >> RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 4))
+            }
+        else
+            let trunkMax = s - 88
+            gen {
+                let! n = Gen.choose(1, trunkMax)
+                return! Gen.listOfLength n (genTrunkForLargeTrees counter) |> Gen.map (Array.ofList >> RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 5))
+            }
+    )
+
+let genLargeTransientTree =
+    genLargePersistentTree
+    |> Gen.map toTransient
+
+let genLargeTree =
+    Gen.oneof [ genLargePersistentTree ; genLargeTransientTree ]
+
 type IsolatedNode<'T> = IsolatedNode of RRBFullNode<'T>
 type IsolatedShortNode<'T> = IsolatedShortNode of RRBFullNode<'T>
 type RootNode<'T> = RootNode of RRBFullNode<'T>
 type LeafNode<'T> = LeafNode of RRBLeafNode<'T>
-
+type LargeRootNode<'T> = LargeRootNode of RRBFullNode<'T>   // TODO: Use toTransient() to sometimes make transient-ish trees here
+type ShowSizedInt = ShowSizedInt of int
 // TODO: Write shrinkers for nodes and for trees
 
 type MyGenerators =
     static member arbTree() =
         { new Arbitrary<RootNode<int>>() with
-            override x.Generator = genTree |> Gen.map (fun node -> RootNode (node :?> RRBFullNode<int>)) }
+            override x.Generator = genSmallTree |> Gen.map (fun node -> RootNode (node :?> RRBFullNode<int>)) }
+    static member arbLargeTree() =
+        { new Arbitrary<LargeRootNode<int>>() with
+            override x.Generator = genLargeTree |> Gen.map (fun node -> LargeRootNode (node :?> RRBFullNode<int>)) }
     static member arbLeaf() =
         { new Arbitrary<LeafNode<int>>() with
             override x.Generator = let counter = mkCounter() in genLeaf counter |> Gen.map LeafNode }
@@ -872,8 +964,9 @@ let doIndividualMergeTestLeftTwigRightTwoNodeTree L R1 R2 =
         Expect.equal (arrL' |> Array.ofSeq) origCombined "Order of items should not change during merge"
         checkProperties (shift * 2) newL "Newly merged node"
 
+
 let mergeTreeTestsWIP =
-  testList "WIP: Rebalance tests" [
+  testList "WIP: Merge tests" [
     testProp "Merging twigs" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         let shift = Literals.blockSizeShift
         let expected = Seq.concat [nodeItems shift nodeL; nodeItems shift nodeR] |> Array.ofSeq
@@ -914,34 +1007,76 @@ let mergeTreeTestsWIP =
         // The top node, being a FullNode, is counting its TreeSize as (32 * full node of down shift), which isn't actually right. TODO: Consider whether newly-made parent should actually
         // be a full node (I think it shouldn't), and if not, how do we detect this scenario at node creation time?
 
-    ftestProp (*1613455846, 296578145*) (362424262, 296578145) "Merging left tree with right twig" <| fun (RootNode nodeL : RootNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+    testProp (*1613455846, 296578145*) (*362424262, 296578145*) "Merging left tree with right twig" <| fun (RootNode nodeL : RootNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         let shiftL = Literals.blockSizeShift * (height nodeL)
         let shiftR = Literals.blockSizeShift
-        if shiftL > Literals.blockSizeShift then
-            logger.debug (
-                eventX "Left tree before merge: {node}"
-                >> setField "node" (sprintf "%A" nodeL)
-            )
+        // if shiftL > Literals.blockSizeShift then
+        //     logger.debug (
+        //         eventX "Left tree before merge: {node}"
+        //         >> setField "node" (sprintf "%A" nodeL)
+        //     )
+        //     logger.debug (
+        //         eventX "Right node before merge: {node}"
+        //         >> setField "node" (sprintf "%A" nodeR)
+        //     )
         checkProperties shiftL nodeL "Original left node"
         checkProperties shiftR nodeR "Original right node"
         let expected = Seq.concat [nodeItems shiftL nodeL; nodeItems shiftR nodeR] |> Array.ofSeq
         let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR
-        if shiftL > Literals.blockSizeShift then
-            logger.debug (
-                eventX "Left tree after merge: {node}"
-                >> setField "node" (sprintf "%A" newL)
-            )
+        // if shiftL > Literals.blockSizeShift then
+        //     logger.debug (
+        //         eventX "Left tree after merge: {node}"
+        //         >> setField "node" (sprintf "%A" newL)
+        //     )
         let newShift = max shiftL shiftR
         match newR with
         | None ->
             Expect.equal (nodeItems newShift newL |> Array.ofSeq) expected "Order of items should not change during merge"
             checkProperties newShift newL "Newly merged node"
         | Some nodeR' ->
-            if shiftL > Literals.blockSizeShift then
-                logger.debug (
-                    eventX "Right tree after merge: {node}"
-                    >> setField "node" (sprintf "%A" nodeR')
-                )
+            // if shiftL > Literals.blockSizeShift then
+            //     logger.debug (
+            //         eventX "Right tree after merge: {node}"
+            //         >> setField "node" (sprintf "%A" nodeR')
+            //     )
+            Expect.equal (Seq.append (nodeItems newShift newL) (nodeItems newShift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
+            let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift newR
+            checkProperties (up newShift) parent "Newly rooted merged tree"
+            checkProperties newShift newL "Newly merged left node"
+            checkProperties newShift nodeR' "Newly merged right node"
+
+    testProp "Merging left tree with right tree" <| fun (RootNode nodeL : RootNode<int>) (RootNode nodeR : RootNode<int>) ->
+        let shiftL = Literals.blockSizeShift * (height nodeL)
+        let shiftR = Literals.blockSizeShift * (height nodeR)
+        // if shiftL > Literals.blockSizeShift || shiftR > Literals.blockSizeShift then
+        //     logger.debug (
+        //         eventX "Left tree before merge: {node}"
+        //         >> setField "node" (sprintf "%A" nodeL)
+        //     )
+        //     logger.debug (
+        //         eventX "Right node before merge: {node}"
+        //         >> setField "node" (sprintf "%A" nodeR)
+        //     )
+        checkProperties shiftL nodeL "Original left node"
+        checkProperties shiftR nodeR "Original right node"
+        let expected = Seq.concat [nodeItems shiftL nodeL; nodeItems shiftR nodeR] |> Array.ofSeq
+        let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR
+        // if shiftL > Literals.blockSizeShift || shiftR > Literals.blockSizeShift then
+        //     logger.debug (
+        //         eventX "Left tree after merge: {node}"
+        //         >> setField "node" (sprintf "%A" newL)
+        //     )
+        let newShift = max shiftL shiftR
+        match newR with
+        | None ->
+            Expect.equal (nodeItems newShift newL |> Array.ofSeq) expected "Order of items should not change during merge"
+            checkProperties newShift newL "Newly merged node"
+        | Some nodeR' ->
+            // if shiftL > Literals.blockSizeShift || shiftR > Literals.blockSizeShift then
+            //     logger.debug (
+            //         eventX "Right tree after merge: {node}"
+            //         >> setField "node" (sprintf "%A" nodeR')
+            //     )
             Expect.equal (Seq.append (nodeItems newShift newL) (nodeItems newShift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
             let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift newR
             checkProperties (up newShift) parent "Newly rooted merged tree"
@@ -961,6 +1096,7 @@ let mergeTreeTestsWIP =
         let R1 = [|32; 16; 32; 20; 32; 19; 32; 28; 32; 22; 19; 32; 21; 32; 22; 32; 24; 32; 25; 32; 17; 32; 28; 32; 20; 32; 22; 32; 23; 32; 32; 30|]
         let R2 = [|32; 31; 32; 16; 32|]
         doIndividualMergeTestLeftTwigRightTwoNodeTree L R1 R2
+
 
 // TODO: Another test case to write -- (472714474, 296577783) after 50 tests:
 // Failed after 50 tests. Parameters:
@@ -989,6 +1125,117 @@ let mergeTreeTestsWIP =
 
   ]
 
+
+
+let largeMergeTreeTestsWIP =
+  ftestList "WIP: Large tree-merge tests" [
+    testProp (*308935299, 296578190*) "Merging left twig with right large tree" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (LargeRootNode nodeR : LargeRootNode<int>) ->
+        let shiftL = Literals.blockSizeShift
+        let shiftR = Literals.blockSizeShift * (height nodeR)
+        checkProperties shiftL nodeL "Original left node"
+        checkProperties shiftR nodeR "Original right node"
+        let expected = Seq.concat [nodeItems shiftL nodeL; nodeItems shiftR nodeR] |> Array.ofSeq
+        let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR
+        let newShift = max shiftL shiftR
+        match newR with
+        | None ->
+            Expect.equal (nodeItems newShift newL |> Array.ofSeq) expected "Order of items should not change during merge"
+            checkProperties newShift newL "Newly merged node"
+        | Some nodeR' ->
+            Expect.equal (Seq.append (nodeItems newShift newL) (nodeItems newShift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
+            let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift newR
+            checkProperties (up newShift) parent "Newly rooted merged tree"
+            checkProperties newShift newL "Newly merged left node"
+            checkProperties newShift nodeR' "Newly merged right node"
+        // Current failure has to do with a FullNode root with two children: left is a FullNode of length 24 (but not *totally* full since it's not length 32) and right is a relaxed node.
+        // The top node, being a FullNode, is counting its TreeSize as (32 * full node of down shift), which isn't actually right. TODO: Consider whether newly-made parent should actually
+        // be a full node (I think it shouldn't), and if not, how do we detect this scenario at node creation time?
+
+    testProp (*308935498, 296578190*) "Merging left large tree with right twig" <| fun (LargeRootNode nodeL : LargeRootNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+        let shiftL = Literals.blockSizeShift * (height nodeL)
+        let shiftR = Literals.blockSizeShift
+        // if shiftL > Literals.blockSizeShift then
+        //     logger.debug (
+        //         eventX "Left tree before merge: {node}"
+        //         >> setField "node" (sprintf "%A" nodeL)
+        //     )
+        //     logger.debug (
+        //         eventX "Right node before merge: {node}"
+        //         >> setField "node" (sprintf "%A" nodeR)
+        //     )
+        checkProperties shiftL nodeL "Original left node"
+        checkProperties shiftR nodeR "Original right node"
+        let expected = Seq.concat [nodeItems shiftL nodeL; nodeItems shiftR nodeR] |> Array.ofSeq
+        let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR
+        // if shiftL > Literals.blockSizeShift then
+        //     logger.debug (
+        //         eventX "Left tree after merge: {node}"
+        //         >> setField "node" (sprintf "%A" newL)
+        //     )
+        let newShift = max shiftL shiftR
+        match newR with
+        | None ->
+            Expect.equal (nodeItems newShift newL |> Array.ofSeq) expected "Order of items should not change during merge"
+            checkProperties newShift newL "Newly merged node"
+        | Some nodeR' ->
+            // if shiftL > Literals.blockSizeShift then
+            //     logger.debug (
+            //         eventX "Right tree after merge: {node}"
+            //         >> setField "node" (sprintf "%A" nodeR')
+            //     )
+            Expect.equal (Seq.append (nodeItems newShift newL) (nodeItems newShift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
+            let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift newR
+            checkProperties (up newShift) parent "Newly rooted merged tree"
+            checkProperties newShift newL "Newly merged left node"
+            checkProperties newShift nodeR' "Newly merged right node"
+
+    testProp "Merging left large tree with right large tree" <| fun (LargeRootNode nodeL : LargeRootNode<int>) (LargeRootNode nodeR : LargeRootNode<int>) ->
+        let shiftL = Literals.blockSizeShift * (height nodeL)
+        let shiftR = Literals.blockSizeShift * (height nodeR)
+        // if shiftL > Literals.blockSizeShift || shiftR > Literals.blockSizeShift then
+        //     logger.debug (
+        //         eventX "Left tree before merge: {node}"
+        //         >> setField "node" (sprintf "%A" nodeL)
+        //     )
+        //     logger.debug (
+        //         eventX "Right node before merge: {node}"
+        //         >> setField "node" (sprintf "%A" nodeR)
+        //     )
+        checkProperties shiftL nodeL "Original left node"
+        checkProperties shiftR nodeR "Original right node"
+        let expected = Seq.concat [nodeItems shiftL nodeL; nodeItems shiftR nodeR] |> Array.ofSeq
+        let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR
+        // if shiftL > Literals.blockSizeShift || shiftR > Literals.blockSizeShift then
+        //     logger.debug (
+        //         eventX "Left tree after merge: {node}"
+        //         >> setField "node" (sprintf "%A" newL)
+        //     )
+        let newShift = max shiftL shiftR
+        match newR with
+        | None ->
+            Expect.equal (nodeItems newShift newL |> Array.ofSeq) expected "Order of items should not change during merge"
+            checkProperties newShift newL "Newly merged node"
+        | Some nodeR' ->
+            // if shiftL > Literals.blockSizeShift || shiftR > Literals.blockSizeShift then
+            //     logger.debug (
+            //         eventX "Right tree after merge: {node}"
+            //         >> setField "node" (sprintf "%A" nodeR')
+            //     )
+            Expect.equal (Seq.append (nodeItems newShift newL) (nodeItems newShift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
+            let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift newR
+            checkProperties (up newShift) parent "Newly rooted merged tree"
+            checkProperties newShift newL "Newly merged left node"
+            checkProperties newShift nodeR' "Newly merged right node"
+
+  ]
+
+
+// let debugGenTests =
+//   ftestList "Debugging generators" [
+//     testProp "Sized int" <| fun (ShowSizedInt n) ->
+//         ()
+//   ]
+
 // logger.debug (
 //     eventX "Result: {node}"
 //     >> setField "node" (sprintf "%A" result)
@@ -996,6 +1243,8 @@ let mergeTreeTestsWIP =
 
 let tests =
   testList "Basic node tests" [
+    largeMergeTreeTestsWIP
+    // debugGenTests
     mergeTreeTestsWIP
     rebalanceTestsWIP
     appendAndPrependChildrenPropertyTests  // Put this first since it's so long
