@@ -408,10 +408,10 @@ let nodeProperties = [
             if shift <= 0 then true else children node |> Seq.forall (check (down shift))
         check shift root
 
-    "No RRBRelaxedNode should contain a \"full\" size table. If the size table was full, it should have been turned into an RRBFullNode.", fun (shift : int) (root : RRBNode<'T>) ->
+    "No RRBRelaxedNode should contain a \"full\" size table (unless it's a singleton node, in which case it's allowed to be relaxed). If the size table was full, it should have been turned into an RRBFullNode.", fun (shift : int) (root : RRBNode<'T>) ->
         let rec check shift (node : RRBNode<'T>) =
             if shift <= 0 then true else
-            let nodeValid = if isRelaxed node then not (isSizeTableFullAtShift shift (node :?> RRBRelaxedNode<'T>).SizeTable node.NodeSize) else true
+            let nodeValid = if isRelaxed node && node.NodeSize > 1 then not (isSizeTableFullAtShift shift (node :?> RRBRelaxedNode<'T>).SizeTable node.NodeSize) else true
             nodeValid && children node |> Seq.forall (check (down shift))
         check shift root
 
@@ -1129,7 +1129,7 @@ let mergeTreeTestsWIP =
 
 let largeMergeTreeTestsWIP =
   ftestList "WIP: Large tree-merge tests" [
-    testProp (*308935299, 296578190*) "Merging left twig with right large tree" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (LargeRootNode nodeR : LargeRootNode<int>) ->
+    ftestProp (308935299, 296578190) "Merging left twig with right large tree" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (LargeRootNode nodeR : LargeRootNode<int>) ->
         let shiftL = Literals.blockSizeShift
         let shiftR = Literals.blockSizeShift * (height nodeR)
         checkProperties shiftL nodeL "Original left node"
@@ -1151,7 +1151,7 @@ let largeMergeTreeTestsWIP =
         // The top node, being a FullNode, is counting its TreeSize as (32 * full node of down shift), which isn't actually right. TODO: Consider whether newly-made parent should actually
         // be a full node (I think it shouldn't), and if not, how do we detect this scenario at node creation time?
 
-    testProp (*308935498, 296578190*) "Merging left large tree with right twig" <| fun (LargeRootNode nodeL : LargeRootNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+    ftestProp (308935498, 296578190) "Merging left large tree with right twig" <| fun (LargeRootNode nodeL : LargeRootNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         let shiftL = Literals.blockSizeShift * (height nodeL)
         let shiftR = Literals.blockSizeShift
         // if shiftL > Literals.blockSizeShift then
