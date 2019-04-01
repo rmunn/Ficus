@@ -835,35 +835,35 @@ PrependNChildrenS n seq<ch> seq<sz>
             let childR = right.FirstChild :?> RRBFullNode<'T>
             match childL.MergeTree owner (down shift) tailOpt (down rightShift) childR with
             | child', None ->
-                let parentL = this.UpdateChild owner shift (this.NodeSize - 1) child'
+                let parentL = this.UpdateChildSAbs owner shift (this.NodeSize - 1) child' (child'.TreeSize (down shift))
                 if right.NodeSize > 1 then
                     let parentR = right.RemoveChild owner shift 0
                     (parentL :?> RRBFullNode<'T>).ConcatNodes owner shift (parentR :?> RRBFullNode<'T>)
                 else
                     parentL, None
             | childL', Some childR' ->
-                let parentL = this.UpdateChild owner shift (this.NodeSize - 1) childL'
-                let parentR = right.UpdateChild owner shift 0 childR'
+                let parentL = this.UpdateChildSAbs owner shift (this.NodeSize - 1) childL' (childL'.TreeSize (down shift))
+                let parentR = right.UpdateChildSAbs owner shift 0 childR' (childR'.TreeSize (down rightShift))
                 (parentL :?> RRBFullNode<'T>).ConcatNodes owner shift (parentR :?> RRBFullNode<'T>)
         elif shift < rightShift then
             let childR = right.FirstChild :?> RRBFullNode<'T>
             match this.MergeTree owner shift tailOpt (down rightShift) childR with
             | child', None ->
-                let parentR = right.UpdateChild owner shift 0 child'
+                let parentR = right.UpdateChildSAbs owner shift 0 child' (child'.TreeSize (down rightShift))
                 parentR, None  // TODO: Test this
             | childL', Some childR' ->
-                let parentL = (childL' :?> RRBFullNode<'T>).NewParent owner (down shift) None
-                let parentR = right.UpdateChild owner shift 0 childR'
+                let parentL = (childL' :?> RRBFullNode<'T>).NewParent owner (down rightShift) None
+                let parentR = right.UpdateChildSAbs owner rightShift 0 childR' (childR'.TreeSize (down rightShift))
                 (parentL :?> RRBFullNode<'T>).ConcatNodes owner rightShift (parentR :?> RRBFullNode<'T>)
         else // shift > rightShift
             let childL = this.LastChild :?> RRBFullNode<'T>
             match this.MergeTree owner (down shift) tailOpt rightShift right with
             | child', None ->
-                let parentL = this.UpdateChild owner shift (this.NodeSize - 1) child'
+                let parentL = this.UpdateChildSAbs owner shift (this.NodeSize - 1) child' (child'.TreeSize (down shift))
                 parentL, None  // TODO: Test this
             | childL', Some childR' ->
-                let parentL = this.UpdateChild owner shift (this.NodeSize - 1) childL'
-                let parentR = (childR' :?> RRBFullNode<'T>).NewParent owner (down rightShift) None
+                let parentL = this.UpdateChildSAbs owner shift (this.NodeSize - 1) childL' (childL'.TreeSize (down shift))
+                let parentR = (childR' :?> RRBFullNode<'T>).NewParent owner (down shift) None
                 (parentL :?> RRBFullNode<'T>).ConcatNodes owner shift (parentR :?> RRBFullNode<'T>)
 
     // TODO: Write "member this.NewParent" for other types of nodes (because expanded nodes will want to create an expanded parent)
@@ -1891,7 +1891,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
                 arr.[0] <- this.Shrink owner
                 sizeTable.[0] <- this.SizeTable.[this.NodeSize - 1]
                 arr.[1] <- right.Expand owner
-                sizeTable.[1] <- right.TreeSize shift
+                sizeTable.[1] <- sizeTable.[0] + right.TreeSize shift
                 2
         RRBExpandedRelaxedNode<'T>(owner, arr, sizeTable, size) :> RRBNode<'T>
 

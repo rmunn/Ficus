@@ -892,14 +892,9 @@ let mergeTreeTestsWIP =
             checkProperties shift newL "Newly merged left node"
             checkProperties shift nodeR' "Newly merged right node"
 
-    testProp (*1667443237, 296576485*) (*472714474, 296577783*) "Merging left twig with right tree" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (RootNode nodeR : RootNode<int>) ->
+    testProp (*662155942, 296578130*) (*1667443237, 296576485*) (*472714474, 296577783*) "Merging left twig with right tree" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (RootNode nodeR : RootNode<int>) ->
         let shiftL = Literals.blockSizeShift
         let shiftR = Literals.blockSizeShift * (height nodeR)
-        if shiftR > Literals.blockSizeShift then
-            logger.debug (
-                eventX "Suspect node: {node}"
-                >> setField "node" (sprintf "%A" nodeR)
-            )
         checkProperties shiftL nodeL "Original left node"
         checkProperties shiftR nodeR "Original right node"
         let expected = Seq.concat [nodeItems shiftL nodeL; nodeItems shiftR nodeR] |> Array.ofSeq
@@ -913,11 +908,45 @@ let mergeTreeTestsWIP =
             Expect.equal (Seq.append (nodeItems newShift newL) (nodeItems newShift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
             let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift newR
             checkProperties (up newShift) parent "Newly rooted merged tree"
-            // checkProperties newShift newL "Newly merged left node"
-            // checkProperties newShift nodeR' "Newly merged right node"
+            checkProperties newShift newL "Newly merged left node"
+            checkProperties newShift nodeR' "Newly merged right node"
         // Current failure has to do with a FullNode root with two children: left is a FullNode of length 24 (but not *totally* full since it's not length 32) and right is a relaxed node.
         // The top node, being a FullNode, is counting its TreeSize as (32 * full node of down shift), which isn't actually right. TODO: Consider whether newly-made parent should actually
         // be a full node (I think it shouldn't), and if not, how do we detect this scenario at node creation time?
+
+    ftestProp (*1613455846, 296578145*) (362424262, 296578145) "Merging left tree with right twig" <| fun (RootNode nodeL : RootNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+        let shiftL = Literals.blockSizeShift * (height nodeL)
+        let shiftR = Literals.blockSizeShift
+        if shiftL > Literals.blockSizeShift then
+            logger.debug (
+                eventX "Left tree before merge: {node}"
+                >> setField "node" (sprintf "%A" nodeL)
+            )
+        checkProperties shiftL nodeL "Original left node"
+        checkProperties shiftR nodeR "Original right node"
+        let expected = Seq.concat [nodeItems shiftL nodeL; nodeItems shiftR nodeR] |> Array.ofSeq
+        let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR
+        if shiftL > Literals.blockSizeShift then
+            logger.debug (
+                eventX "Left tree after merge: {node}"
+                >> setField "node" (sprintf "%A" newL)
+            )
+        let newShift = max shiftL shiftR
+        match newR with
+        | None ->
+            Expect.equal (nodeItems newShift newL |> Array.ofSeq) expected "Order of items should not change during merge"
+            checkProperties newShift newL "Newly merged node"
+        | Some nodeR' ->
+            if shiftL > Literals.blockSizeShift then
+                logger.debug (
+                    eventX "Right tree after merge: {node}"
+                    >> setField "node" (sprintf "%A" nodeR')
+                )
+            Expect.equal (Seq.append (nodeItems newShift newL) (nodeItems newShift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
+            let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift newR
+            checkProperties (up newShift) parent "Newly rooted merged tree"
+            checkProperties newShift newL "Newly merged left node"
+            checkProperties newShift nodeR' "Newly merged right node"
 
         // TODO: Write some individual tests with the failures from src/Ficus/test-failures-2019-03-27.txt as a guideline.
 
@@ -927,7 +956,7 @@ let mergeTreeTestsWIP =
         let R2 = [|32; 32; 32; 32|]
         doIndividualMergeTestLeftTwigRightTwoNodeTree L R1 R2
 
-    ftestCase "Left relaxed, halfish-full twig, right height-2 tree with one fullish, relaxed node and final relaxed node of size 5" <| fun _ ->
+    testCase "Left relaxed, halfish-full twig, right height-2 tree with one fullish, relaxed node and final relaxed node of size 5" <| fun _ ->
         let L = [|32; 27; 32; 29; 32; 30; 32; 22; 32; 16; 32; 25; 32; 27; 32; 28; 32; 32; 17; 32; 26; 32|]
         let R1 = [|32; 16; 32; 20; 32; 19; 32; 28; 32; 22; 19; 32; 21; 32; 22; 32; 24; 32; 25; 32; 17; 32; 28; 32; 20; 32; 22; 32; 23; 32; 32; 30|]
         let R2 = [|32; 31; 32; 16; 32|]
