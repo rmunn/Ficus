@@ -168,7 +168,10 @@ let genBranchForLargeTrees counter =
         let! isFull = Gen.frequency [ 1, Gen.constant true; 3, Gen.constant false ]
         let! twigCount = if isFull then Gen.constant Literals.blockSize else Gen.choose(Literals.blockSize / 4, Literals.blockSize)
         let! twigs = Gen.listOfLength twigCount (genTwigForLargeTrees counter)
-        return RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 2) (twigs |> Array.ofList)
+        if twigs |> List.length = 1 then
+            return RRBNode<int>.MkFullNode nullOwner (twigs |> Array.ofList)
+        else
+            return RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 2) (twigs |> Array.ofList)
     }
 
 let genLimbForLargeTrees counter =
@@ -176,7 +179,10 @@ let genLimbForLargeTrees counter =
         let! isFull = Gen.frequency [ 1, Gen.constant true; 3, Gen.constant false ]
         let! branchCount = if isFull then Gen.constant Literals.blockSize else Gen.choose(Literals.blockSize / 8 |> max 1, Literals.blockSize)
         let! branches = Gen.listOfLength branchCount (genBranchForLargeTrees counter)
-        return RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 3) (branches |> Array.ofList)
+        if branches |> List.length = 1 then
+            return RRBNode<int>.MkFullNode nullOwner (branches |> Array.ofList)
+        else
+            return RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 3) (branches |> Array.ofList)
     }
 
 let genTrunkForLargeTrees counter =
@@ -184,7 +190,10 @@ let genTrunkForLargeTrees counter =
         let! isFull = Gen.frequency [ 1, Gen.constant true; 3, Gen.constant false ]
         let! limbCount = if isFull then Gen.constant Literals.blockSize else Gen.choose(Literals.blockSize / 16 |> max 1, Literals.blockSize)
         let! limbs = Gen.listOfLength limbCount (genLimbForLargeTrees counter)
-        return RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 4) (limbs |> Array.ofList)
+        if limbs |> List.length = 1 then
+            return RRBNode<int>.MkFullNode nullOwner (limbs |> Array.ofList)
+        else
+            return RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 4) (limbs |> Array.ofList)
     }
 
 let genLargePersistentTree =
@@ -408,10 +417,10 @@ let nodeProperties = [
             if shift <= 0 then true else children node |> Seq.forall (check (down shift))
         check shift root
 
-    "No RRBRelaxedNode should contain a \"full\" size table (unless it's a singleton node, in which case it's allowed to be relaxed). If the size table was full, it should have been turned into an RRBFullNode.", fun (shift : int) (root : RRBNode<'T>) ->
+    "No RRBRelaxedNode should contain a \"full\" size table. If the size table was full, it should have been turned into an RRBFullNode.", fun (shift : int) (root : RRBNode<'T>) ->
         let rec check shift (node : RRBNode<'T>) =
             if shift <= 0 then true else
-            let nodeValid = if isRelaxed node && node.NodeSize > 1 then not (isSizeTableFullAtShift shift (node :?> RRBRelaxedNode<'T>).SizeTable node.NodeSize) else true
+            let nodeValid = if isRelaxed node then not (isSizeTableFullAtShift shift (node :?> RRBRelaxedNode<'T>).SizeTable node.NodeSize) else true
             nodeValid && children node |> Seq.forall (check (down shift))
         check shift root
 

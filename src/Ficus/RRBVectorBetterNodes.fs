@@ -1548,7 +1548,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
                 arr.[0] <- this.Shrink owner
                 arr.[1] <- right.Expand owner
                 2
-        if this.NodeSize = Literals.blockSize && this.FullNodeIsTrulyFull shift then
+        if size = 1 || (this.NodeSize = Literals.blockSize && this.FullNodeIsTrulyFull shift) then
             RRBExpandedFullNode<'T>(owner, arr, size) :> RRBNode<'T>
         else
             // TODO: Write RRBExpandedRelaxedNode.Create owner arr size (where it makes its own size table)
@@ -1893,7 +1893,10 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
                 arr.[1] <- right.Expand owner
                 sizeTable.[1] <- sizeTable.[0] + right.TreeSize shift
                 2
-        RRBExpandedRelaxedNode<'T>(owner, arr, sizeTable, size) :> RRBNode<'T>
+        if size = 1 || (isSizeTableFullAtShift shift sizeTable size) then
+            RRBExpandedFullNode<'T>(owner, arr, size) :> RRBNode<'T>
+        else
+            RRBExpandedRelaxedNode<'T>(owner, arr, sizeTable, size) :> RRBNode<'T>
 
 
 
