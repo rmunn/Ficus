@@ -505,6 +505,54 @@ PrependNChildrenS n seq<ch> seq<sz>
         let fullSize = 1 <<< shift
         Array.init count (fun idx -> if idx = lastIdx then fullSize * idx + this.Children.[idx].TreeSize (down shift) else fullSize * (idx + 1))
 
+    member this.NewPath<'T> owner endShift (leaf : RRBLeafNode<'T>) =
+        // NOTE that this does *not* expand any nodes, because it might be called for a left path. It's the caller's responsibility to expand nodes as needed.
+        let rec loop shift node =
+            if shift >= endShift
+            then node
+            else let shift' = (up shift) in loop shift' (RRBNode<'T>.MkNode owner shift' [|node|])
+        loop Literals.blockSizeShift (RRBNode<'T>.MkNode owner Literals.blockSizeShift [|leaf|])
+
+    member this.TryAppendLeaf owner shift (newLeaf : RRBLeafNode<'T>) leafLen =
+        if shift <= Literals.blockSizeShift then
+            if this.NodeSize >= Literals.blockSize then None else this.AppendChildS owner shift newLeaf leafLen |> Some
+        else
+            match (this.LastChild :?> RRBFullNode<'T>).TryAppendLeaf owner (down shift) newLeaf leafLen with
+            | Some newChild ->
+                this.UpdateChildSRel owner shift (this.NodeSize - 1) newChild leafLen |> Some
+            | None -> // Child's subtree had no room to append leaf
+                if this.NodeSize >= Literals.blockSize
+                then None
+                else this.AppendChildS owner shift (this.NewPath owner (down shift) newLeaf) leafLen |> Some
+                // Note that if we're an expanded node, AppendChildS will take care of shrinking old last child and expanding new one
+
+    member this.AppendLeaf owner shift (newLeaf : RRBLeafNode<'T>) =
+        match this.TryAppendLeaf owner shift newLeaf newLeaf.NodeSize with
+        | Some node' -> node', shift
+        | None ->
+            let newRight = this.NewPath owner shift newLeaf
+            this.NewParent owner shift (Some newRight), up shift
+
+    member this.TryPrependLeaf owner shift (newLeaf : RRBLeafNode<'T>) leafLen =
+        if shift <= Literals.blockSizeShift then
+            if this.NodeSize >= Literals.blockSize then None else this.InsertChildS owner shift 0 newLeaf leafLen |> Some
+        else
+            match (this.FirstChild :?> RRBFullNode<'T>).TryPrependLeaf owner (down shift) newLeaf leafLen with
+            | Some newChild ->
+                this.UpdateChildSRel owner shift 0 newChild leafLen |> Some
+            | None -> // Child's subtree had no room to prepend leaf
+                if this.NodeSize >= Literals.blockSize
+                then None
+                else this.InsertChildS owner shift 0 (this.NewPath owner (down shift) newLeaf) leafLen |> Some
+                // Note that if we're an expanded node, PrependChildS will take care of shrinking old last child and expanding new one
+
+    member this.PrependLeaf owner shift (newLeaf : RRBLeafNode<'T>) =
+        match this.TryPrependLeaf owner shift newLeaf newLeaf.NodeSize with
+        | Some node' -> node', shift
+        | None ->
+            let newLeft = this.NewPath owner shift newLeaf :?> RRBFullNode<'T>
+            newLeft.NewParent owner shift (Some this), up shift
+
     member this.SlideChildrenLeft owner shift n (leftSibling : RRBFullNode<'T>) =
         if n = 0 then leftSibling :> RRBNode<'T>, this :> RRBNode<'T> else
         let keepCnt = this.NodeSize - n
@@ -867,6 +915,8 @@ PrependNChildrenS n seq<ch> seq<sz>
                 (parentL :?> RRBFullNode<'T>).ConcatNodes owner shift (parentR :?> RRBFullNode<'T>)
 
     // TODO: Write "member this.NewParent" for other types of nodes (because expanded nodes will want to create an expanded parent)
+    // TODO: Nope, we've done that but now we need to **change the API** because "this" might not always be the left node
+    // So instead, the API needs to become "siblings" as an array instead of "rightSibling"
     abstract member NewParent : OwnerToken -> int -> RRBNode<'T> option -> RRBNode<'T>
     default this.NewParent owner shift rightSibling =
         let arr =
@@ -1505,6 +1555,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
             RRBExpandedRelaxedNode<'T>(owner, node'.Children, sizeTable', newSize) :> RRBNode<'T>
 
     override this.ExpandLastChildIfNeeded owner =
+        // TODO: Turn this into ExpandRightSpineIfNeeded by calling recursively on the (newly?)-expanded child
         if this.NodeSize = 0 then this :> RRBNode<'T> else
         let node' = this.GetEditableNode owner :?> RRBExpandedFullNode<'T>
         let lastChild = this.LastChild
