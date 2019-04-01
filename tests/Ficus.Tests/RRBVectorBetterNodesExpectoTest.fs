@@ -168,10 +168,7 @@ let genBranchForLargeTrees counter =
         let! isFull = Gen.frequency [ 1, Gen.constant true; 3, Gen.constant false ]
         let! twigCount = if isFull then Gen.constant Literals.blockSize else Gen.choose(Literals.blockSize / 4, Literals.blockSize)
         let! twigs = Gen.listOfLength twigCount (genTwigForLargeTrees counter)
-        if twigs |> List.length = 1 then
-            return RRBNode<int>.MkFullNode nullOwner (twigs |> Array.ofList)
-        else
-            return RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 2) (twigs |> Array.ofList)
+        return RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 2) (twigs |> Array.ofList)
     }
 
 let genLimbForLargeTrees counter =
@@ -179,10 +176,7 @@ let genLimbForLargeTrees counter =
         let! isFull = Gen.frequency [ 1, Gen.constant true; 3, Gen.constant false ]
         let! branchCount = if isFull then Gen.constant Literals.blockSize else Gen.choose(Literals.blockSize / 8 |> max 1, Literals.blockSize)
         let! branches = Gen.listOfLength branchCount (genBranchForLargeTrees counter)
-        if branches |> List.length = 1 then
-            return RRBNode<int>.MkFullNode nullOwner (branches |> Array.ofList)
-        else
-            return RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 3) (branches |> Array.ofList)
+        return RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 3) (branches |> Array.ofList)
     }
 
 let genTrunkForLargeTrees counter =
@@ -190,10 +184,7 @@ let genTrunkForLargeTrees counter =
         let! isFull = Gen.frequency [ 1, Gen.constant true; 3, Gen.constant false ]
         let! limbCount = if isFull then Gen.constant Literals.blockSize else Gen.choose(Literals.blockSize / 16 |> max 1, Literals.blockSize)
         let! limbs = Gen.listOfLength limbCount (genLimbForLargeTrees counter)
-        if limbs |> List.length = 1 then
-            return RRBNode<int>.MkFullNode nullOwner (limbs |> Array.ofList)
-        else
-            return RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 4) (limbs |> Array.ofList)
+        return RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 4) (limbs |> Array.ofList)
     }
 
 let genLargePersistentTree =
