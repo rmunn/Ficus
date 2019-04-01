@@ -423,25 +423,25 @@ let nodeProperties = [
             if isLeaf node then acc else (node :?> RRBFullNode<'T>).FirstChild |> height (acc+1)
         (height 0 root) * Literals.blockSizeShift = shift
 
-    // "ExpandedNodes (and ExpandedRRBNodes) should not appear in a tree whose root is not an expanded node variant", fun (shift : int) (root : RRBNode<'T>) ->
-    //     let isExpanded (child : RRBNode<'T>) = (child :? RRBExpandedFullNode<'T>) || (child :? RRBExpandedRelaxedNode<'T>)
-    //     let rec check shift (node : RRBNode<'T>) =
-    //         if shift <= 0 then true
-    //         elif isExpanded node then false
-    //         else children node |> Seq.forall (check (down shift))
-    //     if isExpanded root then true else check shift root
+    "ExpandedNodes (and ExpandedRRBNodes) should not appear in a tree whose root is not an expanded node variant", fun (shift : int) (root : RRBNode<'T>) ->
+        let isExpanded (child : RRBNode<'T>) = (child :? RRBExpandedFullNode<'T>) || (child :? RRBExpandedRelaxedNode<'T>)
+        let rec check shift (node : RRBNode<'T>) =
+            if shift <= 0 then true
+            elif isExpanded node then false
+            else children node |> Seq.forall (check (down shift))
+        if isExpanded root then true else check shift root
 
-    // "If a tree's root is an expanded Node variant, its right spine should contain expanded nodes but nothing else should", fun (shift : int) (root : RRBNode<'T>) ->
-    //     let isExpanded (child : RRBNode<'T>) = (child :? RRBExpandedFullNode<'T>) || (child :? RRBExpandedRelaxedNode<'T>)
-    //     let rec check shift isLast (node : RRBNode<'T>) =
-    //         if shift <= 0 then true
-    //         elif isExpanded node && not isLast then false
-    //         elif isLast && not (isExpanded node) then false
-    //         else
-    //             let checkResultForAllButLast = children node |> Seq.take (node.NodeSize - 1) |> Seq.forall (check (down shift) false)
-    //             let checkResultForLastChild = children node |> Seq.skip (node.NodeSize - 1) |> Seq.head |> check (down shift) true
-    //             checkResultForAllButLast && checkResultForLastChild
-    //     if isExpanded root then check shift true root else true
+    "If a tree's root is an expanded Node variant, its right spine should contain expanded nodes but nothing else should", fun (shift : int) (root : RRBNode<'T>) ->
+        let isExpanded (child : RRBNode<'T>) = (child :? RRBExpandedFullNode<'T>) || (child :? RRBExpandedRelaxedNode<'T>)
+        let rec check shift isLast (node : RRBNode<'T>) =
+            if shift <= 0 then true
+            elif isExpanded node && not isLast then false
+            elif isLast && not (isExpanded node) then false
+            else
+                let checkResultForAllButLast = children node |> Seq.take (node.NodeSize - 1) |> Seq.forall (check (down shift) false)
+                let checkResultForLastChild = children node |> Seq.skip (node.NodeSize - 1) |> Seq.head |> check (down shift) true
+                checkResultForAllButLast && checkResultForLastChild
+        if isExpanded root then check shift true root else true
 
     "ExpandedNodes (and ExpandedRRBNodes) should have exactly as much data in their children & size tables as their node size indicates", fun (shift : int) (root : RRBNode<'T>) ->
         let isExpanded (child : RRBNode<'T>) = (child :? RRBExpandedFullNode<'T>) || (child :? RRBExpandedRelaxedNode<'T>)
@@ -985,7 +985,7 @@ let mergeTreeTestsWIP =
             checkProperties shift newL "Newly merged left node"
             checkProperties shift nodeR' "Newly merged right node"
 
-    ftestProp (218196572, 296578359) "Merging left twig with right tree" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (RootNode nodeR : RootNode<int>) ->
+    ftestProp (7886235, 296578399) "Merging left twig with right tree" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (RootNode nodeR : RootNode<int>) ->
         let shiftL = Literals.blockSizeShift
         let shiftR = Literals.blockSizeShift * (height nodeR)
         checkProperties shiftL nodeL "Original left node"
@@ -1004,7 +1004,7 @@ let mergeTreeTestsWIP =
             checkProperties newShift newL "Newly merged left node"
             checkProperties newShift nodeR' "Newly merged right node"
 
-    ftestProp (218196909, 296578359) "Merging left tree with right twig" <| fun (RootNode nodeL : RootNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+    ftestProp (17045485, 296578399) "Merging left tree with right twig" <| fun (RootNode nodeL : RootNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         let shiftL = Literals.blockSizeShift * (height nodeL)
         let shiftR = Literals.blockSizeShift
         checkProperties shiftL nodeL "Original left node"
@@ -1023,7 +1023,7 @@ let mergeTreeTestsWIP =
             checkProperties newShift newL "Newly merged left node"
             checkProperties newShift nodeR' "Newly merged right node"
 
-    ftestProp (218196994, 296578359) "Merging left tree with right tree" <| fun (RootNode nodeL : RootNode<int>) (RootNode nodeR : RootNode<int>) ->
+    ftestProp (17055139, 296578399) "Merging left tree with right tree" <| fun (RootNode nodeL : RootNode<int>) (RootNode nodeR : RootNode<int>) ->
         let shiftL = Literals.blockSizeShift * (height nodeL)
         let shiftR = Literals.blockSizeShift * (height nodeR)
         checkProperties shiftL nodeL "Original left node"
@@ -1062,7 +1062,7 @@ let mergeTreeTestsWIP =
 
 let largeMergeTreeTestsWIP =
   testList "WIP: Large tree-merge tests" [
-    testProp "Merging left twig with right large tree" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (LargeRootNode nodeR : LargeRootNode<int>) ->
+    ftestProp (3644257, 296578399) "Merging left twig with right large tree" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (LargeRootNode nodeR : LargeRootNode<int>) ->
         let shiftL = Literals.blockSizeShift
         let shiftR = Literals.blockSizeShift * (height nodeR)
         checkProperties shiftL nodeL "Original left node"
@@ -1081,7 +1081,7 @@ let largeMergeTreeTestsWIP =
             checkProperties newShift newL "Newly merged left node"
             checkProperties newShift nodeR' "Newly merged right node"
 
-    testProp "Merging left large tree with right twig" <| fun (LargeRootNode nodeL : LargeRootNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+    ftestProp (3643640, 296578399) "Merging left large tree with right twig" <| fun (LargeRootNode nodeL : LargeRootNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         let shiftL = Literals.blockSizeShift * (height nodeL)
         let shiftR = Literals.blockSizeShift
         checkProperties shiftL nodeL "Original left node"
@@ -1100,7 +1100,7 @@ let largeMergeTreeTestsWIP =
             checkProperties newShift newL "Newly merged left node"
             checkProperties newShift nodeR' "Newly merged right node"
 
-    testProp "Merging left large tree with right large tree" <| fun (LargeRootNode nodeL : LargeRootNode<int>) (LargeRootNode nodeR : LargeRootNode<int>) ->
+    ftestProp (3643987, 296578399) "Merging left large tree with right large tree" <| fun (LargeRootNode nodeL : LargeRootNode<int>) (LargeRootNode nodeR : LargeRootNode<int>) ->
         let shiftL = Literals.blockSizeShift * (height nodeL)
         let shiftR = Literals.blockSizeShift * (height nodeR)
         checkProperties shiftL nodeL "Original left node"
@@ -1141,6 +1141,7 @@ let longRunningTests =
 let tests =
   testList "Basic node tests" [
     // debugGenTests
+    largeMergeTreeTestsWIP
     mergeTreeTestsWIP
     rebalanceTestsWIP
     appendAndPrependChildrenPropertyTests  // Put this first since it's so long
