@@ -958,7 +958,7 @@ let doIndividualMergeTestLeftTwigRightTwoNodeTree L R1 R2 =
         Expect.equal arrCombined origCombined "Order of items should not change during merge"
         checkProperties (shift * 2) newL "Newly merged node"
         checkProperties (shift * 2) nodeR "Newly merged node"
-        let newRoot = (newL :?> RRBFullNode<int>).NewParent nullOwner (shift * 2) (Some nodeR)
+        let newRoot = (newL :?> RRBFullNode<int>).NewParent nullOwner (shift * 2) [|newL; nodeR|]
         checkProperties (shift * 3) newRoot "Newly merged node"
     | None ->
         Expect.equal (arrL' |> Array.ofSeq) origCombined "Order of items should not change during merge"
@@ -985,7 +985,7 @@ let mergeTreeTestsWIP =
             checkProperties shift newL "Newly merged left node"
             checkProperties shift nodeR' "Newly merged right node"
 
-    testProp "Merging left twig with right tree" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (RootNode nodeR : RootNode<int>) ->
+    ftestProp (218196572, 296578359) "Merging left twig with right tree" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (RootNode nodeR : RootNode<int>) ->
         let shiftL = Literals.blockSizeShift
         let shiftR = Literals.blockSizeShift * (height nodeR)
         checkProperties shiftL nodeL "Original left node"
@@ -999,12 +999,12 @@ let mergeTreeTestsWIP =
             checkProperties newShift newL "Newly merged node"
         | Some nodeR' ->
             Expect.equal (Seq.append (nodeItems newShift newL) (nodeItems newShift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
-            let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift newR
+            let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift [|newL; nodeR'|]
             checkProperties (up newShift) parent "Newly rooted merged tree"
             checkProperties newShift newL "Newly merged left node"
             checkProperties newShift nodeR' "Newly merged right node"
 
-    testProp "Merging left tree with right twig" <| fun (RootNode nodeL : RootNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+    ftestProp (218196909, 296578359) "Merging left tree with right twig" <| fun (RootNode nodeL : RootNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         let shiftL = Literals.blockSizeShift * (height nodeL)
         let shiftR = Literals.blockSizeShift
         checkProperties shiftL nodeL "Original left node"
@@ -1018,12 +1018,12 @@ let mergeTreeTestsWIP =
             checkProperties newShift newL "Newly merged node"
         | Some nodeR' ->
             Expect.equal (Seq.append (nodeItems newShift newL) (nodeItems newShift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
-            let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift newR
+            let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift [|newL; nodeR'|]
             checkProperties (up newShift) parent "Newly rooted merged tree"
             checkProperties newShift newL "Newly merged left node"
             checkProperties newShift nodeR' "Newly merged right node"
 
-    testProp "Merging left tree with right tree" <| fun (RootNode nodeL : RootNode<int>) (RootNode nodeR : RootNode<int>) ->
+    ftestProp (218196994, 296578359) "Merging left tree with right tree" <| fun (RootNode nodeL : RootNode<int>) (RootNode nodeR : RootNode<int>) ->
         let shiftL = Literals.blockSizeShift * (height nodeL)
         let shiftR = Literals.blockSizeShift * (height nodeR)
         checkProperties shiftL nodeL "Original left node"
@@ -1037,7 +1037,7 @@ let mergeTreeTestsWIP =
             checkProperties newShift newL "Newly merged node"
         | Some nodeR' ->
             Expect.equal (Seq.append (nodeItems newShift newL) (nodeItems newShift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
-            let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift newR
+            let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift [|newL; nodeR'|]
             checkProperties (up newShift) parent "Newly rooted merged tree"
             checkProperties newShift newL "Newly merged left node"
             checkProperties newShift nodeR' "Newly merged right node"
@@ -1076,7 +1076,7 @@ let largeMergeTreeTestsWIP =
             checkProperties newShift newL "Newly merged node"
         | Some nodeR' ->
             Expect.equal (Seq.append (nodeItems newShift newL) (nodeItems newShift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
-            let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift newR
+            let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift [|newL; nodeR'|]
             checkProperties (up newShift) parent "Newly rooted merged tree"
             checkProperties newShift newL "Newly merged left node"
             checkProperties newShift nodeR' "Newly merged right node"
@@ -1095,7 +1095,7 @@ let largeMergeTreeTestsWIP =
             checkProperties newShift newL "Newly merged node"
         | Some nodeR' ->
             Expect.equal (Seq.append (nodeItems newShift newL) (nodeItems newShift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
-            let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift newR
+            let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift [|newL; nodeR'|]
             checkProperties (up newShift) parent "Newly rooted merged tree"
             checkProperties newShift newL "Newly merged left node"
             checkProperties newShift nodeR' "Newly merged right node"
@@ -1114,7 +1114,7 @@ let largeMergeTreeTestsWIP =
             checkProperties newShift newL "Newly merged node"
         | Some nodeR' ->
             Expect.equal (Seq.append (nodeItems newShift newL) (nodeItems newShift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
-            let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift newR
+            let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift [|newL; nodeR'|]
             checkProperties (up newShift) parent "Newly rooted merged tree"
             checkProperties newShift newL "Newly merged left node"
             checkProperties newShift nodeR' "Newly merged right node"
