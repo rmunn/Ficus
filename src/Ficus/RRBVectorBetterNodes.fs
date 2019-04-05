@@ -873,46 +873,60 @@ PrependNChildrenS n seq<ch> seq<sz>
      || right.NodeSize < Literals.blockSize
      || this.NeedsRebalance2PlusLeaf shift tail.NodeSize right
 
-    member this.MergeTree owner shift (tailOpt : RRBLeafNode<'T> option) rightShift (right : RRBFullNode<'T>) =
+    member this.MergeTree owner shift (tailOpt : RRBLeafNode<'T> option) rightShift (right : RRBFullNode<'T>) shouldKeepExpandedLeftNode =
+        let shrinkLeftNode owner shouldKeepExpandedLeftNode (pair : RRBNode<'T> * RRBNode<'T> option) =
+            match pair with
+            | l, None when shouldKeepExpandedLeftNode -> l, None
+            | l, None -> l.Shrink owner, None
+            | l, Some r -> l.Shrink owner, Some r
         if shift = Literals.blockSizeShift && rightShift = Literals.blockSizeShift then
             match tailOpt with
             | None -> this.ConcatNodes owner shift right
             | Some tail -> this.ConcatTwigsPlusLeaf owner shift tail right
+            |> shrinkLeftNode owner shouldKeepExpandedLeftNode
         elif shift = rightShift then
             let childL = this.LastChild :?> RRBFullNode<'T>
             let childR = right.FirstChild :?> RRBFullNode<'T>
-            match childL.MergeTree owner (down shift) tailOpt (down rightShift) childR with
+            // TODO: Need to check if either node is expanded, and if so, figure out whether ConcatNodes should produce an expanded result
+            // ... which might be trimmed up above. Perhaps for simplicity's sake, this function should acquire a boolean parameter "expandRightAsNeeded"?
+            match childL.MergeTree owner (down shift) tailOpt (down rightShift) childR shouldKeepExpandedLeftNode with
             | child', None ->
                 let parentL = this.UpdateChildSAbs owner shift (this.NodeSize - 1) child' (child'.TreeSize (down shift))
                 if right.NodeSize > 1 then
                     let parentR = right.RemoveChild owner shift 0
                     (parentL :?> RRBFullNode<'T>).ConcatNodes owner shift (parentR :?> RRBFullNode<'T>)
+                    |> shrinkLeftNode owner shouldKeepExpandedLeftNode
                 else
                     parentL, None
             | childL', Some childR' ->
                 let parentL = this.UpdateChildSAbs owner shift (this.NodeSize - 1) childL' (childL'.TreeSize (down shift))
                 let parentR = right.UpdateChildSAbs owner shift 0 childR' (childR'.TreeSize (down rightShift))
                 (parentL :?> RRBFullNode<'T>).ConcatNodes owner shift (parentR :?> RRBFullNode<'T>)
+                |> shrinkLeftNode owner shouldKeepExpandedLeftNode
         elif shift < rightShift then
             let childR = right.FirstChild :?> RRBFullNode<'T>
-            match this.MergeTree owner shift tailOpt (down rightShift) childR with
+            match this.MergeTree owner shift tailOpt (down rightShift) childR shouldKeepExpandedLeftNode with
             | child', None ->
                 let parentR = right.UpdateChildSAbs owner shift 0 child' (child'.TreeSize (down rightShift))
-                parentR, None  // TODO: Test this
+                (parentR, None)  // TODO: Test this: do I need to shrink parentR?
+                |> shrinkLeftNode owner shouldKeepExpandedLeftNode
             | childL', Some childR' ->
                 let parentL = (childL' :?> RRBFullNode<'T>).NewParent owner (down rightShift) [|childL'|]
                 let parentR = right.UpdateChildSAbs owner rightShift 0 childR' (childR'.TreeSize (down rightShift))
                 (parentL :?> RRBFullNode<'T>).ConcatNodes owner rightShift (parentR :?> RRBFullNode<'T>)
+                |> shrinkLeftNode owner shouldKeepExpandedLeftNode
         else // shift > rightShift
             let childL = this.LastChild :?> RRBFullNode<'T>
-            match childL.MergeTree owner (down shift) tailOpt rightShift right with
+            match childL.MergeTree owner (down shift) tailOpt rightShift right shouldKeepExpandedLeftNode with
             | child', None ->
                 let parentL = this.UpdateChildSAbs owner shift (this.NodeSize - 1) child' (child'.TreeSize (down shift))
-                parentL, None  // TODO: Test this
+                (parentL, None)  // TODO: Test this
+                |> shrinkLeftNode owner shouldKeepExpandedLeftNode
             | childL', Some childR' ->
                 let parentL = this.UpdateChildSAbs owner shift (this.NodeSize - 1) childL' (childL'.TreeSize (down shift))
                 let parentR = (childR' :?> RRBFullNode<'T>).NewParent owner (down shift) [|childR'|]
                 (parentL :?> RRBFullNode<'T>).ConcatNodes owner shift (parentR :?> RRBFullNode<'T>)
+                |> shrinkLeftNode owner shouldKeepExpandedLeftNode
 
     // TODO: Write "member this.NewParent" for other types of nodes (because expanded nodes will want to create an expanded parent)
     // TODO: Nope, we've done that but now we need to **change the API** because "this" might not always be the left node

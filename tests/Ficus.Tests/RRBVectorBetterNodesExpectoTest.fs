@@ -949,7 +949,7 @@ let doIndividualMergeTestLeftTwigRightTwoNodeTree L R1 R2 =
     let nodeR2 = R2 |> Array.map (mkLeaf counter >> fun node -> node :> RRBNode<int>) |> RRBNode<int>.MkNode nullOwner shift
     let nodeR = RRBNode<int>.MkNode nullOwner (shift * 2) [|nodeR1; nodeR2|]
     let origCombined = Seq.append (nodeItems shift nodeL) (nodeItems (shift * 2) nodeR) |> Array.ofSeq
-    let newL, newR = (nodeL :?> RRBFullNode<int>).MergeTree nullOwner shift None (shift * 2) (nodeR :?> RRBFullNode<int>)
+    let newL, newR = (nodeL :?> RRBFullNode<int>).MergeTree nullOwner shift None (shift * 2) (nodeR :?> RRBFullNode<int>) false
     let arrL' = newL |> nodeItems (shift * 2)
     match newR with
     | Some nodeR ->
@@ -970,7 +970,7 @@ let mergeTreeTestsWIP =
     testProp "Merging twigs" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         let shift = Literals.blockSizeShift
         let expected = Seq.concat [nodeItems shift nodeL; nodeItems shift nodeR] |> Array.ofSeq
-        let newL, newR = nodeL.MergeTree nullOwner shift None shift nodeR
+        let newL, newR = nodeL.MergeTree nullOwner shift None shift nodeR false
         match newR with
         | None ->
             Expect.isLessThanOrEqual newL.NodeSize Literals.blockSize "After merging, left node should be at most M items long"
@@ -991,7 +991,7 @@ let mergeTreeTestsWIP =
         checkProperties shiftL nodeL "Original left node"
         checkProperties shiftR nodeR "Original right node"
         let expected = Seq.concat [nodeItems shiftL nodeL; nodeItems shiftR nodeR] |> Array.ofSeq
-        let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR
+        let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR false
         let newShift = max shiftL shiftR
         match newR with
         | None ->
@@ -1010,7 +1010,7 @@ let mergeTreeTestsWIP =
         checkProperties shiftL nodeL "Original left node"
         checkProperties shiftR nodeR "Original right node"
         let expected = Seq.concat [nodeItems shiftL nodeL; nodeItems shiftR nodeR] |> Array.ofSeq
-        let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR
+        let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR false
         let newShift = max shiftL shiftR
         match newR with
         | None ->
@@ -1029,7 +1029,7 @@ let mergeTreeTestsWIP =
         checkProperties shiftL nodeL "Original left node"
         checkProperties shiftR nodeR "Original right node"
         let expected = Seq.concat [nodeItems shiftL nodeL; nodeItems shiftR nodeR] |> Array.ofSeq
-        let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR
+        let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR false
         let newShift = max shiftL shiftR
         match newR with
         | None ->
@@ -1068,7 +1068,7 @@ let largeMergeTreeTestsWIP =
         checkProperties shiftL nodeL "Original left node"
         checkProperties shiftR nodeR "Original right node"
         let expected = Seq.concat [nodeItems shiftL nodeL; nodeItems shiftR nodeR] |> Array.ofSeq
-        let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR
+        let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR false
         let newShift = max shiftL shiftR
         match newR with
         | None ->
@@ -1087,7 +1087,7 @@ let largeMergeTreeTestsWIP =
         checkProperties shiftL nodeL "Original left node"
         checkProperties shiftR nodeR "Original right node"
         let expected = Seq.concat [nodeItems shiftL nodeL; nodeItems shiftR nodeR] |> Array.ofSeq
-        let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR
+        let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR false
         let newShift = max shiftL shiftR
         match newR with
         | None ->
@@ -1106,7 +1106,7 @@ let largeMergeTreeTestsWIP =
         checkProperties shiftL nodeL "Original left node"
         checkProperties shiftR nodeR "Original right node"
         let expected = Seq.concat [nodeItems shiftL nodeL; nodeItems shiftR nodeR] |> Array.ofSeq
-        let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR
+        let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR false
         let newShift = max shiftL shiftR
         match newR with
         | None ->
