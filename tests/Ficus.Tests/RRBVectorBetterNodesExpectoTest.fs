@@ -137,6 +137,17 @@ let toTransient (root : RRBNode<'T>) =
             root', thisShift
     expandNode newToken root |> fst
 
+let toPersistent (root : RRBNode<'T>) =
+    let rec shrinkNode token (root : RRBNode<'T>) =
+        if root :? RRBLeafNode<'T>
+        then (root.Shrink token), 0
+        else
+            let child, childShift = (root :?> RRBFullNode<'T>).LastChild |> shrinkNode token
+            let thisShift = up childShift
+            let root' = ((root.Shrink token) :?> RRBFullNode<'T>).UpdateChild token thisShift (root.NodeSize - 1) child
+            root', thisShift
+    shrinkNode nullOwner root |> fst
+
 let genTransientSmallFullTree = genSmallFullTree |> Gen.map toTransient
 
 let genTransientSmallRelaxedTree = genSmallRelaxedTree |> Gen.map toTransient
@@ -950,9 +961,11 @@ let doIndividualMergeTestLeftTwigRightTwoNodeTree L R1 R2 =
     let nodeR = RRBNode<int>.MkNode nullOwner (shift * 2) [|nodeR1; nodeR2|]
     let origCombined = Seq.append (nodeItems shift nodeL) (nodeItems (shift * 2) nodeR) |> Array.ofSeq
     let newL, newR = (nodeL :?> RRBFullNode<int>).MergeTree nullOwner shift None (shift * 2) (nodeR :?> RRBFullNode<int>) false
+    // TODO: let newR, _ = newR.toPersistent  ... except down in the match expression
     let arrL' = newL |> nodeItems (shift * 2)
     match newR with
     | Some nodeR ->
+        let nodeR = toPersistent nodeR
         let arrR' = nodeR |> nodeItems (shift * 2)
         let arrCombined = Seq.append arrL' arrR' |> Array.ofSeq
         Expect.equal arrCombined origCombined "Order of items should not change during merge"
@@ -973,10 +986,13 @@ let mergeTreeTestsWIP =
         let newL, newR = nodeL.MergeTree nullOwner shift None shift nodeR false
         match newR with
         | None ->
+            let newL = toPersistent newL
             Expect.isLessThanOrEqual newL.NodeSize Literals.blockSize "After merging, left node should be at most M items long"
             Expect.equal (nodeItems shift newL |> Array.ofSeq) expected "Order of items should not change during merge"
             checkProperties shift newL "Newly merged node"
         | Some nodeR' ->
+            let newL = toPersistent newL
+            let nodeR' = toPersistent nodeR'
             Expect.equal (Seq.append (nodeItems shift newL) (nodeItems shift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
             let totalOldSize = nodeL.NodeSize + nodeR.NodeSize
             let validNewSizes = if nodeL.NeedsRebalance2 shift nodeR then [totalOldSize - 2; totalOldSize - 1] else [totalOldSize]
@@ -995,9 +1011,12 @@ let mergeTreeTestsWIP =
         let newShift = max shiftL shiftR
         match newR with
         | None ->
+            let newL = toPersistent newL
             Expect.equal (nodeItems newShift newL |> Array.ofSeq) expected "Order of items should not change during merge"
             checkProperties newShift newL "Newly merged node"
         | Some nodeR' ->
+            let newL = toPersistent newL
+            let nodeR' = toPersistent nodeR'
             Expect.equal (Seq.append (nodeItems newShift newL) (nodeItems newShift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
             let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift [|newL; nodeR'|]
             checkProperties (up newShift) parent "Newly rooted merged tree"
@@ -1014,9 +1033,12 @@ let mergeTreeTestsWIP =
         let newShift = max shiftL shiftR
         match newR with
         | None ->
+            let newL = toPersistent newL
             Expect.equal (nodeItems newShift newL |> Array.ofSeq) expected "Order of items should not change during merge"
             checkProperties newShift newL "Newly merged node"
         | Some nodeR' ->
+            let newL = toPersistent newL
+            let nodeR' = toPersistent nodeR'
             Expect.equal (Seq.append (nodeItems newShift newL) (nodeItems newShift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
             let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift [|newL; nodeR'|]
             checkProperties (up newShift) parent "Newly rooted merged tree"
@@ -1033,9 +1055,12 @@ let mergeTreeTestsWIP =
         let newShift = max shiftL shiftR
         match newR with
         | None ->
+            let newL = toPersistent newL
             Expect.equal (nodeItems newShift newL |> Array.ofSeq) expected "Order of items should not change during merge"
             checkProperties newShift newL "Newly merged node"
         | Some nodeR' ->
+            let newL = toPersistent newL
+            let nodeR' = toPersistent nodeR'
             Expect.equal (Seq.append (nodeItems newShift newL) (nodeItems newShift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
             let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift [|newL; nodeR'|]
             checkProperties (up newShift) parent "Newly rooted merged tree"
@@ -1072,9 +1097,12 @@ let largeMergeTreeTestsWIP =
         let newShift = max shiftL shiftR
         match newR with
         | None ->
+            let newL = toPersistent newL
             Expect.equal (nodeItems newShift newL |> Array.ofSeq) expected "Order of items should not change during merge"
             checkProperties newShift newL "Newly merged node"
         | Some nodeR' ->
+            let newL = toPersistent newL
+            let nodeR' = toPersistent nodeR'
             Expect.equal (Seq.append (nodeItems newShift newL) (nodeItems newShift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
             let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift [|newL; nodeR'|]
             checkProperties (up newShift) parent "Newly rooted merged tree"
@@ -1091,9 +1119,12 @@ let largeMergeTreeTestsWIP =
         let newShift = max shiftL shiftR
         match newR with
         | None ->
+            let newL = toPersistent newL
             Expect.equal (nodeItems newShift newL |> Array.ofSeq) expected "Order of items should not change during merge"
             checkProperties newShift newL "Newly merged node"
         | Some nodeR' ->
+            let newL = toPersistent newL
+            let nodeR' = toPersistent nodeR'
             Expect.equal (Seq.append (nodeItems newShift newL) (nodeItems newShift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
             let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift [|newL; nodeR'|]
             checkProperties (up newShift) parent "Newly rooted merged tree"
@@ -1110,9 +1141,12 @@ let largeMergeTreeTestsWIP =
         let newShift = max shiftL shiftR
         match newR with
         | None ->
+            let newL = toPersistent newL
             Expect.equal (nodeItems newShift newL |> Array.ofSeq) expected "Order of items should not change during merge"
             checkProperties newShift newL "Newly merged node"
         | Some nodeR' ->
+            let newL = toPersistent newL
+            let nodeR' = toPersistent nodeR'
             Expect.equal (Seq.append (nodeItems newShift newL) (nodeItems newShift nodeR') |> Array.ofSeq) expected "Order of items should not change during merge"
             let parent = (newL :?> RRBFullNode<int>).NewParent nullOwner newShift [|newL; nodeR'|]
             checkProperties (up newShift) parent "Newly rooted merged tree"

@@ -1979,7 +1979,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBLeafNode<'T>(ownerToken : Own
 
     member this.StringRepr : string = sprintf "L%d" this.NodeSize
 
-    override this.Shrink owner = this.GetEditableNode owner
+    override this.Shrink owner = this.GetEditableNode owner  // TODO: For efficiency, return "this" if owner is same as ours *even* if it's nullOwner
     override this.Expand owner = this.GetEditableNode owner
 
     override this.GetEditableNode owner =
