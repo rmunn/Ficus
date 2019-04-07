@@ -450,7 +450,7 @@ let nodeProperties = [
             elif isLast && not (isExpanded node) then false
             else
                 let checkResultForAllButLast = children node |> Seq.take (node.NodeSize - 1) |> Seq.forall (check (down shift) false)
-                let checkResultForLastChild = children node |> Seq.skip (node.NodeSize - 1) |> Seq.head |> check (down shift) true
+                let checkResultForLastChild = children node |> Seq.skip (node.NodeSize - 1) |> Seq.head |> check (down shift) isLast
                 checkResultForAllButLast && checkResultForLastChild
         if isExpanded root then check shift true root else true
 
@@ -1001,7 +1001,7 @@ let mergeTreeTestsWIP =
             checkProperties shift newL "Newly merged left node"
             checkProperties shift nodeR' "Newly merged right node"
 
-    ftestProp (7886235, 296578399) "Merging left twig with right tree" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (RootNode nodeR : RootNode<int>) ->
+    testProp (*7886235, 296578399*) "Merging left twig with right tree" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (RootNode nodeR : RootNode<int>) ->
         let shiftL = Literals.blockSizeShift
         let shiftR = Literals.blockSizeShift * (height nodeR)
         checkProperties shiftL nodeL "Original left node"
@@ -1023,7 +1023,7 @@ let mergeTreeTestsWIP =
             checkProperties newShift newL "Newly merged left node"
             checkProperties newShift nodeR' "Newly merged right node"
 
-    ftestProp (17045485, 296578399) "Merging left tree with right twig" <| fun (RootNode nodeL : RootNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+    testProp (*17045485, 296578399*) "Merging left tree with right twig" <| fun (RootNode nodeL : RootNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         let shiftL = Literals.blockSizeShift * (height nodeL)
         let shiftR = Literals.blockSizeShift
         checkProperties shiftL nodeL "Original left node"
