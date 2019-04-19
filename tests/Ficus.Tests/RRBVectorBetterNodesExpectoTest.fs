@@ -218,6 +218,42 @@ let genTrunkForLargeTrees counter =
         return RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 4) (limbs |> Array.ofList)
     }
 
+let genMediumPersistentTree =
+    // Size rules for medium trees are:
+    // 1-32: number of leaves
+    // 33-64: subtract 32 -> 1-32 twigs (but since it's Gen.choose(1,x), that's anywhere between 1-2 to 1-32 twigs)
+    // 65-96: subtract 64 -> 1-32 branches (height 2)
+    // 97-100: subtract 96 -> 1-4 limbs (height 3)
+    Gen.sized (fun s ->
+        let counter = mkCounter()
+        logger.debug(eventX "Generating tree of size {n}" >> setField "n" s)
+        if s <= 32 then
+            let leafMax = s
+            gen {
+                let! n = Gen.choose(1, leafMax)
+                let! leaves = genLeavesForLargeTrees n counter
+                return mkRelaxedTwig leaves
+            }
+        elif s <= 64 then
+            let twigMax = s - 32
+            gen {
+                let! n = Gen.choose(1, twigMax)
+                return! Gen.listOfLength n (genTwigForLargeTrees counter) |> Gen.map (Array.ofList >> RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 2))
+            }
+        elif s <= 96 then
+            let branchMax = s - 64
+            gen {
+                let! n = Gen.choose(1, branchMax)
+                return! Gen.listOfLength n (genBranchForLargeTrees counter) |> Gen.map (Array.ofList >> RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 3))
+            }
+        else
+            let limbMax = s - 96
+            gen {
+                let! n = Gen.choose(1, limbMax)
+                return! Gen.listOfLength n (genLimbForLargeTrees counter) |> Gen.map (Array.ofList >> RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 4))
+            }
+    )
+
 let genLargePersistentTree =
     // Size rules for large trees are:
     // 1-8: multiply by 4 -> number of leaves
@@ -261,12 +297,22 @@ let genLargePersistentTree =
             }
     )
 
+let genMediumTransientTree =
+    genMediumPersistentTree
+    |> Gen.map toTransient
+
 let genLargeTransientTree =
     genLargePersistentTree
     |> Gen.map toTransient
 
+let genMediumTree =
+    Gen.oneof [ genMediumPersistentTree ; genMediumTransientTree ]
+
 let genLargeTree =
     Gen.oneof [ genLargePersistentTree ; genLargeTransientTree ]
+
+let genMediumOrLargeTree =
+    Gen.oneof [ genMediumTree ; genLargeTree ]
 
 type IsolatedNode<'T> = IsolatedNode of RRBFullNode<'T>
 type IsolatedShortNode<'T> = IsolatedShortNode of RRBFullNode<'T>
@@ -314,7 +360,7 @@ type MyGenerators =
             override x.Generator = genSmallTree |> Gen.map (fun node -> RootNode (node :?> RRBFullNode<int>)) }
     static member arbLargeTree() =
         { new Arbitrary<LargeRootNode<int>>() with
-            override x.Generator = genLargeTree |> Gen.map (fun node -> LargeRootNode (node :?> RRBFullNode<int>))
+            override x.Generator = genMediumOrLargeTree |> Gen.map (fun node -> LargeRootNode (node :?> RRBFullNode<int>))
             // override x.Shrinker (LargeRootNode root) = shrinkerForNode root |> Seq.map LargeRootNode
             }
     static member arbLeaf() =
@@ -1080,7 +1126,7 @@ let mergeTreeTestsWIP =
             checkProperties newShift newL "Newly merged left node"
             checkProperties newShift nodeR' "Newly merged right node"
 
-    ftestProp (17055139, 296578399) "Merging left tree with right tree" <| fun (RootNode nodeL : RootNode<int>) (RootNode nodeR : RootNode<int>) ->
+    testProp "Merging left tree with right tree" <| fun (RootNode nodeL : RootNode<int>) (RootNode nodeR : RootNode<int>) ->
         let shiftL = Literals.blockSizeShift * (height nodeL)
         let shiftR = Literals.blockSizeShift * (height nodeR)
         checkProperties shiftL nodeL "Original left node"
@@ -1166,7 +1212,7 @@ let largeMergeTreeTestsWIP =
             checkProperties newShift newL "Newly merged left node"
             checkProperties newShift nodeR' "Newly merged right node"
 
-    ftestProp (3643987, 296578399) "Merging left large tree with right large tree" <| fun (LargeRootNode nodeL : LargeRootNode<int>) (LargeRootNode nodeR : LargeRootNode<int>) ->
+    testProp "Merging left large tree with right large tree" <| fun (LargeRootNode nodeL : LargeRootNode<int>) (LargeRootNode nodeR : LargeRootNode<int>) ->
         let shiftL = Literals.blockSizeShift * (height nodeL)
         let shiftR = Literals.blockSizeShift * (height nodeR)
         checkProperties shiftL nodeL "Original left node"
