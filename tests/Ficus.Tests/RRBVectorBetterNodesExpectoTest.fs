@@ -322,47 +322,13 @@ type LargeRootNode<'T> = LargeRootNode of RRBFullNode<'T>   // TODO: Use toTrans
 type ShowSizedInt = ShowSizedInt of int
 // TODO: Write shrinkers for nodes and for trees
 
-let nodeWithChildrenUpTo shift idx (node : RRBFullNode<'T>) =
-    let children' = node.Children |> Array.truncate idx
-    let sizeTable = if isRelaxed node then (node :?> RRBRelaxedNode<'T>).SizeTable |> Some else None
-    let sizeTable' = sizeTable |> Option.map (Array.truncate idx)
-    match node with
-    | :? RRBExpandedRelaxedNode<'T> as n ->
-        RRBExpandedRelaxedNode<'T>(n.Owner, n.Children |> Array.truncate idx, n.SizeTable |> Array.truncate idx).ToFullNodeIfNeeded shift
-    | :? RRBRelaxedNode<'T> as n ->
-        RRBRelaxedNode<'T>(n.Owner, n.Children |> Array.truncate idx, n.SizeTable |> Array.truncate idx).ToFullNodeIfNeeded shift
-    | :? RRBExpandedFullNode<'T> as n ->
-        RRBExpandedFullNode<'T>(n.Owner, n.Children |> Array.truncate idx).ToRelaxedNodeIfNeeded shift
-    | :? RRBFullNode<'T> as n ->
-        RRBFullNode<'T>(n.Owner, n.Children |> Array.truncate idx).ToRelaxedNodeIfNeeded shift
-
-let shrinkerForNode (node : RRBFullNode<'T>) =
-    if node.NodeSize <= 0 then Seq.empty
-    elif node.FirstChild :? RRBLeafNode<'T> then
-        // We don't shrink leaf nodes, we just remove one at a time
-        let shift = Literals.blockSizeShift
-        seq {
-            for i = 1 to node.NodeSize - 1 do
-                yield (node |> nodeWithChildrenUpTo shift i) :?> RRBFullNode<'T>
-        }
-    else
-        let shift = height node * Literals.blockSizeShift
-        seq {
-            for i = 1 to node.NodeSize - 1 do
-                yield (node |> nodeWithChildrenUpTo shift i) :?> RRBFullNode<'T>
-            // TODO: I might also try doing a recursive call to shrinkerForNode here on the child, and replacing the child at each index
-        }
-
-
 type MyGenerators =
     static member arbTree() =
         { new Arbitrary<RootNode<int>>() with
             override x.Generator = genSmallTree |> Gen.map (fun node -> RootNode (node :?> RRBFullNode<int>)) }
     static member arbLargeTree() =
         { new Arbitrary<LargeRootNode<int>>() with
-            override x.Generator = genMediumOrLargeTree |> Gen.map (fun node -> LargeRootNode (node :?> RRBFullNode<int>))
-            // override x.Shrinker (LargeRootNode root) = shrinkerForNode root |> Seq.map LargeRootNode
-            }
+            override x.Generator = genMediumOrLargeTree |> Gen.map (fun node -> LargeRootNode (node :?> RRBFullNode<int>)) }
     static member arbLeaf() =
         { new Arbitrary<LeafNode<int>>() with
             override x.Generator = let counter = mkCounter() in genLeaf counter |> Gen.map LeafNode }
