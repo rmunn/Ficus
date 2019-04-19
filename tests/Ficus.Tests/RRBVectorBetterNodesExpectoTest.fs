@@ -23,6 +23,26 @@ let logger = Log.create "Expecto"
 // And we'll do some manually-generated tests (e.g., here's a manually-generated full leaf, or here's a manually generated all-but-last-is-full node which should become relaxed after append)
 
 
+let children (node : RRBNode<'T>) = (node :?> RRBFullNode<'T>).Children |> Seq.truncate node.NodeSize
+
+let isEmpty (node : RRBNode<'T>) = node.NodeSize <= 0
+// Note: do NOT call isNotTwig or isTwig on empty nodes!
+let isLeaf (node : RRBNode<'T>) = node :? RRBLeafNode<'T>
+let isNode (node : RRBNode<'T>) = not (isLeaf node)
+let isRelaxed (node : RRBNode<'T>) = node :? RRBRelaxedNode<'T>
+let isFull (node : RRBNode<'T>) = isNode node && not (isRelaxed node)
+let isTwig (node : RRBNode<'T>) = isNode node && children node |> Seq.forall isLeaf
+let isNotTwig (node : RRBNode<'T>) = not (isTwig node)
+
+let rec itemCount shift (node : RRBNode<'T>) =
+    if shift <= 0 then node.NodeSize
+    else children node |> Seq.sumBy (itemCount (down shift))
+
+let rec height (node : RRBNode<'T>) =
+    if isEmpty node || isLeaf node
+    then 0
+    else 1 + height (node :?> RRBFullNode<'T>).FirstChild
+
 
 // === Generators ===
 
@@ -256,13 +276,47 @@ type LargeRootNode<'T> = LargeRootNode of RRBFullNode<'T>   // TODO: Use toTrans
 type ShowSizedInt = ShowSizedInt of int
 // TODO: Write shrinkers for nodes and for trees
 
+let nodeWithChildrenUpTo shift idx (node : RRBFullNode<'T>) =
+    let children' = node.Children |> Array.truncate idx
+    let sizeTable = if isRelaxed node then (node :?> RRBRelaxedNode<'T>).SizeTable |> Some else None
+    let sizeTable' = sizeTable |> Option.map (Array.truncate idx)
+    match node with
+    | :? RRBExpandedRelaxedNode<'T> as n ->
+        RRBExpandedRelaxedNode<'T>(n.Owner, n.Children |> Array.truncate idx, n.SizeTable |> Array.truncate idx).ToFullNodeIfNeeded shift
+    | :? RRBRelaxedNode<'T> as n ->
+        RRBRelaxedNode<'T>(n.Owner, n.Children |> Array.truncate idx, n.SizeTable |> Array.truncate idx).ToFullNodeIfNeeded shift
+    | :? RRBExpandedFullNode<'T> as n ->
+        RRBExpandedFullNode<'T>(n.Owner, n.Children |> Array.truncate idx).ToRelaxedNodeIfNeeded shift
+    | :? RRBFullNode<'T> as n ->
+        RRBFullNode<'T>(n.Owner, n.Children |> Array.truncate idx).ToRelaxedNodeIfNeeded shift
+
+let shrinkerForNode (node : RRBFullNode<'T>) =
+    if node.NodeSize <= 0 then Seq.empty
+    elif node.FirstChild :? RRBLeafNode<'T> then
+        // We don't shrink leaf nodes, we just remove one at a time
+        let shift = Literals.blockSizeShift
+        seq {
+            for i = 1 to node.NodeSize - 1 do
+                yield (node |> nodeWithChildrenUpTo shift i) :?> RRBFullNode<'T>
+        }
+    else
+        let shift = height node * Literals.blockSizeShift
+        seq {
+            for i = 1 to node.NodeSize - 1 do
+                yield (node |> nodeWithChildrenUpTo shift i) :?> RRBFullNode<'T>
+            // TODO: I might also try doing a recursive call to shrinkerForNode here on the child, and replacing the child at each index
+        }
+
+
 type MyGenerators =
     static member arbTree() =
         { new Arbitrary<RootNode<int>>() with
             override x.Generator = genSmallTree |> Gen.map (fun node -> RootNode (node :?> RRBFullNode<int>)) }
     static member arbLargeTree() =
         { new Arbitrary<LargeRootNode<int>>() with
-            override x.Generator = genLargeTree |> Gen.map (fun node -> LargeRootNode (node :?> RRBFullNode<int>)) }
+            override x.Generator = genLargeTree |> Gen.map (fun node -> LargeRootNode (node :?> RRBFullNode<int>))
+            // override x.Shrinker (LargeRootNode root) = shrinkerForNode root |> Seq.map LargeRootNode
+            }
     static member arbLeaf() =
         { new Arbitrary<LeafNode<int>>() with
             override x.Generator = let counter = mkCounter() in genLeaf counter |> Gen.map LeafNode }
@@ -299,25 +353,6 @@ let [<Literal>] M = Literals.blockSize  // Shorthand
 
 
 
-let children (node : RRBNode<'T>) = (node :?> RRBFullNode<'T>).Children |> Seq.truncate node.NodeSize
-
-let isEmpty (node : RRBNode<'T>) = node.NodeSize <= 0
-// Note: do NOT call isNotTwig or isTwig on empty nodes!
-let isLeaf (node : RRBNode<'T>) = node :? RRBLeafNode<'T>
-let isNode (node : RRBNode<'T>) = not (isLeaf node)
-let isRelaxed (node : RRBNode<'T>) = node :? RRBRelaxedNode<'T>
-let isFull (node : RRBNode<'T>) = isNode node && not (isRelaxed node)
-let isTwig (node : RRBNode<'T>) = isNode node && children node |> Seq.forall isLeaf
-let isNotTwig (node : RRBNode<'T>) = not (isTwig node)
-
-let rec itemCount shift (node : RRBNode<'T>) =
-    if shift <= 0 then node.NodeSize
-    else children node |> Seq.sumBy (itemCount (down shift))
-
-let rec height (node : RRBNode<'T>) =
-    if isEmpty node || isLeaf node
-    then 0
-    else 1 + height (node :?> RRBFullNode<'T>).FirstChild
 
 type Fullness = CompletelyFull | FullEnough | NotFull   // Used in node properties
 
@@ -812,7 +847,7 @@ let appendAndPrependChildrenPropertyTests =
         let expectedLeafArrays = Array.append origLeafArrays newLeafArrays
 
         checkProperties Literals.blockSizeShift node "Starting node"
-        let result = node.AppendNChildren nullOwner Literals.blockSizeShift n (toAdd |> Seq.cast) :?> RRBFullNode<int>
+        let result = node.AppendNChildren nullOwner Literals.blockSizeShift n (toAdd |> Seq.cast) true :?> RRBFullNode<int>
         checkProperties Literals.blockSizeShift result "Result"
         Expect.equal result.NodeSize (node.NodeSize + n) "Node after append should have N more items"
         let actualLeafArrays = result.Children |> Array.truncate result.NodeSize |> Array.map (fun leaf -> (leaf :?> RRBLeafNode<int>).Items)
@@ -828,7 +863,7 @@ let appendAndPrependChildrenPropertyTests =
         let expectedLeafArrays = Array.append origLeafArrays newLeafArrays
 
         checkProperties Literals.blockSizeShift node "Starting node"
-        let result = node.AppendNChildrenS nullOwner Literals.blockSizeShift n (toAdd |> Seq.cast) sizes :?> RRBFullNode<int>
+        let result = node.AppendNChildrenS nullOwner Literals.blockSizeShift n (toAdd |> Seq.cast) sizes true :?> RRBFullNode<int>
         checkProperties Literals.blockSizeShift result "Result"
         Expect.equal result.NodeSize (node.NodeSize + n) "Node after prepend should have N more items"
         let actualLeafArrays = result.Children |> Array.truncate result.NodeSize |> Array.map (fun leaf -> (leaf :?> RRBLeafNode<int>).Items)
@@ -1087,7 +1122,7 @@ let mergeTreeTestsWIP =
 
 let largeMergeTreeTestsWIP =
   testList "WIP: Large tree-merge tests" [
-    ftestProp (3644257, 296578399) "Merging left twig with right large tree" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (LargeRootNode nodeR : LargeRootNode<int>) ->
+    testProp (*3644257, 296578399*) "Merging left twig with right large tree" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (LargeRootNode nodeR : LargeRootNode<int>) ->
         let shiftL = Literals.blockSizeShift
         let shiftR = Literals.blockSizeShift * (height nodeR)
         checkProperties shiftL nodeL "Original left node"
@@ -1109,7 +1144,7 @@ let largeMergeTreeTestsWIP =
             checkProperties newShift newL "Newly merged left node"
             checkProperties newShift nodeR' "Newly merged right node"
 
-    ftestProp (3643640, 296578399) "Merging left large tree with right twig" <| fun (LargeRootNode nodeL : LargeRootNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+    testProp (*3643640, 296578399*) "Merging left large tree with right twig" <| fun (LargeRootNode nodeL : LargeRootNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         let shiftL = Literals.blockSizeShift * (height nodeL)
         let shiftR = Literals.blockSizeShift
         checkProperties shiftL nodeL "Original left node"

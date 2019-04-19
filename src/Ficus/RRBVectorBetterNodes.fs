@@ -407,8 +407,8 @@ PrependNChildrenS n seq<ch> seq<sz>
         let node' = RRBFullNode<'T>(owner, r) :> RRBNode<'T>
         ((l, lS), node')
 
-    abstract member AppendNChildren : OwnerToken -> int -> int -> RRBNode<'T> seq -> RRBNode<'T>
-    default this.AppendNChildren owner shift n newChildren =
+    abstract member AppendNChildren : OwnerToken -> int -> int -> RRBNode<'T> seq -> bool -> RRBNode<'T>
+    default this.AppendNChildren owner shift n newChildren _shouldExpandRightChildIfNeeded =
         let size = this.NodeSize
         let newSize = size + n
         let children' = Array.zeroCreate newSize
@@ -427,8 +427,8 @@ PrependNChildrenS n seq<ch> seq<sz>
                 prevSizeTableEntry <- nextSizeTableEntry
         RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
 
-    abstract member AppendNChildrenS : OwnerToken -> int -> int -> RRBNode<'T> seq -> int seq -> RRBNode<'T>
-    default this.AppendNChildrenS owner shift n newChildren sizes =
+    abstract member AppendNChildrenS : OwnerToken -> int -> int -> RRBNode<'T> seq -> int seq -> bool -> RRBNode<'T>
+    default this.AppendNChildrenS owner shift n newChildren sizes _shouldExpandRightChildIfNeeded =
         // Note: "sizes" should be a sequence of size table entries, i.e. cumulative: instead of [3;4;3;2;4] it should be [3;7;10;12;16]
         let size = this.NodeSize
         let newSize = size + n
@@ -557,7 +557,7 @@ PrependNChildrenS n seq<ch> seq<sz>
         if n = 0 then leftSibling :> RRBNode<'T>, this :> RRBNode<'T> else
         let keepCnt = this.NodeSize - n
         let (l, lS), this' = this.SplitAndKeepNRightS owner shift keepCnt
-        let leftSibling' = leftSibling.AppendNChildrenS owner shift n l lS
+        let leftSibling' = leftSibling.AppendNChildrenS owner shift n l lS true
         leftSibling', this'
 
     member this.SlideChildrenRight owner shift n (rightSibling : RRBFullNode<'T>) =
@@ -830,8 +830,8 @@ PrependNChildrenS n seq<ch> seq<sz>
             let left' =
                 // Combine as efficiently as possible by re-using right node's size table if it exists
                 if right :? RRBRelaxedNode<'T>
-                then this.AppendNChildrenS owner shift right.NodeSize right.Children (right :?> RRBRelaxedNode<'T>).SizeTable
-                else this.AppendNChildren  owner shift right.NodeSize right.Children
+                then this.AppendNChildrenS owner shift right.NodeSize right.Children (right :?> RRBRelaxedNode<'T>).SizeTable false
+                else this.AppendNChildren  owner shift right.NodeSize right.Children false
             left', None
     // That will form part of the MergeTrees logic, which will be used in concatenating vectors.
 
@@ -897,7 +897,8 @@ PrependNChildrenS n seq<ch> seq<sz>
                     (parentL :?> RRBFullNode<'T>).ConcatNodes owner shift (parentR :?> RRBFullNode<'T>)
                     |> shrinkLeftNode owner shouldKeepExpandedLeftNode
                 else
-                    parentL, None
+                    (parentL, None)
+                    |> shrinkLeftNode owner shouldKeepExpandedLeftNode
             | childL', Some childR' ->
                 let parentL = this.UpdateChildSAbs owner shift (this.NodeSize - 1) childL' (childL'.TreeSize (down shift))
                 let parentR = right.UpdateChildSAbs owner shift 0 childR' (childR'.TreeSize (down rightShift))
@@ -1132,7 +1133,7 @@ and [<StructuredFormatDisplay("RelaxedNode({StringRepr})")>] RRBRelaxedNode<'T>(
         let node' = RRBNode<'T>.MkNodeKnownSize owner shift r rS
         ((l, lS), node')
 
-    override this.AppendNChildren owner shift n newChildren =
+    override this.AppendNChildren owner shift n newChildren shouldExpandRightChildIfNeeded =
         let size = this.NodeSize
         let newSize = size + n
         let children' = Array.zeroCreate newSize
@@ -1151,7 +1152,7 @@ and [<StructuredFormatDisplay("RelaxedNode({StringRepr})")>] RRBRelaxedNode<'T>(
         RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
         // TODO: That's *almost* identical to the version in RRBFullNode<'T> - separate out the common code and combine it
 
-    override this.AppendNChildrenS owner shift n newChildren sizes =
+    override this.AppendNChildrenS owner shift n newChildren sizes shouldExpandRightChildIfNeeded =
         // Note: "sizes" should be a sequence of size table entries, i.e. cumulative: instead of [3;4;3;2;4] it should be [3;7;10;12;16]
         let size = this.NodeSize
         let newSize = size + n
@@ -1445,7 +1446,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         let node' = this.KeepNRight owner shift n
         ((l, lS), node')
 
-    override this.AppendNChildren owner shift n newChildren =
+    override this.AppendNChildren owner shift n newChildren shouldExpandRightChildIfNeeded =
         let node' = this.GetEditableNode owner :?> RRBExpandedFullNode<'T>
         let size = node'.NodeSize
         // Expanded nodes always have their rightmost child, and only that child, expanded
@@ -1465,16 +1466,17 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
                     let childSize = eC.Current.TreeSize (down shift)
                     stillFull <- childSize >= fullChildSize
         node'.SetNodeSize newSize
-        let newLastChild = node'.LastChild
-        let expandedNewLastChild = newLastChild.Expand owner
-        if not (isSameObj newLastChild expandedNewLastChild) then
-            node'.Children.[newSize - 1] <- expandedNewLastChild
+        if shouldExpandRightChildIfNeeded then
+            let newLastChild = node'.LastChild
+            let expandedNewLastChild = newLastChild.Expand owner
+            if not (isSameObj newLastChild expandedNewLastChild) then
+                node'.Children.[newSize - 1] <- expandedNewLastChild
         if stillFull then
             node' :> RRBNode<'T>
         else
             node'.ToRelaxedNodeIfNeeded shift
 
-    override this.AppendNChildrenS owner shift n newChildren sizes =
+    override this.AppendNChildrenS owner shift n newChildren sizes shouldExpandRightChildIfNeeded =
         // Note: "sizes" should be a sequence of size table entries, i.e. cumulative: instead of [3;4;3;2;4] it should be [3;7;10;12;16]
         let node' = this.GetEditableNode owner :?> RRBExpandedFullNode<'T>
         let size = node'.NodeSize
@@ -1504,10 +1506,11 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
                     // Last child can be non-full, but we need to check all the others
                     stillFull <- childSize >= (1 <<< shift)
         node'.SetNodeSize newSize
-        let newLastChild = node'.LastChild
-        let expandedNewLastChild = newLastChild.Expand owner
-        if not (isSameObj newLastChild expandedNewLastChild) then
-            node'.Children.[newSize - 1] <- expandedNewLastChild
+        if shouldExpandRightChildIfNeeded then
+            let newLastChild = node'.LastChild
+            let expandedNewLastChild = newLastChild.Expand owner
+            if not (isSameObj newLastChild expandedNewLastChild) then
+                node'.Children.[newSize - 1] <- expandedNewLastChild
         if stillFull then
             node' :> RRBNode<'T>
         else
@@ -1825,7 +1828,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         let node' = this.KeepNRight owner shift n
         ((l, lS), node')
 
-    override this.AppendNChildren owner shift n newChildren =
+    override this.AppendNChildren owner shift n newChildren shouldExpandRightChildIfNeeded =
         let node' = this.GetEditableNode owner :?> RRBExpandedRelaxedNode<'T>
         let size = node'.NodeSize
         // Expanded nodes always have their rightmost child, and only that child, expanded
@@ -1844,13 +1847,14 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
                 node'.SizeTable.[i] <- nextSizeTableEntry
                 prevSizeTableEntry <- nextSizeTableEntry
         node'.SetNodeSize newSize
-        let newLastChild = node'.LastChild
-        let expandedNewLastChild = newLastChild.Expand owner
-        if not (isSameObj newLastChild expandedNewLastChild) then
-            node'.Children.[newSize - 1] <- expandedNewLastChild
+        if shouldExpandRightChildIfNeeded then
+            let newLastChild = node'.LastChild
+            let expandedNewLastChild = newLastChild.Expand owner
+            if not (isSameObj newLastChild expandedNewLastChild) then
+                node'.Children.[newSize - 1] <- expandedNewLastChild
         node' :> RRBNode<'T>
 
-    override this.AppendNChildrenS owner shift n newChildren sizes =
+    override this.AppendNChildrenS owner shift n newChildren sizes shouldExpandRightChildIfNeeded =
         // Note: "sizes" should be a sequence of size table entries, i.e. cumulative: instead of [3;4;3;2;4] it should be [3;7;10;12;16]
         let node' = this.GetEditableNode owner :?> RRBExpandedRelaxedNode<'T>
         let size = node'.NodeSize
@@ -1872,10 +1876,11 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
                     failwithf "AppendNChildrenS called on an empty node; this should never happen. Parameters: owner=%A shift=%d n=%d newChildren=%A sizes=%A and this node=%A" owner shift n newChildren sizes this
 #endif
         node'.SetNodeSize newSize
-        let newLastChild = node'.LastChild
-        let expandedNewLastChild = newLastChild.Expand owner
-        if not (isSameObj newLastChild expandedNewLastChild) then
-            node'.Children.[newSize - 1] <- expandedNewLastChild
+        if shouldExpandRightChildIfNeeded then
+            let newLastChild = node'.LastChild
+            let expandedNewLastChild = newLastChild.Expand owner
+            if not (isSameObj newLastChild expandedNewLastChild) then
+                node'.Children.[newSize - 1] <- expandedNewLastChild
         node' :> RRBNode<'T>
 
     override this.PrependNChildren owner shift n newChildren =
