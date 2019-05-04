@@ -156,6 +156,11 @@ type RRBNode<'T>(ownerToken : OwnerToken) =
     abstract member UpdatedTree : OwnerToken -> int -> int -> 'T -> RRBNode<'T>  // Params: owner shift treeIdx newItem
     abstract member InsertedTree : OwnerToken -> int -> int -> 'T -> RRBFullNode<'T> option -> int -> SlideResult<RRBNode<'T>>  // Params: owner shift treeIdx (item : 'T) (parentOpt : Node option) idxOfNodeInParent
     abstract member RemovedItem : OwnerToken -> int -> bool -> int -> 'T * RRBNode<'T>  // TODO: Rename to RemovedTree for consistency??
+    abstract member GetTreeItem : int -> int -> 'T
+
+    abstract member KeepNTreeItems : OwnerToken -> int -> int -> RRBNode<'T>
+    abstract member SkipNTreeItems : OwnerToken -> int -> int -> RRBNode<'T>
+    abstract member SplitTree : OwnerToken -> int -> int -> RRBNode<'T> * RRBNode<'T>
 
     member this.NeedsRebalance shift =
         let slots = if shift > Literals.blockSize then this.SlotCount else this.TwigSlotCount
@@ -688,6 +693,10 @@ PrependNChildrenS n seq<ch> seq<sz>
                     let newLeft, newRight = newNode.InsertAndSplitNode owner shift localIdx newRightChild
                     SplitNode (newLeft, newRight)
 
+    override this.GetTreeItem shift treeIdx =
+        let _, child, nextTreeIdx = this.IndexesAndChild shift treeIdx
+        child.GetTreeItem (down shift) nextTreeIdx
+
     override this.RemovedItem owner shift shouldCheckForRebalancing treeIdx =
         let localIdx, child, nextTreeIdx = this.IndexesAndChild shift treeIdx
         let item, child' = child.RemovedItem owner (down shift) shouldCheckForRebalancing nextTreeIdx
@@ -702,6 +711,91 @@ PrependNChildrenS n seq<ch> seq<sz>
         else
             item, node'
 
+    override this.KeepNTreeItems owner shift treeIdx =
+        // Possibilities:
+        // treeIdx = 0; we drop all of our nodes and keep nothing, i.e. we return an empty node (or do we return None? Or can this even happen? Gotta think about it)
+        // treeIdx = this.TreeSize; we keep everything and don't need to descend any further (and should NOT call IndexesAndChild in that case, as it would go off the end!)
+(*
+Thinking.
+
+In vector, we check for keep=0 and shortcut to return an empty tree. We check for keep=tailOffset and shortcut to drop current tail and promote a new tail.
+So if we're in the tree, we're going to end up keeping at least one item. If we keep one item, then the parent keeps one child and its parent keeps one child, and so on.
+So each node will keep at least one child.
+
+At the root of the tree, treeIdx = number of items to keep, so it's also the index of the first item to drop.
+So when we do IndexesAndChild, we should check nextLvlIdx before moving on; if nextLvlIdx = 0, then our treeIdx happened to *just* split between
+one child and the next, and the child we found is actually the *next* child. So the child we actually want in this scenario is "this.Children[localIdx - 1]",
+and the localIdx should actually be one to the left as well for the next paragraph's work, and we should do a #if DEBUG verification that localIdx will never
+be 0 in this scenario. But if nextLvlIdx is not 0, then the child we found is indeed the child we want, and we're going to split that child in two at some point.
+
+Now that we have a localIdx and a child, we should first get a node' from this node that does "KeepNLeft" with the tweaked localIdx.
+Then we calculate the child' by doing (child.KeepNTreeItems (down shift) nextLvlIdx) and then we'll do an UpdateChildSAbs on ourselves (calculating child'.TreeSize (down shift)).
+And now we have the result node that we're ready to return.
+
+For the sake of expanded nodes, the SplitTree method (which we still need to write) won't just do (Keep, Skip) but will use SplitAndKeepNRight (NOT Left) so that
+we won't shrink any right-hand nodes; instead, we'll have to create a MakeLeftNodeForSplit that expanded nodes will use to create an expanded node from the
+left array. And SplitTree might have to decide whether to use an S variant or not; probably use an S variant everywhere for safety, but I need to think about this one.
+*)
+        let localIdx, child, nextTreeIdx = this.IndexesAndChild shift treeIdx
+        if nextTreeIdx = 0 then
+            // Splitting exactly between two subtrees, no need to recurse further down
+#if DEBUG
+            if localIdx = 0 then failwith "In KeepNTreeItems, localIdx should never be 0 when nextTreeIdx = 0, because that means we should have stopped at a level further up"
+            if localIdx < 0 then failwith "In KeepNTreeItems, localIdx should never be < 0"
+#endif
+            this.KeepNLeft owner shift localIdx
+        else
+            // Splitting child in two, so recurse
+            let node' = this.KeepNLeft owner shift (localIdx + 1)
+            let child' = child.KeepNTreeItems owner (down shift) nextTreeIdx
+            (node' :?> RRBFullNode<'T>).UpdateChildSAbs owner shift localIdx child' (child'.TreeSize (down shift))
+
+(*
+member this.SkipNTreeItems is going to be similar, but localIdx is the *start*, not the end, and we'll do KeepNRight and need to watch for fencepost errors calculating N
+So if nextTreeIdx = 0, then we're still splitting between two subtrees, and we KeepNRight from localIdx to NodeSize and then don't recurse further down
+What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, but TODO: Think this through, since as of this writing I'm too tired to think about it
+*)
+    override this.SkipNTreeItems owner shift treeIdx =
+        let localIdx, child, nextTreeIdx = this.IndexesAndChild shift treeIdx
+        let keep = this.NodeSize - localIdx
+        if nextTreeIdx = 0 then
+            // Splitting exactly between two subtrees, no need to recurse further down
+#if DEBUG
+            if localIdx = 0 then failwith "In SkipNTreeItems, localIdx should never be 0 when nextTreeIdx = 0, because that means we should have stopped at a level further up"
+            if localIdx < 0 then failwith "In SkipNTreeItems, localIdx should never be < 0"
+#endif
+            this.KeepNRight owner shift keep
+        else
+            // Splitting child in two, so recurse
+            let node' = this.KeepNRight owner shift keep
+            let child' = child.SkipNTreeItems owner (down shift) nextTreeIdx
+            (node' :?> RRBFullNode<'T>).UpdateChildSAbs owner shift localIdx child' (child'.TreeSize (down shift))
+
+    override this.SplitTree owner shift treeIdx =
+        // treeIdx is first index of right-hand tree
+        let localIdx, child, nextTreeIdx = this.IndexesAndChild shift treeIdx
+        let keep = this.NodeSize - localIdx
+        if nextTreeIdx = 0 then
+            // Splitting exactly between two subtrees, no need to recurse further down
+#if DEBUG
+            if localIdx = 0 then failwith "In SplitTree, localIdx should never be 0 when nextTreeIdx = 0, because that means we should have stopped at a level further up"
+            if localIdx < 0 then failwith "In SplitTree, localIdx should never be < 0"
+#endif
+            let (leftChildren, leftSizes), rightNode = this.SplitAndKeepNRightS owner shift keep
+            let leftNode = this.MakeLeftNodeForSplit owner shift leftChildren leftSizes
+            leftNode, rightNode
+        else
+            // Splitting child in two, so recurse
+            let (leftChildren, leftSizes), rightNode = this.SplitAndKeepNRightS owner shift keep
+            let leftNode = this.MakeLeftNodeForSplit owner shift leftChildren leftSizes
+            let childL, childR = child.SplitTree owner (down shift) nextTreeIdx
+            let leftNode' = (leftNode :?> RRBFullNode<'T>).AppendChild owner shift childL
+            let rightNode' = (rightNode :?> RRBFullNode<'T>).UpdateChildSAbs owner shift 0 childR (childR.TreeSize (down shift))
+            leftNode', rightNode'
+
+    abstract member MakeLeftNodeForSplit : OwnerToken -> int -> RRBNode<'T>[] -> int[] -> RRBNode<'T>
+    default this.MakeLeftNodeForSplit owner shift children sizes =
+        RRBNode<'T>.MkNodeKnownSize owner shift children sizes
 
     member this.RemoveLastLeaf owner shift =
         // EXPAND: This needs an implementation in expanded nodes, where we expand the new last child after shrinking the child we return
@@ -1594,6 +1688,8 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         else
             RRBNode<'T>.MkNode owner shift arr
 
+    override this.MakeLeftNodeForSplit owner shift children sizes =
+        (RRBNode<'T>.MkNodeKnownSize owner shift children sizes).Expand owner
 
     // override this.InsertAndSlideChildrenLeft owner shift localIdx newChild leftSibling =
     //     failwith "Not implemented"
@@ -1948,6 +2044,9 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         else
             RRBNode<'T>.MkNode owner shift arr
 
+    override this.MakeLeftNodeForSplit owner shift children sizes =
+        (RRBNode<'T>.MkNodeKnownSize owner shift children sizes).Expand owner
+
     override this.NewParent owner shift siblings =
         let arr = Array.zeroCreate<RRBNode<'T>> Literals.blockSize
         let size = siblings |> Array.length
@@ -2058,8 +2157,21 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBLeafNode<'T>(ownerToken : Own
         let resultLeaf = this.Items |> Array.copyAndPop |> RRBNode<'T>.MkLeaf owner
         resultItem, resultLeaf
 
+    override this.GetTreeItem _shift localIdx =
+        this.Items.[localIdx]
+
     // TODO: Consider whether this.RemovedItem should mirror PopLastItem or not. There's not nearly as much demand for RemoveAndReturn from the middle of a list as there is to pop the last item.
     override this.RemovedItem owner shift shouldCheckForRebalancing localIdx =
         let resultItem = this.Items.[localIdx]
         let resultLeaf = Array.copyAndRemoveAt localIdx this.Items |> RRBNode<'T>.MkLeaf owner
         resultItem, resultLeaf
+
+    override this.KeepNTreeItems owner shift treeIdx =
+        this.Items |> Array.truncate treeIdx |> RRBNode<'T>.MkLeaf owner
+
+    override this.SkipNTreeItems owner shift treeIdx =
+        this.Items |> Array.skip treeIdx |> RRBNode<'T>.MkLeaf owner
+
+    override this.SplitTree owner shift treeIdx =
+        let l, r = this.Items |> Array.splitAt treeIdx
+        (l |> RRBNode<'T>.MkLeaf owner), (r |> RRBNode<'T>.MkLeaf owner)

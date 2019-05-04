@@ -1024,6 +1024,39 @@ let doIndividualMergeTestLeftTwigRightTwoNodeTree L R1 R2 =
         Expect.equal (arrL' |> Array.ofSeq) origCombined "Order of items should not change during merge"
         checkProperties (shift * 2) newL "Newly merged node"
 
+let splitTreeTests =
+  ftestList "Split tests" [
+    testProp "Keep" <| fun (IsolatedNode root : IsolatedNode<int>) (NonNegativeInt idx) ->
+        let shift = Literals.blockSizeShift
+        let keep = (idx % root.TreeSize shift) + 1
+        checkProperties shift root "Original node"
+        let expected = nodeItems shift root |> Seq.truncate keep |> Array.ofSeq
+        let newRoot = root.KeepNTreeItems nullOwner shift keep
+        checkProperties shift newRoot "Root after keep"
+        Expect.equal (nodeItems shift newRoot |> Array.ofSeq) expected "Items after keep are still the same"
+
+    ftestProp (108648183, 296591410) "Skip" <| fun (IsolatedNode root : IsolatedNode<int>) (NonNegativeInt idx) ->
+        let shift = Literals.blockSizeShift
+        let skip = (idx % root.TreeSize shift) + 1
+        checkProperties shift root "Original node"
+        let expected = nodeItems shift root |> Seq.skip skip |> Array.ofSeq
+        let newRoot = root.SkipNTreeItems nullOwner shift skip
+        checkProperties shift newRoot "Root after skip"
+        Expect.equal (nodeItems shift newRoot |> Array.ofSeq) expected "Items after skip are still the same"
+
+    ftestProp (108648097, 296591410) "Split" <| fun (IsolatedNode root : IsolatedNode<int>) (NonNegativeInt idx) ->
+        let shift = Literals.blockSizeShift
+        let idx = (idx % root.TreeSize shift) + 1
+        checkProperties shift root "Original node"
+        let expectedArr = nodeItems shift root |> Array.ofSeq
+        let expectedL = expectedArr.[0..idx-1]
+        let expectedR = expectedArr.[idx..]
+        let newL, newR = root.SplitTree nullOwner shift idx
+        checkProperties shift newL "Left node after split"
+        checkProperties shift newR "Right node after split"
+        Expect.equal (nodeItems shift newL |> Array.ofSeq) expectedL "Items in left split are still the same"
+        Expect.equal (nodeItems shift newR |> Array.ofSeq) expectedR "Items in right split are still the same"
+  ]
 
 let mergeTreeTestsWIP =
   testList "WIP: Merge tests" [
@@ -1222,7 +1255,7 @@ let longRunningTests =
 let tests =
   testList "Basic node tests" [
     // debugGenTests
-    largeMergeTreeTestsWIP
+    splitTreeTests
     mergeTreeTestsWIP
     rebalanceTestsWIP
     appendAndPrependChildrenPropertyTests  // Put this first since it's so long
