@@ -270,10 +270,10 @@ type Node<'C, 'T>(thread, array : 'C[]) =
     abstract member AppendLeafWithoutGrowth : Thread ref -> int -> Node<'T, 'T> -> int -> Node<'C, 'T> option
     default this.AppendLeafWithoutGrowth thread shift (newLeaf : Node<'T, 'T>) leafLen =
         if shift <= Literals.blockSizeShift then
-            if this.NodeSize >= Literals.blockSize then None else this.AppendChild thread shift (box newLeaf) leafLen |> Some
+            if this.NodeSize >= Literals.blockSize then None else this.AppendChild thread shift (newLeaf |> Node<'C, 'T>.AsChild) leafLen |> Some
         else
             let lastIdx = this.NodeSize - 1
-            let lastChild = this.Array.[lastIdx] :?> Node<'C, 'T>
+            let lastChild = this.Array.[lastIdx] |> Node<'C, 'T>.ChildAsNode
             let resultOpt = lastChild.AppendLeafWithoutGrowth thread (RRBMath.down shift) newLeaf leafLen
             match resultOpt with
             | Some result ->
@@ -281,7 +281,7 @@ type Node<'C, 'T>(thread, array : 'C[]) =
             | None -> // Rightmost subtree was full
                 if this.NodeSize >= Literals.blockSize then None else
                 let newNode = this.NewPath<'T> thread (RRBMath.down shift) newLeaf
-                this.AppendChild thread shift newNode leafLen |> Some
+                this.AppendChild thread shift (newNode |> Node<'C, 'T>.AsChild) leafLen |> Some
 
     abstract member PushTailDown : Thread ref -> int -> 'T[] -> Node<'C, 'T> * int
     default this.PushTailDown thread shift (leaf:'T[]) =

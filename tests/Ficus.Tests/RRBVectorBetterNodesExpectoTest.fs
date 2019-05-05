@@ -347,7 +347,7 @@ type MyGenerators =
 Arb.register<MyGenerators>() |> ignore
 let testProp  name fn =  testPropertyWithConfig { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] } name fn
 let ptestProp name fn = ptestPropertyWithConfig { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] } name fn
-let ftestProp replay name fn = ftestPropertyWithConfig replay { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] } name fn
+let ftestProp replay name fn = etestPropertyWithConfig replay { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] } name fn
 
 // === Tests here ===
 
@@ -1025,28 +1025,28 @@ let doIndividualMergeTestLeftTwigRightTwoNodeTree L R1 R2 =
         checkProperties (shift * 2) newL "Newly merged node"
 
 let splitTreeTests =
-  ftestList "Split tests" [
-    testProp "Keep" <| fun (IsolatedNode root : IsolatedNode<int>) (NonNegativeInt idx) ->
+  testList "Split tests" [
+    testProp (*871740682, 296591768*) "Keep" <| fun (IsolatedNode root : IsolatedNode<int>) (NonNegativeInt idx) ->
         let shift = Literals.blockSizeShift
-        let keep = (idx % root.TreeSize shift) + 1
+        let keep = (idx % root.TreeSize shift) + 1 |> min (root.TreeSize shift - 1)
         checkProperties shift root "Original node"
         let expected = nodeItems shift root |> Seq.truncate keep |> Array.ofSeq
         let newRoot = root.KeepNTreeItems nullOwner shift keep
         checkProperties shift newRoot "Root after keep"
         Expect.equal (nodeItems shift newRoot |> Array.ofSeq) expected "Items after keep are still the same"
 
-    ftestProp (108648183, 296591410) "Skip" <| fun (IsolatedNode root : IsolatedNode<int>) (NonNegativeInt idx) ->
+    testProp "Skip" <| fun (IsolatedNode root : IsolatedNode<int>) (NonNegativeInt idx) ->
         let shift = Literals.blockSizeShift
-        let skip = (idx % root.TreeSize shift) + 1
+        let skip = (idx % root.TreeSize shift) + 1 |> min (root.TreeSize shift - 1)
         checkProperties shift root "Original node"
         let expected = nodeItems shift root |> Seq.skip skip |> Array.ofSeq
         let newRoot = root.SkipNTreeItems nullOwner shift skip
         checkProperties shift newRoot "Root after skip"
         Expect.equal (nodeItems shift newRoot |> Array.ofSeq) expected "Items after skip are still the same"
 
-    ftestProp (108648097, 296591410) "Split" <| fun (IsolatedNode root : IsolatedNode<int>) (NonNegativeInt idx) ->
+    testProp "Split" <| fun (IsolatedNode root : IsolatedNode<int>) (NonNegativeInt idx) ->
         let shift = Literals.blockSizeShift
-        let idx = (idx % root.TreeSize shift) + 1
+        let idx = (idx % root.TreeSize shift) + 1 |> min (root.TreeSize shift - 1)
         checkProperties shift root "Original node"
         let expectedArr = nodeItems shift root |> Array.ofSeq
         let expectedL = expectedArr.[0..idx-1]
@@ -1252,6 +1252,7 @@ let longRunningTests =
     largeMergeTreeTestsWIP  // This one is *extremely* long-running, in fact
   ]
 
+[<Tests>]
 let tests =
   testList "Basic node tests" [
     // debugGenTests

@@ -172,8 +172,8 @@ type RRBNode<'T>(ownerToken : OwnerToken) =
 
     member this.NeedsRebalance2PlusLeaf shift (leafLen : int) (right : RRBNode<'T>) =
 #if DEBUG
-        if shift <> Literals.blockSize then
-            failwith <| sprintf "NeedsRebalance2PlusLeaf may only be called at the twig level (shift %d), and it was instead called at with shift %d" Literals.blockSizeShift shift
+        if shift <> Literals.blockSizeShift then
+            failwith <| sprintf "NeedsRebalance2PlusLeaf may only be called at the twig level (shift %d), and it was instead called with shift %d" Literals.blockSizeShift shift
 #endif
         let slots = this.TwigSlotCount + leafLen + right.TwigSlotCount
         slots <= ((this.NodeSize + 1 + right.NodeSize - Literals.eMaxPlusOne) <<< Literals.blockSizeShift)
@@ -769,7 +769,7 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
             // Splitting child in two, so recurse
             let node' = this.KeepNRight owner shift keep
             let child' = child.SkipNTreeItems owner (down shift) nextTreeIdx
-            (node' :?> RRBFullNode<'T>).UpdateChildSAbs owner shift localIdx child' (child'.TreeSize (down shift))
+            (node' :?> RRBFullNode<'T>).UpdateChildSAbs owner shift 0 child' (child'.TreeSize (down shift))
 
     override this.SplitTree owner shift treeIdx =
         // treeIdx is first index of right-hand tree
@@ -962,7 +962,7 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
         else
             failwith <| sprintf "ConcatTwigsPlusLeaf should only be called when there is room to merge the tail, and HasRoomToMergeTheTail reported true. Since left and right were both full, that should mean that the tail was mergeable because a rebalance was possible... but we didn't rebalance. This resulted in a tail merge that wasn't actually possible. Must find out why. Left was %A, middle was %A, and right was %A" this middle right
 
-    member inline this.HasRoomToMergeTheTail shift (tail : RRBLeafNode<'T>) (right : RRBFullNode<'T>) =
+    member this.HasRoomToMergeTheTail shift (tail : RRBLeafNode<'T>) (right : RRBFullNode<'T>) =
         this.NodeSize  < Literals.blockSize
      || right.NodeSize < Literals.blockSize
      || this.NeedsRebalance2PlusLeaf shift tail.NodeSize right
@@ -1374,10 +1374,11 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         let node' = this.GetEditableNode owner :?> RRBExpandedFullNode<'T>
         let oldSize = node'.NodeSize
         // Expanded nodes always have their rightmost child, and only that child, expanded
-        let lastChild = node'.LastChild
-        let shrunkLastChild = lastChild.Shrink owner
-        if not (isSameObj lastChild shrunkLastChild) then
-            node'.Children.[oldSize - 1] <- shrunkLastChild
+        if oldSize > 0 then
+            let lastChild = node'.LastChild
+            let shrunkLastChild = lastChild.Shrink owner
+            if not (isSameObj lastChild shrunkLastChild) then
+                node'.Children.[oldSize - 1] <- shrunkLastChild
         node'.Children.[oldSize] <- newChild.Expand owner
         node'.SetNodeSize (oldSize + 1)
         // Full nodes are allowed to have their last item be non-full, so we have to check that
@@ -1771,15 +1772,12 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
     override this.AppendChildS owner shift newChild newChildSize =
         let node' = this.GetEditableNode owner :?> RRBExpandedRelaxedNode<'T>
         let oldSize = node'.NodeSize
-#if DEBUG
-        if oldSize <= 0 then
-            failwithf "AppendChildS called on an empty node; this should never happen. Parameters: owner=%A shift=%d newChild=%A and this node=%A" owner shift newChild this
-#endif
-        // Expanded nodes always have their rightmost child, and only that child, expanded
-        let lastChild = node'.LastChild
-        let shrunkLastChild = lastChild.Shrink owner
-        if not (isSameObj lastChild shrunkLastChild) then
-            node'.Children.[oldSize - 1] <- shrunkLastChild
+        if oldSize > 0 then
+            // Expanded nodes always have their rightmost child, and only that child, expanded
+            let lastChild = node'.LastChild
+            let shrunkLastChild = lastChild.Shrink owner
+            if not (isSameObj lastChild shrunkLastChild) then
+                node'.Children.[oldSize - 1] <- shrunkLastChild
         node'.Children.[oldSize] <- newChild.Expand owner
         node'.SizeTable.[oldSize] <- node'.SizeTable.[oldSize - 1] + newChildSize
         node'.SetNodeSize (oldSize + 1)

@@ -1,6 +1,8 @@
 Expecto
 Expecto.FsCheck
-FSharp.Core
-Microsoft.DotNet.Watcher.Tools
-dotnet-mono
 FParsec
+FSharp.Core
+dotnet-mono
+Microsoft.NET.Test.Sdk
+YoloDev.Expecto.TestSdk
+altcover

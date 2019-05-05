@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>netcoreapp2.0;net461</TargetFrameworks>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Ficus/Ficus.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="RRBVectorBetterNodesExpectoTest.fs" />
+    <Compile Include="Main2.fs" />
+  </ItemGroup>
+  <Import Project="..\..\netfx.props" />
+  <Import Project="..\..\.paket\Paket.Restore.targets" />
+</Project>

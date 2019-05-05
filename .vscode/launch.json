@@ -8,7 +8,7 @@
             "name": "Launch",
             "type": "mono",
             "request": "launch",
-            "program": "${workspaceRoot}/tests/Ficus.Tests/bin/Release/net461/Ficus.Tests.exe",
+            "program": "${workspaceRoot}/tests/Ficus.Tests/bin/Release/net461/Ficus.TestsNew.exe",
             "args": [
                 "--debug-vscode"
             ],
@@ -19,7 +19,7 @@
             "preLaunchTask": "build.sh DotnetBuild",
             "type": "mono",
             "request": "launch",
-            "program": "${workspaceRoot}/tests/Ficus.Tests/bin/Release/net461/Ficus.Tests.exe",
+            "program": "${workspaceRoot}/tests/Ficus.Tests/bin/Release/net461/Ficus.TestsNew.exe",
             "args": [
                 "--debug-vscode"
             ],
