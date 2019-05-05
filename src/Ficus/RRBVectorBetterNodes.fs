@@ -2173,3 +2173,5 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBLeafNode<'T>(ownerToken : Own
     override this.SplitTree owner shift treeIdx =
         let l, r = this.Items |> Array.splitAt treeIdx
         (l |> RRBNode<'T>.MkLeaf owner), (r |> RRBNode<'T>.MkLeaf owner)
+
+let emptyNode<'T> = RRBNode<'T>.MkFullNode nullOwner Array.empty
