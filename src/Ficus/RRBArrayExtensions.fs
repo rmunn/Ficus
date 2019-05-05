@@ -11,7 +11,7 @@ module Ficus.RRBArrayExtensions
 
 module Array =
 
-    let copyAndAppend newItem oldArr =
+    let copyAndAppend newItem oldArr =   // FIXME: Rename to copyAndPush
         let len = Array.length oldArr
         let newArr = Array.zeroCreate (len + 1)
         Array.blit oldArr 0 newArr 0 len

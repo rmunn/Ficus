@@ -671,9 +671,39 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     // abstract member IterItems : unit -> seq<'T>
     // abstract member RevIterItems : unit -> seq<'T>
     // // abstract member GetEnumerator : unit -> IEnumerator<'T>
+
     // abstract member Push : 'T -> RRBVector<'T>
+    override this.Push newItem =
+        let tailLen = this.Length - this.TailOffset
+        if tailLen >= Literals.blockSize then
+            let tailNode = RRBNode<'T>.MkLeaf this.Root.Owner this.Tail :?> RRBLeafNode<'T>
+            let newRoot, newShift = (this.Root :?> RRBFullNode<'T>).AppendLeaf this.Root.Owner this.Shift tailNode
+            RRBPersistentVector<'T>(this.Length + 1, newShift, newRoot, [|newItem|], this.Length) :> RRBVector<'T>
+        else
+            let newTail = this.Tail |> Array.copyAndAppend newItem
+            RRBPersistentVector<'T>(this.Length + 1, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
+
     // abstract member Peek : unit -> 'T
+    override this.Peek() =
+        if this.Length <= 0 then failwith "Can't get last item from an empty vector"
+        else
+            let tailLen = this.Length - this.TailOffset
+#if DEBUG
+            if tailLen = 0 then failwith "Tail should never be empty"
+#endif
+            this.Tail.[tailLen - 1]
+
     // abstract member Pop : unit -> RRBVector<'T>
+    override this.Pop() =
+        if this.Length <= 0 then failwith "Can't pop from an empty vector"
+        else
+            if this.Tail.Length > 1 then
+                let newTail = this.Tail |> Array.copyAndPop
+                RRBPersistentVector<'T>(this.Length - 1, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
+            else
+            let newTailNode, newRoot = (this.Root :?> RRBFullNode<'T>).PopLastLeaf this.Root.Owner this.Shift
+            RRBPersistentVector<'T>(this.Length - 1, this.Shift, newRoot, newTailNode.Items, this.TailOffset - newTailNode.NodeSize) :> RRBVector<'T>  // FIXME: We'll need to check for newly-last leaf satisfying invariant, and also potentially shrink tree height if root becomes size 1 or even empty
+
     // abstract member Take : int -> RRBVector<'T>
     override this.Take idx =
         this.EnsureValidIndexLengthAllowed idx
