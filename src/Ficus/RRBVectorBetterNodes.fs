@@ -246,6 +246,12 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
         let nextTreeIdx = treeIdx &&& antimask
         localIdx, child, nextTreeIdx
 
+    member this.ChildrenSeq = this.Children |> Seq.truncate this.NodeSize
+    member this.LeavesSeq shift =
+        if shift <= Literals.blockSizeShift then
+            this.ChildrenSeq |> Seq.cast<RRBLeafNode<'T>>
+        else
+            this.ChildrenSeq |> Seq.collect (fun child -> (child :?> RRBFullNode<'T>).LeavesSeq (down shift))
 (*
 
 AppendChild ch

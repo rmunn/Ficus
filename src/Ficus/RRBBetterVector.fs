@@ -16,7 +16,7 @@ open RRBVectorBetterNodes
 [<AbstractClass>]
 [<StructuredFormatDisplay("{StringRepr}")>]
 type RRBVector<'T>() =
-    abstract member Empty : RRBVector<'T>  // Or maybe it should be unit -> RRBVector<'T>
+    abstract member Empty : unit -> RRBVector<'T>
     abstract member IsEmpty : unit -> bool
     abstract member StringRepr : string
     abstract member Length : int
@@ -656,20 +656,47 @@ type internal IRRBInternal<'T> =
 type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, tail : 'T [], tailOffset : int) =
     inherit RRBVector<'T>()
 
-    member this.Length = count
+    member this.Count = count
     member this.Shift = shift
     member this.Root = root
     member this.Tail = tail
     member this.TailOffset = tailOffset
 
     // abstract member Empty : RRBVector<'T>  // Or maybe it should be unit -> RRBVector<'T>
+    override this.Empty() = RRBPersistentVector<'T>(0, Literals.blockSizeShift, emptyNode, Array.empty, 0) :> RRBVector<'T>
+
     // abstract member IsEmpty : unit -> bool
+    override this.IsEmpty() = this.Length = 0
+
     // abstract member StringRepr : string
+    override this.StringRepr = "Not implemented yet"
+
     // abstract member Length : int
+    override this.Length = this.Count
+
     // abstract member IterLeaves : unit -> seq<'T []>
+    override this.IterLeaves() = seq {
+        yield! (this.Root :?> RRBFullNode<'T>).LeavesSeq this.Shift |> Seq.map (fun leaf -> leaf.Items)
+        yield this.Tail
+    }
+
     // abstract member RevIterLeaves : unit -> seq<'T []>
+    override this.RevIterLeaves() = seq {
+        yield this.Tail
+        yield! (this.Root :?> RRBFullNode<'T>).LeavesSeq this.Shift |> Seq.map (fun leaf -> leaf.Items)
+    }
+
     // abstract member IterItems : unit -> seq<'T>
+    override this.IterItems() =
+        this.IterLeaves() |> Seq.collect id
+
     // abstract member RevIterItems : unit -> seq<'T>
+    override this.RevIterItems() = seq {
+        for arr in this.RevIterLeaves() do
+            for i = arr.Length - 1 downto 0 do
+                yield arr.[i]
+    }
+
     // // abstract member GetEnumerator : unit -> IEnumerator<'T>
 
     // abstract member Push : 'T -> RRBVector<'T>
@@ -708,7 +735,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     override this.Take idx =
         this.EnsureValidIndexLengthAllowed idx
         if idx = 0 then
-            this.Empty
+            this.Empty()
         elif idx = this.Length then
             this :> RRBVector<'T>
         elif idx = this.TailOffset then
@@ -731,7 +758,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
         if idx = 0 then
             this :> RRBVector<'T>
         elif idx = this.Length then
-            this.Empty
+            this.Empty()
         elif idx = this.TailOffset then
             // Splitting exactly at the tail means we'll have an empty root
             RRBPersistentVector<'T>(this.Tail.Length, Literals.blockSizeShift, RRBNode<'T>.MkFullNode nullOwner Array.empty, this.Tail, 0) :> RRBVector<'T>
@@ -748,9 +775,9 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     override this.Split idx =
         this.EnsureValidIndexLengthAllowed idx
         if idx = 0 then
-            this.Empty, this :> RRBVector<'T>
+            this.Empty(), this :> RRBVector<'T>
         elif idx = this.Length then
-            this :> RRBVector<'T>, this.Empty
+            this :> RRBVector<'T>, this.Empty()
         elif idx = this.TailOffset then
             // Splitting exactly at the tail means we have to promote a new tail
             let newTailNode, newRoot = (this.Root :?> RRBFullNode<'T>).PopLastLeaf this.Root.Owner this.Shift
