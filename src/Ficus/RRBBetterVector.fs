@@ -869,7 +869,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                 this :> RRBVector<'T>  // TODO: Fixme
         else
             let newRoot, newShift =
-                match this.Root.InsertedTree root.Owner shift idx newItem None 0 with
+                match this.Root.InsertedTree this.Root.Owner this.Shift idx newItem None 0 with
                 | SimpleInsertion(newCurrent) -> newCurrent, this.Shift
                 | SplitNode(newCurrent, newRight) -> (newCurrent :?> RRBFullNode<'T>).NewParent this.Root.Owner this.Shift [|newCurrent; newRight|], (RRBMath.up this.Shift)
                 | SlidItemsLeft(newLeft, newCurrent) -> failwith "Impossible" // TODO: Write full error message in case this ever manages to happen
@@ -880,13 +880,16 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     override this.Remove idx =
         this.RemoveImpl idx false
 
-    member this.RemoveImpl idx shouldCheckForRebalancing =
+    member internal this.RemoveWithoutRebalance idx =
+        this.RemoveImpl idx true
+
+    member internal this.RemoveImpl idx shouldCheckForRebalancing =
         this.EnsureValidIndex idx
         if idx >= this.TailOffset then
             let newTail = this.Tail  |> Array.copyAndRemoveAt (this.TailOffset - idx)
             RRBPersistentVector<'T>(this.Length, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
         else
-            let root' = this.Root.RemovedItem root.Owner shift shouldCheckForRebalancing idx |> snd  // TODO: We don't actually want to return the removed item
+            let root' = this.Root.RemovedItem this.Root.Owner this.Shift shouldCheckForRebalancing idx |> snd  // TODO: We don't actually want to return the removed item
             RRBPersistentVector<'T>(this.Length, this.Shift, root', this.Tail, this.TailOffset) :> RRBVector<'T>
 
     // abstract member Update : int -> 'T -> RRBVector<'T>
@@ -896,7 +899,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
             let newTail = this.Tail |> Array.copyAndSet (this.TailOffset - idx) newItem
             RRBPersistentVector<'T>(this.Length, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
         else
-            let root' = this.Root.UpdatedTree root.Owner shift idx newItem
+            let root' = this.Root.UpdatedTree this.Root.Owner this.Shift idx newItem
             RRBPersistentVector<'T>(this.Length, this.Shift, root', this.Tail, this.TailOffset) :> RRBVector<'T>
 
     // abstract member GetItem : int -> 'T
@@ -905,7 +908,89 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
         if idx >= this.TailOffset then
             tail.[idx - this.TailOffset]
         else
-            this.Root.GetTreeItem shift idx
+            this.Root.GetTreeItem this.Shift idx
+
+    member this.EnsureValidIndex idx =
+        if idx < 0 then failwith "Index must not be negative"
+        elif idx >= this.Length then failwith "Index must not be past the end of the vector"
+        else ()
+
+    member this.EnsureValidIndexLengthAllowed idx =
+        if idx < 0 then failwith "Index must not be negative"
+        elif idx > this.Length then failwith "Index must not be more than one past the end of the vector"
+        else ()
+
+
+and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tail : 'T [], tailOffset : int) =
+    inherit RRBVector<'T>()
+
+    member val Count = count with get, set
+    member val Shift = shift with get, set
+    member val Root = root with get, set
+    member val Tail = tail with get, set
+    member val TailOffset = tailOffset with get, set
+
+    // abstract member Empty : unit -> RRBVector<'T>
+    // abstract member IsEmpty : unit -> bool
+    // abstract member StringRepr : string
+    // abstract member Length : int
+    // abstract member IterLeaves : unit -> seq<'T []>
+    // abstract member RevIterLeaves : unit -> seq<'T []>
+    // abstract member IterItems : unit -> seq<'T>
+    // abstract member RevIterItems : unit -> seq<'T>
+    // // abstract member GetEnumerator : unit -> IEnumerator<'T>
+    // abstract member Push : 'T -> RRBVector<'T>
+    // abstract member Peek : unit -> 'T
+    // abstract member Pop : unit -> RRBVector<'T>
+    // abstract member Take : int -> RRBVector<'T>
+    // abstract member Skip : int -> RRBVector<'T>
+    // abstract member Split : int -> RRBVector<'T> * RRBVector<'T>
+    // abstract member Slice : int * int -> RRBVector<'T>
+    // abstract member GetSlice : int option * int option -> RRBVector<'T>
+    // abstract member Append : RRBVector<'T> -> RRBVector<'T>
+    // abstract member Insert : int -> 'T -> RRBVector<'T>
+
+    // abstract member Remove : int -> RRBVector<'T>
+    override this.Remove idx =
+        this.RemoveImpl idx false
+
+    member internal this.RemoveWithoutRebalance idx =
+        this.RemoveImpl idx true
+
+    member internal this.RemoveImpl idx shouldCheckForRebalancing =
+        this.EnsureValidIndex idx
+        if idx >= this.TailOffset then
+            let tailIdx = idx - this.TailOffset
+            let tailLen = this.Length - this.TailOffset
+            for i = tailIdx to tailLen - 2 do
+                this.Tail.[i] <- this.Tail.[i + 1]
+            this.Tail.[tailLen - 1] <- Unchecked.defaultof<'T>
+        else
+            let root' = this.Root.RemovedItem this.Root.Owner this.Shift shouldCheckForRebalancing idx |> snd  // TODO: We don't actually want to return the removed item
+            if not <| isSameObj root' this.Root then
+                this.Root <- root'
+            this.TailOffset <- this.TailOffset - 1
+        this.Count <- this.Count - 1
+        this :> RRBVector<'T>
+
+    // abstract member Update : int -> 'T -> RRBVector<'T>
+    override this.Update idx newItem =
+        this.EnsureValidIndex idx
+        if idx >= this.TailOffset then
+            this.Tail.[this.TailOffset - idx] <- newItem
+        else
+            let root' = this.Root.UpdatedTree this.Root.Owner this.Shift idx newItem
+            if not <| isSameObj root' this.Root then
+                this.Root <- root'
+        this :> RRBVector<'T>
+
+    // abstract member GetItem : int -> 'T
+    override this.GetItem idx =
+        this.EnsureValidIndex idx
+        if idx >= this.TailOffset then
+            tail.[idx - this.TailOffset]
+        else
+            this.Root.GetTreeItem this.Shift idx
 
     member this.EnsureValidIndex idx =
         if idx < 0 then failwith "Index must not be negative"
