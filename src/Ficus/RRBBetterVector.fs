@@ -662,6 +662,13 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     member this.Tail = tail
     member this.TailOffset = tailOffset
 
+    member this.Transient() =
+        let newToken = mkOwnerToken()
+        let root' = (this.Root :?> RRBFullNode<'T>).ExpandRightSpine newToken this.Shift
+        let tailLen = this.Length - this.TailOffset
+        let newTail = Array.sub this.Tail 0 tailLen
+        RRBTransientVector<'T>(this.Count, this.Shift, root', newTail, this.TailOffset)
+
     // abstract member Empty : RRBVector<'T>  // Or maybe it should be unit -> RRBVector<'T>
     override this.Empty() = RRBPersistentVector<'T>(0, Literals.blockSizeShift, emptyNode, Array.empty, 0) :> RRBVector<'T>
 
@@ -832,7 +839,8 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                     let newLeafItems, newTail = Array.appendAndSplitAt Literals.blockSize this.Tail right.Tail
                     let newLeaf = RRBNode<'T>.MkLeaf this.Root.Owner newLeafItems :?> RRBLeafNode<'T>
                     if this.TailOffset <= 0 then
-                        // Can't use AppendLeaf in an empty root, so we create the first leaf by hand
+                        // Can't use AppendLeaf in an empty root, so we create the first twig by hand
+                        // FIXME: Yes, we can actually. So this if-else isn't actually necessary! I think. TODO: Test this.
                         let newRoot = RRBNode<'T>.MkFullNode this.Root.Owner [|newLeaf|]
                         RRBPersistentVector<'T>(newLen, Literals.blockSizeShift, newRoot, newTail, Literals.blockSize) :> RRBVector<'T>
                     else
@@ -853,9 +861,9 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                     let newRoot = (newLeft :?> RRBFullNode<'T>).NewParent this.Root.Owner this.Shift [|newLeft; newRight|]
                     let oldShift = max this.Shift right.Shift
                     RRBPersistentVector<'T>(newLen, (RRBMath.up oldShift), newRoot, right.Tail, this.Length + right.TailOffset) :> RRBVector<'T>
-        // Uncomment once we've defined the RRBTransientVector class
-        // | :? RRBTransientVector<'T> as right ->
-        //     this.Append (right.Persistent())
+        // Transient vectors may only stay transient if appended to a transient of the same owner; here, we're a persistent
+        | :? RRBTransientVector<'T> as right ->
+            this.Append (right.Persistent())
 
 
     // abstract member Insert : int -> 'T -> RRBVector<'T>
@@ -930,6 +938,11 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
     member val Tail = tail with get, set
     member val TailOffset = tailOffset with get, set
 
+    member this.Persistent() =
+        let root' = (this.Root :?> RRBFullNode<'T>).ShrinkRightSpine nullOwner this.Shift
+        let tailLen = this.Length - this.TailOffset
+        RRBPersistentVector<'T>(this.Count, this.Shift, root', this.Tail |> Array.truncate tailLen, this.TailOffset)
+
     // abstract member Empty : unit -> RRBVector<'T>
     // abstract member IsEmpty : unit -> bool
     // abstract member StringRepr : string
@@ -948,7 +961,105 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
     // abstract member Slice : int * int -> RRBVector<'T>
     // abstract member GetSlice : int option * int option -> RRBVector<'T>
     // abstract member Append : RRBVector<'T> -> RRBVector<'T>
+    override this.Append other =
+        match other with
+        | :? RRBTransientVector<'T> as right when this.Root.IsEditableBy right.Root.Owner ->
+            // We can only merge transient trees when they have the same owner, otherwise it's impossible to
+            // tell which owner token to give to the new tree. Get it wrong, and there could be some persistent
+            // trees out there with references to nodes with that owner token, and so we might end up editing
+            // some nodes in-place even though a persistent tree has a reference to that node, which breaks
+            // the entire promise of a persistent data structure. The only safe way to merge two trees and have
+            // the result be transient is if they have the same owner token, which can only happen if they
+            // came from the same original transient tree that was later split.
+            let newLen = this.Length + right.Length
+            if right.TailOffset <= 0 then
+                // Right is a tail-only vector
+                let tailLenL = this.Length - this.TailOffset
+                let tailLenR = right.Length - right.TailOffset
+                if tailLenL + tailLenR <= Literals.blockSize then
+                    right.Tail.CopyTo(this.Tail, tailLenL)
+                    this.Count <- newLen
+                    this :> RRBVector<'T>
+                else
+                    let newTail = Array.zeroCreate Literals.blockSize
+                    let splitIdxR = Literals.blockSize - tailLenR
+                    Array.blit right.Tail 0 this.Tail tailLenL splitIdxR
+                    Array.blit right.Tail splitIdxR newTail 0 (tailLenR - splitIdxR)
+                    let newLeaf = RRBNode<'T>.MkLeaf this.Root.Owner this.Tail :?> RRBLeafNode<'T>
+                    if this.TailOffset <= 0 then
+                        // We CAN use AppendChild in an empty root!
+                        let newRoot = (this.Root :?> RRBFullNode<'T>).AppendChild this.Root.Owner this.Shift newLeaf
+                        if not <| isSameObj newRoot this.Root then
+                            this.Root <- newRoot
+                        this.Count <- newLen
+                        this.TailOffset <- this.TailOffset + newLeaf.NodeSize
+                        this :> RRBVector<'T>
+                    else
+                        let newRoot = (this.Root :?> RRBFullNode<'T>).AppendChild this.Root.Owner this.Shift newLeaf
+                        if not <| isSameObj newRoot this.Root then
+                            this.Root <- newRoot
+                        this.Count <- newLen
+                        this.TailOffset <- this.TailOffset + newLeaf.NodeSize
+                        this :> RRBVector<'T>
+                        // TODO: The "then" and "else" blocks here are identical. Write test to make sure we can append into a tail-only left transient, then collapse this "if" into a single copy of this block.
+            elif this.TailOffset <= 0 then
+                // Right has a root and a tail, but we're a tail-only node
+                let tailNode = RRBNode<'T>.MkLeaf this.Root.Owner this.Tail :?> RRBLeafNode<'T>
+                let newRoot, newShift = (right.Root :?> RRBFullNode<'T>).PrependLeaf right.Root.Owner right.Shift tailNode
+                if not <| isSameObj newRoot right.Root then
+                    right.Root <- newRoot
+                // Calling code expects "this" to contain the results, so we steal everything from the right-hand tree
+                this.Root <- right.Root
+                this.Shift <- newShift
+                this.Count <- newLen
+                this.TailOffset <- right.TailOffset + tailNode.NodeSize
+                this.Tail <- right.Tail
+                // FIXME: Figure out how we're going to "invalidate" the right tree now, since we can't set its root owner to null as its root is now our root
+                right :> RRBVector<'T>
+            else
+                // Right has a root and a tail, and so do we
+                let tailNode = RRBNode<'T>.MkLeaf this.Root.Owner this.Tail :?> RRBLeafNode<'T>
+                let newRoot, newShift =
+                    match (this.Root :?> RRBFullNode<'T>).MergeTree this.Root.Owner this.Shift (Some tailNode) right.Shift (right.Root :?> RRBFullNode<'T>) true with
+                    | newRoot, None ->
+                        newRoot, (max this.Shift right.Shift)
+                    | newLeft, Some newRight ->
+                        let newRoot = (newLeft :?> RRBFullNode<'T>).NewParent this.Root.Owner this.Shift [|newLeft; newRight|]
+                        let oldShift = max this.Shift right.Shift
+                        newRoot, (RRBMath.up oldShift)
+                this.Count <- newLen
+                this.Shift <- newShift
+                this.Root <- newRoot
+                this.Tail <- right.Tail
+                this.TailOffset <- this.Length + right.TailOffset
+                this :> RRBVector<'T>
+        // Transient vectors may only stay transient if appended to a transient of the same owner
+        | :? RRBTransientVector<'T> as right ->
+            this.Append (right.Persistent())
+        | :? RRBPersistentVector<'T> as right ->
+            this.Persistent().Append right
+        // TODO: Implement .Persistent() (and also .Transient() on persistent trees)
+
     // abstract member Insert : int -> 'T -> RRBVector<'T>
+    override this.Insert idx newItem =
+        this.EnsureValidIndex idx
+        if idx >= this.TailOffset then
+            if this.Length - this.TailOffset < Literals.blockSize then
+                this.Tail.[this.TailOffset - idx] <- newItem
+                this :> RRBVector<'T>
+            else
+                this :> RRBVector<'T>  // TODO: Fixme with PushTailDown
+        else
+            let newRoot, newShift =
+                match this.Root.InsertedTree this.Root.Owner this.Shift idx newItem None 0 with
+                | SimpleInsertion(newCurrent) -> newCurrent, this.Shift
+                | SplitNode(newCurrent, newRight) -> (newCurrent :?> RRBFullNode<'T>).NewParent this.Root.Owner this.Shift [|newCurrent; newRight|], (RRBMath.up this.Shift)
+                | SlidItemsLeft(newLeft, newCurrent) -> failwith "Impossible" // TODO: Write full error message in case this ever manages to happen
+                | SlidItemsRight(newCurrent, newRight) -> failwith "Impossible" // TODO: Write full error message in case this ever manages to happen
+            if not <| isSameObj newRoot this.Root then
+                this.Root <- newRoot
+            this.Shift <- newShift
+            this :> RRBVector<'T>
 
     // abstract member Remove : int -> RRBVector<'T>
     override this.Remove idx =
@@ -1260,7 +1371,7 @@ module RRBVector =
         if vec.Length = 0 then invalidArg "vec" "Can't get last item of empty vector"
         vec.[vec.Length - 1]
     let inline length (vec : RRBVector<'T>) = vec.Length
-    let inline map f (vec : RRBVector<'T>) = Seq.map f vec |> ofSeq
+    let inline map f (vec : RRBVector<'T>) = Seq.map f vec |> ofSeq  // FIXME: This needs to be "smarter" if dealing with transient trees, since we need to maintain owner tokens
     let inline map2 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) = Seq.map2 f vec1 vec2 |> ofSeq
     let inline map3 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) (vec3 : RRBVector<'T3>) = Seq.map3 f vec1 vec2 vec3 |> ofSeq
     let inline mapi f (vec : RRBVector<'T>) = Seq.mapi f vec |> ofSeq

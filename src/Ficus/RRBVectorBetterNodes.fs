@@ -228,6 +228,30 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
         let node' = this.GetEditableNode owner :?> RRBFullNode<'T>
         RRBExpandedFullNode<'T>(owner, node'.Children) :> RRBNode<'T>
 
+    member this.ShrinkRightSpine owner shift =
+        if shift <= Literals.blockSizeShift || this.NodeSize = 0 then
+            this.Shrink owner
+        else
+            let child' = (this.LastChild :?> RRBFullNode<'T>).ShrinkRightSpine owner (down shift)
+            if isSameObj child' this.LastChild then
+                this.Shrink owner
+            else
+                let node' = this.Shrink owner
+                (node' :?> RRBFullNode<'T>).Children.[node'.NodeSize - 1] <- child'
+                node'
+
+    member this.ExpandRightSpine owner shift =
+        if shift <= Literals.blockSizeShift || this.NodeSize = 0 then
+            this.Expand owner
+        else
+            let child' = (this.LastChild :?> RRBFullNode<'T>).ExpandRightSpine owner (down shift)
+            if isSameObj child' this.LastChild then
+                this.Expand owner
+            else
+                let node' = this.Expand owner
+                (node' :?> RRBFullNode<'T>).Children.[node'.NodeSize - 1] <- child'
+                node'
+
     abstract member ToRelaxedNodeIfNeeded : int -> RRBNode<'T>
     default this.ToRelaxedNodeIfNeeded shift =
         // TODO: Use this.BuildSizeTable instead???
