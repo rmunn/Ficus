@@ -756,7 +756,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
         else
             let tmpRoot = this.Root.KeepNTreeItems this.Root.Owner this.Shift idx
             let newTailNode, newRoot = (tmpRoot :?> RRBFullNode<'T>).PopLastLeaf tmpRoot.Owner this.Shift
-            // FIXME: Will have to adjust this tree in case the height can now be shortened
+            // FIXME: Will have to adjust this tree in case the height can now be shortened, and/or in case new tail and last leaf need to be tweaked to maintain the invariant
             RRBPersistentVector<'T>(idx, this.Shift, newRoot, newTailNode.Items, idx - newTailNode.NodeSize) :> RRBVector<'T>  // Shift can't change during this step, not yet. FIXME: We'll need to check for newly-last leaf satisfying invariant, and also potentially shrink tree height if root becomes size 1 or even empty
 
     // abstract member Skip : int -> RRBVector<'T>
@@ -775,7 +775,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
             RRBPersistentVector<'T>(tailR.Length, Literals.blockSizeShift, RRBNode<'T>.MkFullNode nullOwner Array.empty, tailR, 0) :> RRBVector<'T>
         else
             let newRoot = this.Root.SkipNTreeItems this.Root.Owner this.Shift idx
-            // FIXME: Will have to adjust this tree in case the height can now be shortened
+            // FIXME: Will have to adjust this tree in case the height can now be shortened, and/or in case new tail and last leaf need to be tweaked to maintain the invariant
             RRBPersistentVector<'T>(this.Length - idx, this.Shift, newRoot, this.Tail, this.TailOffset - idx) :> RRBVector<'T>
 
     // abstract member Split : int -> RRBVector<'T> * RRBVector<'T>
@@ -983,10 +983,12 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
         yield! (this.Root :?> RRBFullNode<'T>).LeavesSeq this.Shift |> Seq.map (fun leaf -> leaf.Items)
     }
 
-    member this.RevIterEditableLeaves() = seq {
-        yield this.Tail
-        yield! (this.Root :?> RRBFullNode<'T>).LeavesSeq this.Shift |> Seq.map (fun leaf -> (leaf.GetEditableNode owner :?> RRBLeafNode<'T>).Items)
-    }
+    member this.RevIterEditableLeaves() =
+        let owner = this.Root.Owner
+        seq {
+            yield this.Tail
+            yield! (this.Root :?> RRBFullNode<'T>).LeavesSeq this.Shift |> Seq.map (fun leaf -> (leaf.GetEditableNode owner :?> RRBLeafNode<'T>).Items)
+        }
 
     // abstract member IterItems : unit -> seq<'T>
     override this.IterItems() =
@@ -1000,9 +1002,53 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
     }
 
     // // abstract member GetEnumerator : unit -> IEnumerator<'T>
+
     // abstract member Push : 'T -> RRBVector<'T>
+    override this.Push newItem =
+        let tailLen = this.Length - this.TailOffset
+        if tailLen >= Literals.blockSize then
+            let tailNode = RRBNode<'T>.MkLeaf this.Root.Owner this.Tail :?> RRBLeafNode<'T>
+            let newRoot, newShift = (this.Root :?> RRBFullNode<'T>).AppendLeaf this.Root.Owner this.Shift tailNode
+            if not <| isSameObj newRoot this.Root then
+                this.Root <- newRoot
+            this.TailOffset <- this.Count
+            this.Count <- this.Count + 1
+            this.Shift <- newShift
+            this.Tail.[0] <- newItem
+            Array.fill this.Tail 1 (Literals.blockSize - 1) Unchecked.defaultof<'T>
+            this :> RRBVector<'T>
+        else
+            this.Count <- this.Count + 1
+            this.Tail.[tailLen] <- newItem
+            this :> RRBVector<'T>
+
     // abstract member Peek : unit -> 'T
+    override this.Peek() =
+        if this.Length <= 0 then failwith "Can't get last item from an empty vector"
+        else
+            let tailLen = this.Length - this.TailOffset
+#if DEBUG
+            if tailLen = 0 then failwith "Tail should never be empty"
+#endif
+            this.Tail.[tailLen - 1]
+
     // abstract member Pop : unit -> RRBVector<'T>
+    override this.Pop() =
+        if this.Length <= 0 then failwith "Can't pop from an empty vector"
+        else
+            let tailLen = this.Length - this.TailOffset
+            if tailLen > 1 then
+                this.Count <- this.Count - 1
+                this.Tail.[tailLen - 1] <- Unchecked.defaultof<'T>
+            else
+                this.Count <- this.Count - 1
+                let newTailNode, newRoot = (this.Root :?> RRBFullNode<'T>).PopLastLeaf this.Root.Owner this.Shift
+                if not <| isSameObj newRoot this.Root then
+                    this.Root <- newRoot
+                this.TailOffset <- this.TailOffset - newTailNode.NodeSize
+                this.Tail <- (newTailNode.GetEditableNode this.Root.Owner :?> RRBLeafNode<'T>).Items
+            this :> RRBVector<'T>  // FIXME: We'll need to check for newly-last leaf satisfying invariant, and also potentially shrink tree height if root becomes size 1 or even empty
+
     // abstract member Take : int -> RRBVector<'T>
     override this.Take idx =
         this.EnsureValidIndexLengthAllowed idx
@@ -1010,20 +1056,31 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             this.Empty()
         elif idx = this.Length then
             this :> RRBVector<'T>
-// XYZZY Edited up to here
         elif idx = this.TailOffset then
             // Splitting exactly at the tail means we have to promote a new tail
             let newTailNode, newRoot = (this.Root :?> RRBFullNode<'T>).PopLastLeaf this.Root.Owner this.Shift
-            RRBPersistentVector<'T>(idx, this.Shift, newRoot, newTailNode.Items, idx - newTailNode.NodeSize) :> RRBVector<'T>  // Shift can't change during this step, not yet. FIXME: We'll need to check for newly-last leaf satisfying invariant, and also potentially shrink tree height if root becomes size 1 or even empty
+            this.Count <- idx
+            if not <| isSameObj newRoot this.Root then
+                this.Root <- newRoot
+            this.TailOffset <- idx - newTailNode.NodeSize
+            this.Tail <- (newTailNode.GetEditableNode this.Root.Owner :?> RRBLeafNode<'T>).Items
+            this :> RRBVector<'T>  // Shift can't change during this step, not yet. FIXME: We'll need to check for newly-last leaf satisfying invariant, and also potentially shrink tree height if root becomes size 1 or even empty
         elif idx > this.TailOffset then
             // Splitting the tail in two
-            let newTail = this.Tail |> Array.truncate (idx - this.TailOffset)
-            RRBPersistentVector<'T>(idx, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
+            this.Count <- idx
+            let newTailLen = idx - this.TailOffset
+            Array.fill this.Tail newTailLen (Literals.blockSize - newTailLen) Unchecked.defaultof<'T>
+            this :> RRBVector<'T>
         else
             let tmpRoot = this.Root.KeepNTreeItems this.Root.Owner this.Shift idx
             let newTailNode, newRoot = (tmpRoot :?> RRBFullNode<'T>).PopLastLeaf tmpRoot.Owner this.Shift
-            // FIXME: Will have to adjust this tree in case the height can now be shortened
-            RRBPersistentVector<'T>(idx, this.Shift, newRoot, newTailNode.Items, idx - newTailNode.NodeSize) :> RRBVector<'T>  // Shift can't change during this step, not yet. FIXME: We'll need to check for newly-last leaf satisfying invariant, and also potentially shrink tree height if root becomes size 1 or even empty
+            this.Count <- idx
+            if not <| isSameObj newRoot this.Root then
+                this.Root <- newRoot
+            this.TailOffset <- idx - newTailNode.NodeSize
+            this.Tail <- (newTailNode.GetEditableNode this.Root.Owner :?> RRBLeafNode<'T>).Items
+            // FIXME: Will have to adjust this tree in case the height can now be shortened, and/or in case new tail and last leaf need to be tweaked to maintain the invariant
+            this :> RRBVector<'T>  // Shift can't change during this step, not yet. FIXME: We'll need to check for newly-last leaf satisfying invariant, and also potentially shrink tree height if root becomes size 1 or even empty
 
     // abstract member Skip : int -> RRBVector<'T>
     override this.Skip idx =
@@ -1032,20 +1089,36 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             this :> RRBVector<'T>
         elif idx = this.Length then
             this.Empty()
-// XYZZY Edited up to here
         elif idx = this.TailOffset then
             // Splitting exactly at the tail means we'll have an empty root
-            RRBPersistentVector<'T>(this.Tail.Length, Literals.blockSizeShift, RRBNode<'T>.MkFullNode nullOwner Array.empty, this.Tail, 0) :> RRBVector<'T>
+            Array.fill (this.Root :?> RRBFullNode<'T>).Children 0 Literals.blockSize null
+            this.Count <- this.Tail.Length
+            this.Shift <- Literals.blockSizeShift
+            this.TailOffset <- 0
+            this :> RRBVector<'T>
         elif idx > this.TailOffset then
             // Splitting the tail in two
-            let tailR = this.Tail |> Array.skip (idx - this.TailOffset)
-            RRBPersistentVector<'T>(tailR.Length, Literals.blockSizeShift, RRBNode<'T>.MkFullNode nullOwner Array.empty, tailR, 0) :> RRBVector<'T>
+            Array.fill (this.Root :?> RRBFullNode<'T>).Children 0 Literals.blockSize null
+            this.Count <- this.Length - idx
+            this.Shift <- Literals.blockSizeShift
+            this.TailOffset <- 0
+            let idx' = idx - this.TailOffset
+            Array.fill this.Tail idx' (Literals.blockSize - idx') Unchecked.defaultof<'T>
+            for i = 0 to Literals.blockSize - 1 - idx' do
+                this.Tail.[i] <- this.Tail.[i + idx']
+            this :> RRBVector<'T>
         else
             let newRoot = this.Root.SkipNTreeItems this.Root.Owner this.Shift idx
-            // FIXME: Will have to adjust this tree in case the height can now be shortened
-            RRBPersistentVector<'T>(this.Length - idx, this.Shift, newRoot, this.Tail, this.TailOffset - idx) :> RRBVector<'T>
+            if not <| isSameObj newRoot this.Root then
+                this.Root <- newRoot
+            this.Count <- this.Length - idx
+            this.TailOffset <- this.TailOffset - idx
+            // FIXME: Will have to adjust this tree in case the height can now be shortened, and/or in case new tail and last leaf need to be tweaked to maintain the invariant
+            this :> RRBVector<'T>
 
     // abstract member Split : int -> RRBVector<'T> * RRBVector<'T>
+    // TODO: Write this one carefully
+
     // abstract member Slice : int * int -> RRBVector<'T>
     override this.Slice (start, stop) =
         (this.Skip start).Take stop
