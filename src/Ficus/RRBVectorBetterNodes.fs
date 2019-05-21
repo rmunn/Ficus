@@ -252,6 +252,12 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
                 (node' :?> RRBFullNode<'T>).Children.[node'.NodeSize - 1] <- child'
                 node'
 
+    member this.ReplaceLastLeaf owner shift (newLeaf : RRBLeafNode<'T>) sizeDiff =
+        if shift <= Literals.blockSizeShift then
+            this.UpdateChildSRel owner shift (this.NodeSize - 1) newLeaf sizeDiff
+        else
+            (this.LastChild :?> RRBFullNode<'T>).ReplaceLastLeaf owner (down shift) newLeaf sizeDiff
+
     abstract member ToRelaxedNodeIfNeeded : int -> RRBNode<'T>
     default this.ToRelaxedNodeIfNeeded shift =
         // TODO: Use this.BuildSizeTable instead???
