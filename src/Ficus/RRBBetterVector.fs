@@ -794,7 +794,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
         elif idx > this.TailOffset then
             // Splitting the tail in two
             let tailL, tailR = this.Tail |> Array.splitAt (idx - this.TailOffset)
-            let newLeft = RRBPersistentVector<'T>(this.Length, this.Shift, this.Root, tailL, this.TailOffset) :> RRBVector<'T>
+            let newLeft = RRBPersistentVector<'T>(idx, this.Shift, this.Root, tailL, this.TailOffset) :> RRBVector<'T>
             let newRight = RRBPersistentVector<'T>(tailR.Length, Literals.blockSizeShift, RRBNode<'T>.MkFullNode nullOwner Array.empty, tailR, 0) :> RRBVector<'T>
             newLeft, newRight
         else
@@ -937,6 +937,17 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
     member val Root = root with get, set
     member val Tail = tail with get, set
     member val TailOffset = tailOffset with get, set
+
+    // new() = RRBTransientVector(0, 5, emptyNode, Array.empty, 0)
+    new (token : OwnerToken) =
+        let root = RRBExpandedFullNode<'T>(token, Array.zeroCreate Literals.blockSize, 0)
+        RRBTransientVector<'T>(0, Literals.blockSizeShift, root, Array.zeroCreate Literals.blockSize, 0)
+
+    new () =
+        RRBTransientVector<'T>(mkOwnerToken())
+
+    static member MkEmpty() = RRBTransientVector<'T>()
+    static member internal MkEmptyWithToken token = RRBTransientVector<'T>(token)
 
     member this.Persistent() =
         let root' = (this.Root :?> RRBFullNode<'T>).ShrinkRightSpine nullOwner this.Shift
@@ -1117,7 +1128,59 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             this :> RRBVector<'T>
 
     // abstract member Split : int -> RRBVector<'T> * RRBVector<'T>
-    // TODO: Write this one carefully
+    override this.Split idx =
+        // NOTE: Remember that in transients, we need to create the right vector with the same owner token
+        // And "this" must remain the left vector. So when idx = 0, we can't just do "this.Empty()" as that
+        // would erase the root. Instead, we must first copy the node and hand the copy to right to be its
+        // root, or else hand our original node to right and make a brand-new empty node for "this". Don't
+        // know yet which is better. If anyone had pointers to our original root... well, they shouldn't.
+        // And if anyone had pointers to nodes further down in the tree, copying the root won't do any harm.
+        this.EnsureValidIndexLengthAllowed idx
+        if idx = 0 then
+            let right = RRBTransientVector<'T>(this.Count, this.Shift, this.Root, this.Tail, this.TailOffset)
+            this.Count <- 0
+            this.Shift <- Literals.blockSizeShift
+            this.Root <- RRBExpandedFullNode<'T>(this.Root.Owner, Array.zeroCreate Literals.blockSize, 0)
+            this.Tail <- Array.zeroCreate Literals.blockSize
+            this.TailOffset <- 0
+            this :> RRBVector<'T>, right :> RRBVector<'T>
+        elif idx = this.Length then
+            let right = RRBTransientVector<'T>(this.Root.Owner)
+            this :> RRBVector<'T>, right :> RRBVector<'T>
+        elif idx = this.TailOffset then
+            // Splitting exactly at the tail means we have to promote a new tail for the left (this)
+            let right = RRBTransientVector<'T>(this.Root.Owner)
+            right.Tail <- this.Tail
+            right.Count <- this.Count - this.TailOffset
+            let newTailNode, newRoot = (this.Root :?> RRBFullNode<'T>).PopLastLeaf this.Root.Owner this.Shift
+            this.Count <- idx
+            if not <| isSameObj newRoot this.Root then
+                this.Root <- newRoot
+            this.Tail <- newTailNode.Items |> Array.expandToBlockSize
+            this.TailOffset <- idx - newTailNode.NodeSize
+            // FIXME: We'll need to check "this" (but not "right") for newly-last leaf satisfying invariant, and also potentially shrink tree height if root becomes size 1 or even empty
+            this :> RRBVector<'T>, right :> RRBVector<'T>
+        elif idx > this.TailOffset then
+            // Splitting the tail in two
+            let tailIdx = idx - this.TailOffset
+            let tailLen = this.Count - this.TailOffset
+            let right = RRBTransientVector<'T>(this.Root.Owner)
+            Array.blit this.Tail tailIdx right.Tail 0 (tailLen - tailIdx)
+            Array.fill this.Tail tailIdx (tailLen - tailIdx) Unchecked.defaultof<'T>
+            this.Count <- idx
+            right.Count <- tailLen
+            this :> RRBVector<'T>, right :> RRBVector<'T>
+        else
+            let rootL, rootR = this.Root.SplitTree this.Root.Owner this.Shift idx
+            let right = RRBTransientVector<'T>(this.Length - idx, this.Shift, rootR, this.Tail, this.Length - idx - this.Tail.Length)
+            let newTailNodeL, newRootL = (rootL :?> RRBFullNode<'T>).PopLastLeaf rootL.Owner this.Shift
+            this.Count <- idx
+            if not <| isSameObj newRootL this.Root then
+                this.Root <- newRootL
+            this.Tail <- newTailNodeL.Items |> Array.expandToBlockSize
+            this.TailOffset <- idx - newTailNodeL.NodeSize
+            // FIXME: Going to have to adjust the tree for both "this" AND "right" in this one, since either one could have become a tall, thin tree
+            this :> RRBVector<'T>, right :> RRBVector<'T>
 
     // abstract member Slice : int * int -> RRBVector<'T>
     override this.Slice (start, stop) =
