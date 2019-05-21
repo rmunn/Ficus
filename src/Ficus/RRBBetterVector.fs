@@ -778,8 +778,8 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                 let newTail = this.Tail |> Array.copyAndPop
                 RRBPersistentVector<'T>(this.Length - 1, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
             else
-            let newTailNode, newRoot = (this.Root :?> RRBFullNode<'T>).PopLastLeaf this.Root.Owner this.Shift
-            RRBPersistentVector<'T>(this.Length - 1, this.Shift, newRoot, newTailNode.Items, this.TailOffset - newTailNode.NodeSize) :> RRBVector<'T>  // FIXME: We'll need to check for newly-last leaf satisfying invariant, and also potentially shrink tree height if root becomes size 1 or even empty
+                let newTailNode, newRoot = (this.Root :?> RRBFullNode<'T>).PopLastLeaf this.Root.Owner this.Shift
+                RRBPersistentVector<'T>(this.Length - 1, this.Shift, newRoot, newTailNode.Items, this.TailOffset - newTailNode.NodeSize).AdjustTree()
 
     // abstract member Take : int -> RRBVector<'T>
     override this.Take idx =
@@ -791,7 +791,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
         elif idx = this.TailOffset then
             // Splitting exactly at the tail means we have to promote a new tail
             let newTailNode, newRoot = (this.Root :?> RRBFullNode<'T>).PopLastLeaf this.Root.Owner this.Shift
-            RRBPersistentVector<'T>(idx, this.Shift, newRoot, newTailNode.Items, idx - newTailNode.NodeSize) :> RRBVector<'T>  // Shift can't change during this step, not yet. FIXME: We'll need to check for newly-last leaf satisfying invariant, and also potentially shrink tree height if root becomes size 1 or even empty
+            RRBPersistentVector<'T>(idx, this.Shift, newRoot, newTailNode.Items, idx - newTailNode.NodeSize).AdjustTree()
         elif idx > this.TailOffset then
             // Splitting the tail in two
             let newTail = this.Tail |> Array.truncate (idx - this.TailOffset)
@@ -799,8 +799,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
         else
             let tmpRoot = this.Root.KeepNTreeItems this.Root.Owner this.Shift idx
             let newTailNode, newRoot = (tmpRoot :?> RRBFullNode<'T>).PopLastLeaf tmpRoot.Owner this.Shift
-            // FIXME: Will have to adjust this tree in case the height can now be shortened, and/or in case new tail and last leaf need to be tweaked to maintain the invariant
-            RRBPersistentVector<'T>(idx, this.Shift, newRoot, newTailNode.Items, idx - newTailNode.NodeSize) :> RRBVector<'T>  // Shift can't change during this step, not yet. FIXME: We'll need to check for newly-last leaf satisfying invariant, and also potentially shrink tree height if root becomes size 1 or even empty
+            RRBPersistentVector<'T>(idx, this.Shift, newRoot, newTailNode.Items, idx - newTailNode.NodeSize).AdjustTree()
 
     // abstract member Skip : int -> RRBVector<'T>
     override this.Skip idx =
@@ -818,8 +817,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
             RRBPersistentVector<'T>(tailR.Length, Literals.blockSizeShift, RRBNode<'T>.MkFullNode nullOwner Array.empty, tailR, 0) :> RRBVector<'T>
         else
             let newRoot = this.Root.SkipNTreeItems this.Root.Owner this.Shift idx
-            // FIXME: Will have to adjust this tree in case the height can now be shortened, and/or in case new tail and last leaf need to be tweaked to maintain the invariant
-            RRBPersistentVector<'T>(this.Length - idx, this.Shift, newRoot, this.Tail, this.TailOffset - idx) :> RRBVector<'T>
+            RRBPersistentVector<'T>(this.Length - idx, this.Shift, newRoot, this.Tail, this.TailOffset - idx).AdjustTree()
 
     // abstract member Split : int -> RRBVector<'T> * RRBVector<'T>
     override this.Split idx =
@@ -831,7 +829,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
         elif idx = this.TailOffset then
             // Splitting exactly at the tail means we have to promote a new tail
             let newTailNode, newRoot = (this.Root :?> RRBFullNode<'T>).PopLastLeaf this.Root.Owner this.Shift
-            let newLeft = RRBPersistentVector<'T>(idx, this.Shift, newRoot, newTailNode.Items, idx - newTailNode.NodeSize) :> RRBVector<'T>  // Shift can't change during this step, not yet. FIXME: We'll need to check for newly-last leaf satisfying invariant, and also potentially shrink tree height if root becomes size 1 or even empty
+            let newLeft = RRBPersistentVector<'T>(idx, this.Shift, newRoot, newTailNode.Items, idx - newTailNode.NodeSize).AdjustTree()
             let newRight = RRBPersistentVector<'T>(this.Tail.Length, Literals.blockSizeShift, RRBNode<'T>.MkFullNode nullOwner Array.empty, this.Tail, 0) :> RRBVector<'T>
             newLeft, newRight
         elif idx > this.TailOffset then
@@ -846,12 +844,12 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
             // let rootSizeL = rootL.TreeSize this.Shift
             // let rootSizeR = rootR.TreeSize this.Shift
             // let newTailNodeL, newRootL = (rootL :?> RRBFullNode<'T>).PopLastLeaf rootL.Owner this.Shift
-            // let newLeft = RRBPersistentVector<'T>(rootSizeL, this.Shift, newRootL, newTailNodeL.Items, this.TailOffset) :> RRBVector<'T>
-            // let newRight = RRBPersistentVector<'T>(rootSizeR + this.Tail.Length, this.Shift, rootR, this.Tail, rootSizeR) :> RRBVector<'T>
+            // let newLeft = RRBPersistentVector<'T>(rootSizeL, this.Shift, newRootL, newTailNodeL.Items, rootSizeL - newTailNodeL.NodeSize).AdjustTree()
+            // let newRight = RRBPersistentVector<'T>(rootSizeR + this.Tail.Length, this.Shift, rootR, this.Tail, rootSizeR).AdjustTree()
             let newTailNodeL, newRootL = (rootL :?> RRBFullNode<'T>).PopLastLeaf rootL.Owner this.Shift
-            let newLeft = RRBPersistentVector<'T>(idx, this.Shift, newRootL, newTailNodeL.Items, idx - newTailNodeL.NodeSize) :> RRBVector<'T>
-            let newRight = RRBPersistentVector<'T>(this.Length - idx, this.Shift, rootR, this.Tail, this.Length - idx - this.Tail.Length) :> RRBVector<'T>
-            // FIXME: Going to have to adjust the tree for both newLeft AND newRight in this one, since either one could have become a tall, thin tree
+            // Have to adjust the tree for both newLeft AND newRight in this one, since either one could have become a tall, thin tree during the split
+            let newLeft = RRBPersistentVector<'T>(idx, this.Shift, newRootL, newTailNodeL.Items, idx - newTailNodeL.NodeSize).AdjustTree()
+            let newRight = RRBPersistentVector<'T>(this.Length - idx, this.Shift, rootR, this.Tail, this.Length - idx - this.Tail.Length).AdjustTree()
             newLeft, newRight
 
     // abstract member Slice : int * int -> RRBVector<'T>
@@ -888,6 +886,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                         RRBPersistentVector<'T>(newLen, Literals.blockSizeShift, newRoot, newTail, Literals.blockSize) :> RRBVector<'T>
                     else
                         let newRoot, newShift = (this.Root :?> RRBFullNode<'T>).AppendLeaf this.Root.Owner this.Shift newLeaf
+                        // The new leaf that was pushed down cannot have been short, so here we don't need to adjust the tree to maintain the invariant.
                         RRBPersistentVector<'T>(newLen, newShift, newRoot, newTail, this.TailOffset + Literals.blockSize) :> RRBVector<'T>
             elif this.TailOffset <= 0 then
                 // Right has a root and a tail, but we're a tail-only node
@@ -896,6 +895,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                 RRBPersistentVector<'T>(newLen, newShift, newRoot, right.Tail, right.TailOffset + tailNode.NodeSize) :> RRBVector<'T>
             else
                 // Right has a root and a tail, and so do we
+                // TODO FIXME: Determine if there are any merge scenarios which break the invariant, by running lots of merges that hit this code branch (Original code had .AdjustTree everywhere, but is it needed?)
                 let tailNode = RRBNode<'T>.MkLeaf this.Root.Owner this.Tail :?> RRBLeafNode<'T>
                 match (this.Root :?> RRBFullNode<'T>).MergeTree this.Root.Owner this.Shift (Some tailNode) right.Shift (right.Root :?> RRBFullNode<'T>) false with
                 | newRoot, None ->
@@ -908,7 +908,6 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
         | :? RRBTransientVector<'T> as right ->
             this.Append (right.Persistent())
 
-
     // abstract member Insert : int -> 'T -> RRBVector<'T>
     override this.Insert idx newItem =
         this.EnsureValidIndex idx
@@ -917,7 +916,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                 let newTail = this.Tail |> Array.copyAndInsertAt (this.TailOffset - idx) newItem
                 RRBPersistentVector<'T>(this.Length, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
             else
-                this :> RRBVector<'T>  // TODO: Fixme
+                this :> RRBVector<'T>  // TODO: Fixme with PushTailDown, and don't forget to adjust the tree
         else
             let newRoot, newShift =
                 match this.Root.InsertedTree this.Root.Owner this.Shift idx newItem None 0 with
@@ -925,7 +924,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                 | SplitNode(newCurrent, newRight) -> (newCurrent :?> RRBFullNode<'T>).NewParent this.Root.Owner this.Shift [|newCurrent; newRight|], (RRBMath.up this.Shift)
                 | SlidItemsLeft(newLeft, newCurrent) -> failwith "Impossible" // TODO: Write full error message in case this ever manages to happen
                 | SlidItemsRight(newCurrent, newRight) -> failwith "Impossible" // TODO: Write full error message in case this ever manages to happen
-            RRBPersistentVector<'T>(this.Length, newShift, newRoot, this.Tail, this.TailOffset) :> RRBVector<'T>
+            RRBPersistentVector<'T>(this.Length, newShift, newRoot, this.Tail, this.TailOffset).AdjustTree()
 
     // abstract member Remove : int -> RRBVector<'T>
     override this.Remove idx =
@@ -937,11 +936,16 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     member internal this.RemoveImpl idx shouldCheckForRebalancing =
         this.EnsureValidIndex idx
         if idx >= this.TailOffset then
-            let newTail = this.Tail  |> Array.copyAndRemoveAt (this.TailOffset - idx)
-            RRBPersistentVector<'T>(this.Length, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
+            if true then  // FIXME: Need to check if the tail had just one item, in which case we need to pop a new tail and adjust the tree afterwards
+                let newTail = this.Tail |> Array.copyAndRemoveAt (this.TailOffset - idx)  // XYZZY
+                RRBPersistentVector<'T>(this.Length - 1, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
+            else
+                let newTail = this.Tail |> Array.copyAndRemoveAt (this.TailOffset - idx)  // XYZZY
+                RRBPersistentVector<'T>(this.Length - 1, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
         else
             let root' = this.Root.RemovedItem this.Root.Owner this.Shift shouldCheckForRebalancing idx |> snd  // TODO: We don't actually want to return the removed item
-            RRBPersistentVector<'T>(this.Length, this.Shift, root', this.Tail, this.TailOffset) :> RRBVector<'T>
+            // FIXME: Need to actually check for rebalancing
+            RRBPersistentVector<'T>(this.Length - 1, this.Shift, root', this.Tail, this.TailOffset - 1) :> RRBVector<'T>
 
     // abstract member Update : int -> 'T -> RRBVector<'T>
     override this.Update idx newItem =
@@ -1150,6 +1154,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             if tailLen > 1 then
                 this.Count <- this.Count - 1
                 this.Tail.[tailLen - 1] <- Unchecked.defaultof<'T>
+                this :> RRBVector<'T>
             else
                 this.Count <- this.Count - 1
                 let newTailNode, newRoot = (this.Root :?> RRBFullNode<'T>).PopLastLeaf this.Root.Owner this.Shift
@@ -1157,7 +1162,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                     this.Root <- newRoot
                 this.TailOffset <- this.TailOffset - newTailNode.NodeSize
                 this.Tail <- (newTailNode.GetEditableNode this.Root.Owner :?> RRBLeafNode<'T>).Items
-            this :> RRBVector<'T>  // FIXME: We'll need to check for newly-last leaf satisfying invariant, and also potentially shrink tree height if root becomes size 1 or even empty
+                this.AdjustTree()
 
     // abstract member Take : int -> RRBVector<'T>
     override this.Take idx =
@@ -1174,7 +1179,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                 this.Root <- newRoot
             this.TailOffset <- idx - newTailNode.NodeSize
             this.Tail <- (newTailNode.GetEditableNode this.Root.Owner :?> RRBLeafNode<'T>).Items
-            this :> RRBVector<'T>  // Shift can't change during this step, not yet. FIXME: We'll need to check for newly-last leaf satisfying invariant, and also potentially shrink tree height if root becomes size 1 or even empty
+            this.AdjustTree()
         elif idx > this.TailOffset then
             // Splitting the tail in two
             this.Count <- idx
@@ -1189,8 +1194,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                 this.Root <- newRoot
             this.TailOffset <- idx - newTailNode.NodeSize
             this.Tail <- (newTailNode.GetEditableNode this.Root.Owner :?> RRBLeafNode<'T>).Items
-            // FIXME: Will have to adjust this tree in case the height can now be shortened, and/or in case new tail and last leaf need to be tweaked to maintain the invariant
-            this :> RRBVector<'T>  // Shift can't change during this step, not yet. FIXME: We'll need to check for newly-last leaf satisfying invariant, and also potentially shrink tree height if root becomes size 1 or even empty
+            this.AdjustTree()
 
     // abstract member Skip : int -> RRBVector<'T>
     override this.Skip idx =
@@ -1223,8 +1227,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                 this.Root <- newRoot
             this.Count <- this.Length - idx
             this.TailOffset <- this.TailOffset - idx
-            // FIXME: Will have to adjust this tree in case the height can now be shortened, and/or in case new tail and last leaf need to be tweaked to maintain the invariant
-            this :> RRBVector<'T>
+            this.AdjustTree()
 
     // abstract member Split : int -> RRBVector<'T> * RRBVector<'T>
     override this.Split idx =
@@ -1257,8 +1260,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                 this.Root <- newRoot
             this.Tail <- newTailNode.Items |> Array.expandToBlockSize
             this.TailOffset <- idx - newTailNode.NodeSize
-            // FIXME: We'll need to check "this" (but not "right") for newly-last leaf satisfying invariant, and also potentially shrink tree height if root becomes size 1 or even empty
-            this :> RRBVector<'T>, right :> RRBVector<'T>
+            this.AdjustTree(), right :> RRBVector<'T>
         elif idx > this.TailOffset then
             // Splitting the tail in two
             let tailIdx = idx - this.TailOffset
@@ -1278,8 +1280,8 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                 this.Root <- newRootL
             this.Tail <- newTailNodeL.Items |> Array.expandToBlockSize
             this.TailOffset <- idx - newTailNodeL.NodeSize
-            // FIXME: Going to have to adjust the tree for both "this" AND "right" in this one, since either one could have become a tall, thin tree
-            this :> RRBVector<'T>, right :> RRBVector<'T>
+            // Have to adjust the tree for both "this" AND "right" in this one, since either one could have become a tall, thin tree
+            this.AdjustTree(), right.AdjustTree()
 
     // abstract member Slice : int * int -> RRBVector<'T>
     override this.Slice (start, stop) =
@@ -1371,7 +1373,6 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             this.Append (right.Persistent())
         | :? RRBPersistentVector<'T> as right ->
             this.Persistent().Append right
-        // TODO: Implement .Persistent() (and also .Transient() on persistent trees)
 
     // abstract member Insert : int -> 'T -> RRBVector<'T>
     override this.Insert idx newItem =
