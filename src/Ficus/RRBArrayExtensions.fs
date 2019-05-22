@@ -28,6 +28,18 @@ module Array =
         newArr
 
     // NOTE: No bounds-checking on idx. It's caller's responsibility to set it properly.
+    let copyAndInsertIntoFullArray idx newItem oldArr =
+        let oldLen = Array.length oldArr
+        if idx = oldLen then
+            oldArr, [| newItem |]
+        else
+            let newArrL = Array.zeroCreate oldLen
+            Array.blit oldArr 0 newArrL 0 idx
+            newArrL.[idx] <- newItem
+            Array.blit oldArr idx newArrL (idx + 1) (oldLen - idx)
+            newArrL, [| oldArr.[oldLen - 1] |]
+
+    // NOTE: No bounds-checking on idx. It's caller's responsibility to set it properly.
     let inline copyAndSet idx newItem oldArr =
         let newArr = Array.copy oldArr
         newArr.[idx] <- newItem

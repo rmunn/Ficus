@@ -916,7 +916,11 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                 let newTail = this.Tail |> Array.copyAndInsertAt (this.TailOffset - idx) newItem
                 RRBPersistentVector<'T>(this.Length, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
             else
-                this :> RRBVector<'T>  // TODO: Fixme with PushTailDown, and don't forget to adjust the tree
+                let newLeafItems, newTail = this.Tail |> Array.copyAndInsertIntoFullArray (this.TailOffset - idx) newItem
+                let newLeafNode = RRBNode<'T>.MkLeaf this.Root.Owner newLeafItems :?> RRBLeafNode<'T>
+                let newRoot, newShift = (this.Root :?> RRBFullNode<'T>).AppendLeaf this.Root.Owner this.Shift newLeafNode
+                // Pushing a full tail down into a leaf can't break the invariant, so no need to adjust the tree here
+                RRBPersistentVector<'T>(this.Length + 1, newShift, newRoot, newTail, this.Length) :> RRBVector<'T>
         else
             let newRoot, newShift =
                 match this.Root.InsertedTree this.Root.Owner this.Shift idx newItem None 0 with
@@ -924,7 +928,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                 | SplitNode(newCurrent, newRight) -> (newCurrent :?> RRBFullNode<'T>).NewParent this.Root.Owner this.Shift [|newCurrent; newRight|], (RRBMath.up this.Shift)
                 | SlidItemsLeft(newLeft, newCurrent) -> failwith "Impossible" // TODO: Write full error message in case this ever manages to happen
                 | SlidItemsRight(newCurrent, newRight) -> failwith "Impossible" // TODO: Write full error message in case this ever manages to happen
-            RRBPersistentVector<'T>(this.Length, newShift, newRoot, this.Tail, this.TailOffset).AdjustTree()
+            RRBPersistentVector<'T>(this.Length + 1, newShift, newRoot, this.Tail, this.TailOffset + 1).AdjustTree()
 
     // abstract member Remove : int -> RRBVector<'T>
     override this.Remove idx =
@@ -936,15 +940,15 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     member internal this.RemoveImpl idx shouldCheckForRebalancing =
         this.EnsureValidIndex idx
         if idx >= this.TailOffset then
-            if true then  // FIXME: Need to check if the tail had just one item, in which case we need to pop a new tail and adjust the tree afterwards
-                let newTail = this.Tail |> Array.copyAndRemoveAt (this.TailOffset - idx)  // XYZZY
+            if this.Length - this.TailOffset > 1 then
+                let newTail = this.Tail |> Array.copyAndRemoveAt (idx - this.TailOffset)
                 RRBPersistentVector<'T>(this.Length - 1, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
             else
-                let newTail = this.Tail |> Array.copyAndRemoveAt (this.TailOffset - idx)  // XYZZY
-                RRBPersistentVector<'T>(this.Length - 1, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
+                // Tail is now empty, so promote a new tail
+                let newTailNode, newRoot = (this.Root :?> RRBFullNode<'T>).PopLastLeaf this.Root.Owner this.Shift
+                RRBPersistentVector<'T>(this.Length - 1, this.Shift, newRoot, newTailNode.Items, this.TailOffset - newTailNode.NodeSize).AdjustTree()
         else
             let root' = this.Root.RemovedItem this.Root.Owner this.Shift shouldCheckForRebalancing idx |> snd  // TODO: We don't actually want to return the removed item
-            // FIXME: Need to actually check for rebalancing
             RRBPersistentVector<'T>(this.Length - 1, this.Shift, root', this.Tail, this.TailOffset - 1) :> RRBVector<'T>
 
     // abstract member Update : int -> 'T -> RRBVector<'T>
@@ -1128,8 +1132,8 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             this.TailOffset <- this.Count
             this.Count <- this.Count + 1
             this.Shift <- newShift
+            this.Tail <- Array.zeroCreate Literals.blockSize
             this.Tail.[0] <- newItem
-            Array.fill this.Tail 1 (Literals.blockSize - 1) Unchecked.defaultof<'T>
             this :> RRBVector<'T>
         else
             this.Count <- this.Count + 1
@@ -1321,6 +1325,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                     Array.blit right.Tail 0 this.Tail tailLenL splitIdxR
                     Array.blit right.Tail splitIdxR newTail 0 (tailLenR - splitIdxR)
                     let newLeaf = RRBNode<'T>.MkLeaf this.Root.Owner this.Tail :?> RRBLeafNode<'T>
+                    this.Tail <- newTail
                     if this.TailOffset <= 0 then
                         // We CAN use AppendChild in an empty root!
                         let newRoot = (this.Root :?> RRBFullNode<'T>).AppendChild this.Root.Owner this.Shift newLeaf
@@ -1378,11 +1383,26 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
     override this.Insert idx newItem =
         this.EnsureValidIndex idx
         if idx >= this.TailOffset then
-            if this.Length - this.TailOffset < Literals.blockSize then
-                this.Tail.[this.TailOffset - idx] <- newItem
+            let tailLen = this.Length - this.TailOffset
+            if tailLen < Literals.blockSize then
+                let tailIdx = this.TailOffset - idx
+                for i = tailLen downto tailIdx do
+                    this.Tail.[i+1] <- this.Tail.[i]
+                this.Tail.[tailIdx] <- newItem
+                this.Count <- this.Count + 1
                 this :> RRBVector<'T>
             else
-                this :> RRBVector<'T>  // TODO: Fixme with PushTailDown
+                let newLeafItems, newTail = this.Tail |> Array.copyAndInsertIntoFullArray (this.TailOffset - idx) newItem
+                let newLeafNode = RRBNode<'T>.MkLeaf this.Root.Owner newLeafItems :?> RRBLeafNode<'T>
+                let newRoot, newShift = (this.Root :?> RRBFullNode<'T>).AppendLeaf this.Root.Owner this.Shift newLeafNode
+                if not <| isSameObj newRoot this.Root then
+                    this.Root <- newRoot
+                this.Shift <- newShift
+                this.TailOffset <- this.Count
+                this.Count <- this.Count + 1
+                this.Tail <- newTail
+                // Pushing a full tail down into a leaf can't break the invariant, so no need to adjust the tree here
+                this :> RRBVector<'T>
         else
             let newRoot, newShift =
                 match this.Root.InsertedTree this.Root.Owner this.Shift idx newItem None 0 with
@@ -1393,6 +1413,8 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             if not <| isSameObj newRoot this.Root then
                 this.Root <- newRoot
             this.Shift <- newShift
+            this.Count <- this.Count + 1
+            this.TailOffset <- this.TailOffset + 1
             this :> RRBVector<'T>
 
     // abstract member Remove : int -> RRBVector<'T>
@@ -1405,18 +1427,31 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
     member internal this.RemoveImpl idx shouldCheckForRebalancing =
         this.EnsureValidIndex idx
         if idx >= this.TailOffset then
-            let tailIdx = idx - this.TailOffset
-            let tailLen = this.Length - this.TailOffset
-            for i = tailIdx to tailLen - 2 do
-                this.Tail.[i] <- this.Tail.[i + 1]
-            this.Tail.[tailLen - 1] <- Unchecked.defaultof<'T>
+            if this.Length - this.TailOffset > 1 then
+                let tailIdx = idx - this.TailOffset
+                let tailLen = this.Length - this.TailOffset
+                for i = tailIdx to tailLen - 2 do
+                    this.Tail.[i] <- this.Tail.[i + 1]
+                this.Tail.[tailLen - 1] <- Unchecked.defaultof<'T>
+                this.Count <- this.Count - 1
+                this :> RRBVector<'T>
+            else
+                // Tail is now empty, so promote a new tail
+                let newTailNode, newRoot = (this.Root :?> RRBFullNode<'T>).PopLastLeaf this.Root.Owner this.Shift
+                newTailNode.Items.CopyTo(this.Tail, 0)
+                Array.fill this.Tail (newTailNode.NodeSize) (Literals.blockSize - newTailNode.NodeSize) Unchecked.defaultof<'T>
+                if not <| isSameObj newRoot this.Root then
+                    this.Root <- newRoot
+                this.Count <- this.Count - 1
+                this.TailOffset <- this.TailOffset - newTailNode.NodeSize
+                this.AdjustTree()
         else
-            let root' = this.Root.RemovedItem this.Root.Owner this.Shift shouldCheckForRebalancing idx |> snd  // TODO: We don't actually want to return the removed item
-            if not <| isSameObj root' this.Root then
-                this.Root <- root'
+            let newRoot = this.Root.RemovedItem this.Root.Owner this.Shift shouldCheckForRebalancing idx |> snd  // TODO: We don't actually want to return the removed item
+            if not <| isSameObj newRoot this.Root then
+                this.Root <- newRoot
             this.TailOffset <- this.TailOffset - 1
-        this.Count <- this.Count - 1
-        this :> RRBVector<'T>
+            this.Count <- this.Count - 1
+            this :> RRBVector<'T>
 
     // abstract member Update : int -> 'T -> RRBVector<'T>
     override this.Update idx newItem =
