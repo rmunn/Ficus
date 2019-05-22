@@ -665,7 +665,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     member this.Transient() =
         let newToken = mkOwnerToken()
         let root' = (this.Root :?> RRBFullNode<'T>).ExpandRightSpine newToken this.Shift
-        let tailLen = this.Length - this.TailOffset
+        let tailLen = this.Count - this.TailOffset
         let newTail = Array.sub this.Tail 0 tailLen
         RRBTransientVector<'T>(this.Count, this.Shift, root', newTail, this.TailOffset)
 
@@ -696,7 +696,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                 node
             let lastLeaf = (lastTwig :?> RRBFullNode<'T>).LastChild :?> RRBLeafNode<'T>
             let shiftCount = Literals.blockSize - lastLeaf.NodeSize
-            let tailLen = this.Length - this.TailOffset
+            let tailLen = this.Count - this.TailOffset
             if shiftCount <= 0 then
                 this :> RRBVector<'T>
             elif shiftCount >= tailLen then
@@ -704,19 +704,19 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                 let removedLeaf, newRoot = (this.Root :?> RRBFullNode<'T>).RemoveLastLeaf this.Root.Owner this.Shift
                 let newTail = this.Tail |> Array.append removedLeaf.Items
                 // In certain rare cases, we might need to recurse. For example, the vector [M 5] [5] T1 will become [M 5] T6, which then needs to become M T11.
-                RRBPersistentVector<'T>(this.Length, this.Shift, newRoot, newTail, this.TailOffset - removedLeaf.NodeSize).ShiftNodesFromTailIfNeeded()
+                RRBPersistentVector<'T>(this.Count, this.Shift, newRoot, newTail, this.TailOffset - removedLeaf.NodeSize).ShiftNodesFromTailIfNeeded()
             else
                 let itemsToShift, newTail = this.Tail |> Array.splitAt shiftCount
                 let newLeaf = RRBLeafNode<'T>(this.Root.Owner, lastLeaf.Items |> Array.append itemsToShift)
                 let newRoot = (this.Root :?> RRBFullNode<'T>).ReplaceLastLeaf this.Root.Owner this.Shift newLeaf shiftCount
                 // No need to recurse here
-                RRBPersistentVector<'T>(this.Length, this.Shift, newRoot, newTail, this.TailOffset + shiftCount) :> RRBVector<'T>
+                RRBPersistentVector<'T>(this.Count, this.Shift, newRoot, newTail, this.TailOffset + shiftCount) :> RRBVector<'T>
 
     // abstract member Empty : RRBVector<'T>  // Or maybe it should be unit -> RRBVector<'T>
     override this.Empty() = RRBPersistentVector<'T>(0, Literals.blockSizeShift, emptyNode, Array.empty, 0) :> RRBVector<'T>
 
     // abstract member IsEmpty : unit -> bool
-    override this.IsEmpty() = this.Length = 0
+    override this.IsEmpty() = this.Count = 0
 
     // abstract member StringRepr : string
     override this.StringRepr = this.ToString()
@@ -751,20 +751,20 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
 
     // abstract member Push : 'T -> RRBVector<'T>
     override this.Push newItem =
-        let tailLen = this.Length - this.TailOffset
+        let tailLen = this.Count - this.TailOffset
         if tailLen >= Literals.blockSize then
             let tailNode = RRBNode<'T>.MkLeaf this.Root.Owner this.Tail :?> RRBLeafNode<'T>
             let newRoot, newShift = (this.Root :?> RRBFullNode<'T>).AppendLeaf this.Root.Owner this.Shift tailNode
-            RRBPersistentVector<'T>(this.Length + 1, newShift, newRoot, [|newItem|], this.Length) :> RRBVector<'T>
+            RRBPersistentVector<'T>(this.Count + 1, newShift, newRoot, [|newItem|], this.Count) :> RRBVector<'T>
         else
             let newTail = this.Tail |> Array.copyAndAppend newItem
-            RRBPersistentVector<'T>(this.Length + 1, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
+            RRBPersistentVector<'T>(this.Count + 1, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
 
     // abstract member Peek : unit -> 'T
     override this.Peek() =
-        if this.Length <= 0 then failwith "Can't get last item from an empty vector"
+        if this.Count <= 0 then failwith "Can't get last item from an empty vector"
         else
-            let tailLen = this.Length - this.TailOffset
+            let tailLen = this.Count - this.TailOffset
 #if DEBUG
             if tailLen = 0 then failwith "Tail should never be empty"
 #endif
@@ -772,21 +772,21 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
 
     // abstract member Pop : unit -> RRBVector<'T>
     override this.Pop() =
-        if this.Length <= 0 then failwith "Can't pop from an empty vector"
+        if this.Count <= 0 then failwith "Can't pop from an empty vector"
         else
             if this.Tail.Length > 1 then
                 let newTail = this.Tail |> Array.copyAndPop
-                RRBPersistentVector<'T>(this.Length - 1, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
+                RRBPersistentVector<'T>(this.Count - 1, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
             else
                 let newTailNode, newRoot = (this.Root :?> RRBFullNode<'T>).PopLastLeaf this.Root.Owner this.Shift
-                RRBPersistentVector<'T>(this.Length - 1, this.Shift, newRoot, newTailNode.Items, this.TailOffset - newTailNode.NodeSize).AdjustTree()
+                RRBPersistentVector<'T>(this.Count - 1, this.Shift, newRoot, newTailNode.Items, this.TailOffset - newTailNode.NodeSize).AdjustTree()
 
     // abstract member Take : int -> RRBVector<'T>
     override this.Take idx =
         this.EnsureValidIndexLengthAllowed idx
         if idx = 0 then
             this.Empty()
-        elif idx = this.Length then
+        elif idx = this.Count then
             this :> RRBVector<'T>
         elif idx = this.TailOffset then
             // Splitting exactly at the tail means we have to promote a new tail
@@ -806,7 +806,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
         this.EnsureValidIndexLengthAllowed idx
         if idx = 0 then
             this :> RRBVector<'T>
-        elif idx = this.Length then
+        elif idx = this.Count then
             this.Empty()
         elif idx = this.TailOffset then
             // Splitting exactly at the tail means we'll have an empty root
@@ -817,14 +817,14 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
             RRBPersistentVector<'T>(tailR.Length, Literals.blockSizeShift, RRBNode<'T>.MkFullNode nullOwner Array.empty, tailR, 0) :> RRBVector<'T>
         else
             let newRoot = this.Root.SkipNTreeItems this.Root.Owner this.Shift idx
-            RRBPersistentVector<'T>(this.Length - idx, this.Shift, newRoot, this.Tail, this.TailOffset - idx).AdjustTree()
+            RRBPersistentVector<'T>(this.Count - idx, this.Shift, newRoot, this.Tail, this.TailOffset - idx).AdjustTree()
 
     // abstract member Split : int -> RRBVector<'T> * RRBVector<'T>
     override this.Split idx =
         this.EnsureValidIndexLengthAllowed idx
         if idx = 0 then
             this.Empty(), this :> RRBVector<'T>
-        elif idx = this.Length then
+        elif idx = this.Count then
             this :> RRBVector<'T>, this.Empty()
         elif idx = this.TailOffset then
             // Splitting exactly at the tail means we have to promote a new tail
@@ -849,7 +849,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
             let newTailNodeL, newRootL = (rootL :?> RRBFullNode<'T>).PopLastLeaf rootL.Owner this.Shift
             // Have to adjust the tree for both newLeft AND newRight in this one, since either one could have become a tall, thin tree during the split
             let newLeft = RRBPersistentVector<'T>(idx, this.Shift, newRootL, newTailNodeL.Items, idx - newTailNodeL.NodeSize).AdjustTree()
-            let newRight = RRBPersistentVector<'T>(this.Length - idx, this.Shift, rootR, this.Tail, this.Length - idx - this.Tail.Length).AdjustTree()
+            let newRight = RRBPersistentVector<'T>(this.Count - idx, this.Shift, rootR, this.Tail, this.Count - idx - this.Tail.Length).AdjustTree()
             newLeft, newRight
 
     // abstract member Slice : int * int -> RRBVector<'T>
@@ -868,11 +868,11 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     override this.Append other =
         match other with
         | :? RRBPersistentVector<'T> as right ->
-            let newLen = this.Length + right.Length
+            let newLen = this.Count + right.Count
             if right.TailOffset <= 0 then
                 // Right is a tail-only vector
-                let tailLenL = this.Length - this.TailOffset
-                let tailLenR = right.Length - right.TailOffset
+                let tailLenL = this.Count - this.TailOffset
+                let tailLenR = right.Count - right.TailOffset
                 if tailLenL + tailLenR <= Literals.blockSize then
                     let newTail = Array.append this.Tail right.Tail
                     RRBPersistentVector<'T>(newLen, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
@@ -899,11 +899,11 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                 let tailNode = RRBNode<'T>.MkLeaf this.Root.Owner this.Tail :?> RRBLeafNode<'T>
                 match (this.Root :?> RRBFullNode<'T>).MergeTree this.Root.Owner this.Shift (Some tailNode) right.Shift (right.Root :?> RRBFullNode<'T>) false with
                 | newRoot, None ->
-                    RRBPersistentVector<'T>(newLen, max this.Shift right.Shift, newRoot, right.Tail, this.Length + right.TailOffset) :> RRBVector<'T>
+                    RRBPersistentVector<'T>(newLen, max this.Shift right.Shift, newRoot, right.Tail, this.Count + right.TailOffset) :> RRBVector<'T>
                 | newLeft, Some newRight ->
                     let newRoot = (newLeft :?> RRBFullNode<'T>).NewParent this.Root.Owner this.Shift [|newLeft; newRight|]
                     let oldShift = max this.Shift right.Shift
-                    RRBPersistentVector<'T>(newLen, (RRBMath.up oldShift), newRoot, right.Tail, this.Length + right.TailOffset) :> RRBVector<'T>
+                    RRBPersistentVector<'T>(newLen, (RRBMath.up oldShift), newRoot, right.Tail, this.Count + right.TailOffset) :> RRBVector<'T>
         // Transient vectors may only stay transient if appended to a transient of the same owner; here, we're a persistent
         | :? RRBTransientVector<'T> as right ->
             this.Append (right.Persistent())
@@ -912,15 +912,15 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     override this.Insert idx newItem =
         this.EnsureValidIndex idx
         if idx >= this.TailOffset then
-            if this.Length - this.TailOffset < Literals.blockSize then
+            if this.Count - this.TailOffset < Literals.blockSize then
                 let newTail = this.Tail |> Array.copyAndInsertAt (this.TailOffset - idx) newItem
-                RRBPersistentVector<'T>(this.Length, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
+                RRBPersistentVector<'T>(this.Count, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
             else
                 let newLeafItems, newTail = this.Tail |> Array.copyAndInsertIntoFullArray (this.TailOffset - idx) newItem
                 let newLeafNode = RRBNode<'T>.MkLeaf this.Root.Owner newLeafItems :?> RRBLeafNode<'T>
                 let newRoot, newShift = (this.Root :?> RRBFullNode<'T>).AppendLeaf this.Root.Owner this.Shift newLeafNode
                 // Pushing a full tail down into a leaf can't break the invariant, so no need to adjust the tree here
-                RRBPersistentVector<'T>(this.Length + 1, newShift, newRoot, newTail, this.Length) :> RRBVector<'T>
+                RRBPersistentVector<'T>(this.Count + 1, newShift, newRoot, newTail, this.Count) :> RRBVector<'T>
         else
             let newRoot, newShift =
                 match this.Root.InsertedTree this.Root.Owner this.Shift idx newItem None 0 with
@@ -928,7 +928,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                 | SplitNode(newCurrent, newRight) -> (newCurrent :?> RRBFullNode<'T>).NewParent this.Root.Owner this.Shift [|newCurrent; newRight|], (RRBMath.up this.Shift)
                 | SlidItemsLeft(newLeft, newCurrent) -> failwith "Impossible" // TODO: Write full error message in case this ever manages to happen
                 | SlidItemsRight(newCurrent, newRight) -> failwith "Impossible" // TODO: Write full error message in case this ever manages to happen
-            RRBPersistentVector<'T>(this.Length + 1, newShift, newRoot, this.Tail, this.TailOffset + 1).AdjustTree()
+            RRBPersistentVector<'T>(this.Count + 1, newShift, newRoot, this.Tail, this.TailOffset + 1).AdjustTree()
 
     // abstract member Remove : int -> RRBVector<'T>
     override this.Remove idx =
@@ -940,26 +940,26 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     member internal this.RemoveImpl idx shouldCheckForRebalancing =
         this.EnsureValidIndex idx
         if idx >= this.TailOffset then
-            if this.Length - this.TailOffset > 1 then
+            if this.Count - this.TailOffset > 1 then
                 let newTail = this.Tail |> Array.copyAndRemoveAt (idx - this.TailOffset)
-                RRBPersistentVector<'T>(this.Length - 1, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
+                RRBPersistentVector<'T>(this.Count - 1, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
             else
                 // Tail is now empty, so promote a new tail
                 let newTailNode, newRoot = (this.Root :?> RRBFullNode<'T>).PopLastLeaf this.Root.Owner this.Shift
-                RRBPersistentVector<'T>(this.Length - 1, this.Shift, newRoot, newTailNode.Items, this.TailOffset - newTailNode.NodeSize).AdjustTree()
+                RRBPersistentVector<'T>(this.Count - 1, this.Shift, newRoot, newTailNode.Items, this.TailOffset - newTailNode.NodeSize).AdjustTree()
         else
             let root' = this.Root.RemovedItem this.Root.Owner this.Shift shouldCheckForRebalancing idx |> snd  // TODO: We don't actually want to return the removed item
-            RRBPersistentVector<'T>(this.Length - 1, this.Shift, root', this.Tail, this.TailOffset - 1) :> RRBVector<'T>
+            RRBPersistentVector<'T>(this.Count - 1, this.Shift, root', this.Tail, this.TailOffset - 1) :> RRBVector<'T>
 
     // abstract member Update : int -> 'T -> RRBVector<'T>
     override this.Update idx newItem =
         this.EnsureValidIndex idx
         if idx >= this.TailOffset then
             let newTail = this.Tail |> Array.copyAndSet (this.TailOffset - idx) newItem
-            RRBPersistentVector<'T>(this.Length, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
+            RRBPersistentVector<'T>(this.Count, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
         else
             let root' = this.Root.UpdatedTree this.Root.Owner this.Shift idx newItem
-            RRBPersistentVector<'T>(this.Length, this.Shift, root', this.Tail, this.TailOffset) :> RRBVector<'T>
+            RRBPersistentVector<'T>(this.Count, this.Shift, root', this.Tail, this.TailOffset) :> RRBVector<'T>
 
     // abstract member GetItem : int -> 'T
     override this.GetItem idx =
@@ -971,12 +971,12 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
 
     member this.EnsureValidIndex idx =
         if idx < 0 then failwith "Index must not be negative"
-        elif idx >= this.Length then failwith "Index must not be past the end of the vector"
+        elif idx >= this.Count then failwith "Index must not be past the end of the vector"
         else ()
 
     member this.EnsureValidIndexLengthAllowed idx =
         if idx < 0 then failwith "Index must not be negative"
-        elif idx > this.Length then failwith "Index must not be more than one past the end of the vector"
+        elif idx > this.Count then failwith "Index must not be more than one past the end of the vector"
         else ()
 
 
@@ -1002,7 +1002,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
 
     member this.Persistent() =
         let root' = (this.Root :?> RRBFullNode<'T>).ShrinkRightSpine nullOwner this.Shift
-        let tailLen = this.Length - this.TailOffset
+        let tailLen = this.Count - this.TailOffset
         RRBPersistentVector<'T>(this.Count, this.Shift, root', this.Tail |> Array.truncate tailLen, this.TailOffset)
 
     member internal this.AdjustTree() =
@@ -1035,7 +1035,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                 node
             let lastLeaf = (lastTwig :?> RRBFullNode<'T>).LastChild :?> RRBLeafNode<'T>
             let shiftCount = Literals.blockSize - lastLeaf.NodeSize
-            let tailLen = this.Length - this.TailOffset
+            let tailLen = this.Count - this.TailOffset
             if shiftCount <= 0 then
                 this :> RRBVector<'T>
             elif shiftCount >= tailLen then
@@ -1074,7 +1074,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
         this :> RRBVector<'T>
 
     // abstract member IsEmpty : unit -> bool
-    override this.IsEmpty() = this.Length = 0
+    override this.IsEmpty() = this.Count = 0
 
     // abstract member StringRepr : string
     override this.StringRepr = this.ToString()
@@ -1123,7 +1123,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
 
     // abstract member Push : 'T -> RRBVector<'T>
     override this.Push newItem =
-        let tailLen = this.Length - this.TailOffset
+        let tailLen = this.Count - this.TailOffset
         if tailLen >= Literals.blockSize then
             let tailNode = RRBNode<'T>.MkLeaf this.Root.Owner this.Tail :?> RRBLeafNode<'T>
             let newRoot, newShift = (this.Root :?> RRBFullNode<'T>).AppendLeaf this.Root.Owner this.Shift tailNode
@@ -1142,9 +1142,9 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
 
     // abstract member Peek : unit -> 'T
     override this.Peek() =
-        if this.Length <= 0 then failwith "Can't get last item from an empty vector"
+        if this.Count <= 0 then failwith "Can't get last item from an empty vector"
         else
-            let tailLen = this.Length - this.TailOffset
+            let tailLen = this.Count - this.TailOffset
 #if DEBUG
             if tailLen = 0 then failwith "Tail should never be empty"
 #endif
@@ -1152,9 +1152,9 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
 
     // abstract member Pop : unit -> RRBVector<'T>
     override this.Pop() =
-        if this.Length <= 0 then failwith "Can't pop from an empty vector"
+        if this.Count <= 0 then failwith "Can't pop from an empty vector"
         else
-            let tailLen = this.Length - this.TailOffset
+            let tailLen = this.Count - this.TailOffset
             if tailLen > 1 then
                 this.Count <- this.Count - 1
                 this.Tail.[tailLen - 1] <- Unchecked.defaultof<'T>
@@ -1173,7 +1173,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
         this.EnsureValidIndexLengthAllowed idx
         if idx = 0 then
             this.Empty()
-        elif idx = this.Length then
+        elif idx = this.Count then
             this :> RRBVector<'T>
         elif idx = this.TailOffset then
             // Splitting exactly at the tail means we have to promote a new tail
@@ -1205,7 +1205,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
         this.EnsureValidIndexLengthAllowed idx
         if idx = 0 then
             this :> RRBVector<'T>
-        elif idx = this.Length then
+        elif idx = this.Count then
             this.Empty()
         elif idx = this.TailOffset then
             // Splitting exactly at the tail means we'll have an empty root
@@ -1217,7 +1217,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
         elif idx > this.TailOffset then
             // Splitting the tail in two
             Array.fill (this.Root :?> RRBFullNode<'T>).Children 0 Literals.blockSize null
-            this.Count <- this.Length - idx
+            this.Count <- this.Count - idx
             this.Shift <- Literals.blockSizeShift
             this.TailOffset <- 0
             let idx' = idx - this.TailOffset
@@ -1229,7 +1229,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             let newRoot = this.Root.SkipNTreeItems this.Root.Owner this.Shift idx
             if not <| isSameObj newRoot this.Root then
                 this.Root <- newRoot
-            this.Count <- this.Length - idx
+            this.Count <- this.Count - idx
             this.TailOffset <- this.TailOffset - idx
             this.AdjustTree()
 
@@ -1250,7 +1250,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             this.Tail <- Array.zeroCreate Literals.blockSize
             this.TailOffset <- 0
             this :> RRBVector<'T>, right :> RRBVector<'T>
-        elif idx = this.Length then
+        elif idx = this.Count then
             let right = RRBTransientVector<'T>(this.Root.Owner)
             this :> RRBVector<'T>, right :> RRBVector<'T>
         elif idx = this.TailOffset then
@@ -1277,7 +1277,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             this :> RRBVector<'T>, right :> RRBVector<'T>
         else
             let rootL, rootR = this.Root.SplitTree this.Root.Owner this.Shift idx
-            let right = RRBTransientVector<'T>(this.Length - idx, this.Shift, rootR, this.Tail, this.Length - idx - this.Tail.Length)
+            let right = RRBTransientVector<'T>(this.Count - idx, this.Shift, rootR, this.Tail, this.Count - idx - this.Tail.Length)
             let newTailNodeL, newRootL = (rootL :?> RRBFullNode<'T>).PopLastLeaf rootL.Owner this.Shift
             this.Count <- idx
             if not <| isSameObj newRootL this.Root then
@@ -1310,11 +1310,11 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             // the entire promise of a persistent data structure. The only safe way to merge two trees and have
             // the result be transient is if they have the same owner token, which can only happen if they
             // came from the same original transient tree that was later split.
-            let newLen = this.Length + right.Length
+            let newLen = this.Count + right.Count
             if right.TailOffset <= 0 then
                 // Right is a tail-only vector
-                let tailLenL = this.Length - this.TailOffset
-                let tailLenR = right.Length - right.TailOffset
+                let tailLenL = this.Count - this.TailOffset
+                let tailLenR = right.Count - right.TailOffset
                 if tailLenL + tailLenR <= Literals.blockSize then
                     right.Tail.CopyTo(this.Tail, tailLenL)
                     this.Count <- newLen
@@ -1371,7 +1371,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                 this.Shift <- newShift
                 this.Root <- newRoot
                 this.Tail <- right.Tail
-                this.TailOffset <- this.Length + right.TailOffset
+                this.TailOffset <- this.Count + right.TailOffset
                 this :> RRBVector<'T>
         // Transient vectors may only stay transient if appended to a transient of the same owner
         | :? RRBTransientVector<'T> as right ->
@@ -1383,7 +1383,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
     override this.Insert idx newItem =
         this.EnsureValidIndex idx
         if idx >= this.TailOffset then
-            let tailLen = this.Length - this.TailOffset
+            let tailLen = this.Count - this.TailOffset
             if tailLen < Literals.blockSize then
                 let tailIdx = this.TailOffset - idx
                 for i = tailLen downto tailIdx do
@@ -1427,9 +1427,9 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
     member internal this.RemoveImpl idx shouldCheckForRebalancing =
         this.EnsureValidIndex idx
         if idx >= this.TailOffset then
-            if this.Length - this.TailOffset > 1 then
+            if this.Count - this.TailOffset > 1 then
                 let tailIdx = idx - this.TailOffset
-                let tailLen = this.Length - this.TailOffset
+                let tailLen = this.Count - this.TailOffset
                 for i = tailIdx to tailLen - 2 do
                     this.Tail.[i] <- this.Tail.[i + 1]
                 this.Tail.[tailLen - 1] <- Unchecked.defaultof<'T>
@@ -1474,12 +1474,12 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
 
     member this.EnsureValidIndex idx =
         if idx < 0 then failwith "Index must not be negative"
-        elif idx >= this.Length then failwith "Index must not be past the end of the vector"
+        elif idx >= this.Count then failwith "Index must not be past the end of the vector"
         else ()
 
     member this.EnsureValidIndexLengthAllowed idx =
         if idx < 0 then failwith "Index must not be negative"
-        elif idx > this.Length then failwith "Index must not be more than one past the end of the vector"
+        elif idx > this.Count then failwith "Index must not be more than one past the end of the vector"
         else ()
 
 (*
