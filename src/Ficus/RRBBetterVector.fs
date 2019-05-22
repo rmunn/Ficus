@@ -1088,25 +1088,19 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
         yield this.Tail
     }
 
-    member this.IterEditableLeaves() =
+    member this.IterEditableLeavesWithoutTail() =
         let owner = this.Root.Owner
-        seq {
-            yield! (this.Root :?> RRBFullNode<'T>).LeavesSeq this.Shift |> Seq.map (fun leaf -> (leaf.GetEditableNode owner :?> RRBLeafNode<'T>).Items)
-            yield this.Tail
-        }
+        (this.Root :?> RRBFullNode<'T>).LeavesSeq this.Shift |> Seq.map (fun leaf -> (leaf.GetEditableNode owner :?> RRBLeafNode<'T>).Items)
 
     // abstract member RevIterLeaves : unit -> seq<'T []>
     override this.RevIterLeaves() = seq {
         yield this.Tail
-        yield! (this.Root :?> RRBFullNode<'T>).LeavesSeq this.Shift |> Seq.map (fun leaf -> leaf.Items)
+        yield! (this.Root :?> RRBFullNode<'T>).RevLeavesSeq this.Shift |> Seq.map (fun leaf -> leaf.Items)
     }
 
-    member this.RevIterEditableLeaves() =
+    member this.RevIterEditableLeavesWithoutTail() =
         let owner = this.Root.Owner
-        seq {
-            yield this.Tail
-            yield! (this.Root :?> RRBFullNode<'T>).LeavesSeq this.Shift |> Seq.map (fun leaf -> (leaf.GetEditableNode owner :?> RRBLeafNode<'T>).Items)
-        }
+        (this.Root :?> RRBFullNode<'T>).RevLeavesSeq this.Shift |> Seq.map (fun leaf -> (leaf.GetEditableNode owner :?> RRBLeafNode<'T>).Items)
 
     // abstract member IterItems : unit -> seq<'T>
     override this.IterItems() =

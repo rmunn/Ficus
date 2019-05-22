@@ -282,6 +282,11 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
             this.ChildrenSeq |> Seq.cast<RRBLeafNode<'T>>
         else
             this.ChildrenSeq |> Seq.collect (fun child -> (child :?> RRBFullNode<'T>).LeavesSeq (down shift))
+    member this.RevLeavesSeq shift =
+        if shift <= Literals.blockSizeShift then
+            this.ChildrenSeq |> Seq.rev |> Seq.cast<RRBLeafNode<'T>>
+        else
+            this.ChildrenSeq |> Seq.rev |> Seq.collect (fun child -> (child :?> RRBFullNode<'T>).RevLeavesSeq (down shift))
 (*
 
 AppendChild ch
