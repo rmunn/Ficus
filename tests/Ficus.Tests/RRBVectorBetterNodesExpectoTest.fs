@@ -368,6 +368,12 @@ let [<Literal>] M = Literals.blockSize  // Shorthand
 
 type Fullness = CompletelyFull | FullEnough | NotFull   // Used in node properties
 
+// Tree properties should include:
+// Tail should be empty if and only if tree is empty (tree length = 0)
+// Tree length should never be negative
+// Root should be empty if and only if tail offset = 0
+// Tail offset should never be negative
+
 let nodeProperties = [
     "All twigs should be at height 1", fun (shift : int) (root : RRBNode<'T>) ->
         let rec check shift (node : RRBNode<'T>) =
