@@ -752,13 +752,13 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     // abstract member Push : 'T -> RRBVector<'T>
     override this.Push newItem =
         let tailLen = this.Count - this.TailOffset
-        if tailLen >= Literals.blockSize then
+        if tailLen < Literals.blockSize then
+            let newTail = this.Tail |> Array.copyAndAppend newItem
+            RRBPersistentVector<'T>(this.Count + 1, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
+        else
             let tailNode = RRBNode<'T>.MkLeaf this.Root.Owner this.Tail :?> RRBLeafNode<'T>
             let newRoot, newShift = (this.Root :?> RRBFullNode<'T>).AppendLeaf this.Root.Owner this.Shift tailNode
             RRBPersistentVector<'T>(this.Count + 1, newShift, newRoot, [|newItem|], this.Count) :> RRBVector<'T>
-        else
-            let newTail = this.Tail |> Array.copyAndAppend newItem
-            RRBPersistentVector<'T>(this.Count + 1, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
 
     // abstract member Peek : unit -> 'T
     override this.Peek() =
@@ -1124,7 +1124,11 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
     // abstract member Push : 'T -> RRBVector<'T>
     override this.Push newItem =
         let tailLen = this.Count - this.TailOffset
-        if tailLen >= Literals.blockSize then
+        if tailLen < Literals.blockSize then
+            this.Count <- this.Count + 1
+            this.Tail.[tailLen] <- newItem
+            this :> RRBVector<'T>
+        else
             let tailNode = RRBNode<'T>.MkLeaf this.Root.Owner this.Tail :?> RRBLeafNode<'T>
             let newRoot, newShift = (this.Root :?> RRBFullNode<'T>).AppendLeaf this.Root.Owner this.Shift tailNode
             if not <| isSameObj newRoot this.Root then
@@ -1134,10 +1138,6 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             this.Shift <- newShift
             this.Tail <- Array.zeroCreate Literals.blockSize
             this.Tail.[0] <- newItem
-            this :> RRBVector<'T>
-        else
-            this.Count <- this.Count + 1
-            this.Tail.[tailLen] <- newItem
             this :> RRBVector<'T>
 
     // abstract member Peek : unit -> 'T
