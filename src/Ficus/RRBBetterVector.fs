@@ -785,10 +785,10 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     // abstract member Take : int -> RRBVector<'T>
     override this.Take idx =
         this.EnsureValidIndexLengthAllowed idx  // TODO: Allow taking more than the total items in the vector, which just means returning the vector unchanged
-        if idx = 0 then  // TODO: Allow taking negative items, which is like Skip (negative count + length), i.e. Take -5 will return the last five items of the list
-            this.Empty()
-        elif idx = this.Count then
+        if idx = this.Count then
             this :> RRBVector<'T>
+        elif idx = 0 then  // TODO: Allow taking negative items, which is like Skip (negative count + length), i.e. Take -5 will return the last five items of the list
+            this.Empty()
         elif idx = this.TailOffset then
             // Dropping the tail and nothing else, so we promote a new tail
             let newTailNode, newRoot = (this.Root :?> RRBFullNode<'T>).PopLastLeaf this.Root.Owner this.Shift
@@ -814,8 +814,8 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
             RRBPersistentVector<'T>(this.Tail.Length, Literals.blockSizeShift, RRBNode<'T>.MkFullNode nullOwner Array.empty, this.Tail, 0) :> RRBVector<'T>
         elif idx > this.TailOffset then
             // Splitting the tail in two
-            let tailR = this.Tail |> Array.skip (idx - this.TailOffset)
-            RRBPersistentVector<'T>(tailR.Length, Literals.blockSizeShift, RRBNode<'T>.MkFullNode nullOwner Array.empty, tailR, 0) :> RRBVector<'T>
+            let newTail = this.Tail |> Array.skip (idx - this.TailOffset)
+            RRBPersistentVector<'T>(newTail.Length, Literals.blockSizeShift, RRBNode<'T>.MkFullNode nullOwner Array.empty, newTail, 0) :> RRBVector<'T>
         else
             let newRoot = this.Root.SkipNTreeItems this.Root.Owner this.Shift idx
             RRBPersistentVector<'T>(this.Count - idx, this.Shift, newRoot, this.Tail, this.TailOffset - idx).AdjustTree()
@@ -823,10 +823,10 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     // abstract member Split : int -> RRBVector<'T> * RRBVector<'T>
     override this.Split idx =
         this.EnsureValidIndexLengthAllowed idx
-        if idx = 0 then
-            this.Empty(), this :> RRBVector<'T>
-        elif idx = this.Count then
+        if idx = this.Count then
             this :> RRBVector<'T>, this.Empty()
+        elif idx = 0 then
+            this.Empty(), this :> RRBVector<'T>
         elif idx = this.TailOffset then
             // Splitting exactly at the tail means we have to promote a new tail
             let newTailNode, newRoot = (this.Root :?> RRBFullNode<'T>).PopLastLeaf this.Root.Owner this.Shift
@@ -864,6 +864,8 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
         | None, Some stop -> this.Take stop
         | Some start, None -> this.Skip start
         | Some start, Some stop -> this.Slice (start, stop)
+
+// XYZZY Audited up to here
 
     // abstract member Append : RRBVector<'T> -> RRBVector<'T>
     override this.Append other =
@@ -1160,16 +1162,16 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                 if not <| isSameObj newRoot this.Root then
                     this.Root <- newRoot
                 this.TailOffset <- this.TailOffset - newTailNode.NodeSize
-                this.Tail <- (newTailNode.GetEditableNode this.Root.Owner :?> RRBLeafNode<'T>).Items
+                this.Tail <- (newTailNode.GetEditableNodeOfBlockSizeLength this.Root.Owner :?> RRBLeafNode<'T>).Items
                 this.AdjustTree()
 
     // abstract member Take : int -> RRBVector<'T>
     override this.Take idx =
         this.EnsureValidIndexLengthAllowed idx  // TODO: Allow taking more than the total items in the vector, which just means returning the vector unchanged
-        if idx = 0 then  // TODO: Allow taking negative items, which is like Skip (negative count + length), i.e. Take -5 will return the last five items of the list
-            this.Empty()
-        elif idx = this.Count then
+        if idx = this.Count then
             this :> RRBVector<'T>
+        elif idx = 0 then  // TODO: Allow taking negative items, which is like Skip (negative count + length), i.e. Take -5 will return the last five items of the list
+            this.Empty()
         elif idx = this.TailOffset then
             // Dropping the tail and nothing else, so we promote a new tail
             let newTailNode, newRoot = (this.Root :?> RRBFullNode<'T>).PopLastLeaf this.Root.Owner this.Shift
@@ -1177,11 +1179,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             if not <| isSameObj newRoot this.Root then
                 this.Root <- newRoot
             this.TailOffset <- idx - newTailNode.NodeSize
-            this.Tail <- (newTailNode.GetEditableNode this.Root.Owner :?> RRBLeafNode<'T>).Items  // FIXME: Search through the code for places like this and ensure we expand to blockSize if needed
-#if DEBUG
-            if this.Tail.Length <> Literals.blockSize then
-                failwith <| sprintf "Last leaf just popped turned out to have %d items instead of %d: %A" this.Tail.Length Literals.blockSize this.Tail
-#endif
+            this.Tail <- (newTailNode.GetEditableNodeOfBlockSizeLength this.Root.Owner :?> RRBLeafNode<'T>).Items
             this.AdjustTree()
         elif idx > this.TailOffset then
             // Splitting the tail in two
@@ -1196,7 +1194,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             if not <| isSameObj newRoot this.Root then
                 this.Root <- newRoot
             this.TailOffset <- idx - newTailNode.NodeSize
-            this.Tail <- (newTailNode.GetEditableNode this.Root.Owner :?> RRBLeafNode<'T>).Items
+            this.Tail <- (newTailNode.GetEditableNodeOfBlockSizeLength this.Root.Owner :?> RRBLeafNode<'T>).Items
             this.AdjustTree()
 
     // abstract member Skip : int -> RRBVector<'T>
@@ -1209,26 +1207,28 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
         elif idx = this.TailOffset then
             // Splitting exactly at the tail means we'll have an empty root
             Array.fill (this.Root :?> RRBFullNode<'T>).Children 0 Literals.blockSize null
-            this.Count <- this.Count - this.TailOffset
+            this.Count <- this.Count - idx
             this.Shift <- Literals.blockSizeShift
             this.TailOffset <- 0
             this :> RRBVector<'T>
         elif idx > this.TailOffset then
             // Splitting the tail in two
             Array.fill (this.Root :?> RRBFullNode<'T>).Children 0 Literals.blockSize null
+            let tailLen = this.Count - this.TailOffset
+            let tailIdx = idx - this.TailOffset
             this.Count <- this.Count - idx
             this.Shift <- Literals.blockSizeShift
+            // Shift remaining items down, then zero out the slots that have become empty
+            for i = tailIdx to tailLen - 1 do
+                this.Tail.[i - tailIdx] <- this.Tail.[i]
+            Array.fill this.Tail (tailLen - tailIdx) tailIdx Unchecked.defaultof<'T>
             this.TailOffset <- 0
-            let idx' = idx - this.TailOffset
-            Array.fill this.Tail idx' (Literals.blockSize - idx') Unchecked.defaultof<'T>
-            for i = 0 to Literals.blockSize - 1 - idx' do
-                this.Tail.[i] <- this.Tail.[i + idx']
             this :> RRBVector<'T>
         else
             let newRoot = this.Root.SkipNTreeItems this.Root.Owner this.Shift idx
+            this.Count <- this.Count - idx
             if not <| isSameObj newRoot this.Root then
                 this.Root <- newRoot
-            this.Count <- this.Count - idx
             this.TailOffset <- this.TailOffset - idx
             this.AdjustTree()
 
@@ -1241,16 +1241,16 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
         // know yet which is better. If anyone had pointers to our original root... well, they shouldn't.
         // And if anyone had pointers to nodes further down in the tree, copying the root won't do any harm.
         this.EnsureValidIndexLengthAllowed idx
-        if idx = 0 then
+        if idx = this.Count then
+            let right = RRBTransientVector<'T>(this.Root.Owner)
+            this :> RRBVector<'T>, right :> RRBVector<'T>
+        elif idx = 0 then
             let right = RRBTransientVector<'T>(this.Count, this.Shift, this.Root, this.Tail, this.TailOffset)
             this.Count <- 0
             this.Shift <- Literals.blockSizeShift
             this.Root <- RRBExpandedFullNode<'T>(this.Root.Owner, Array.zeroCreate Literals.blockSize, 0)
             this.Tail <- Array.zeroCreate Literals.blockSize
             this.TailOffset <- 0
-            this :> RRBVector<'T>, right :> RRBVector<'T>
-        elif idx = this.Count then
-            let right = RRBTransientVector<'T>(this.Root.Owner)
             this :> RRBVector<'T>, right :> RRBVector<'T>
         elif idx = this.TailOffset then
             // Splitting exactly at the tail means we have to promote a new tail for the left (this)
@@ -1261,7 +1261,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             this.Count <- idx
             if not <| isSameObj newRoot this.Root then
                 this.Root <- newRoot
-            this.Tail <- newTailNode.Items |> Array.expandToBlockSize
+            this.Tail <- (newTailNode.GetEditableNodeOfBlockSizeLength this.Root.Owner :?> RRBLeafNode<'T>).Items
             this.TailOffset <- idx - newTailNode.NodeSize
             this.AdjustTree(), right :> RRBVector<'T>
         elif idx > this.TailOffset then
@@ -1281,7 +1281,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             this.Count <- idx
             if not <| isSameObj newRootL this.Root then
                 this.Root <- newRootL
-            this.Tail <- newTailNodeL.Items |> Array.expandToBlockSize
+            this.Tail <- (newTailNodeL.GetEditableNodeOfBlockSizeLength this.Root.Owner :?> RRBLeafNode<'T>).Items
             this.TailOffset <- idx - newTailNodeL.NodeSize
             // Have to adjust the tree for both "this" AND "right" in this one, since either one could have become a tall, thin tree
             this.AdjustTree(), right.AdjustTree()
@@ -1297,6 +1297,8 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
         | None, Some stop -> this.Take stop
         | Some start, None -> this.Skip start
         | Some start, Some stop -> this.Slice (start, stop)
+
+// XYZZY Audited up to here
 
     // abstract member Append : RRBVector<'T> -> RRBVector<'T>
     override this.Append other =
