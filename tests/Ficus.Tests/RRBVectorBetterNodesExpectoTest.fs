@@ -373,6 +373,10 @@ type Fullness = CompletelyFull | FullEnough | NotFull   // Used in node properti
 // Tree length should never be negative
 // Root should be empty if and only if tail offset = 0
 // Tail offset should never be negative
+// Tail offset should match root's treesize at tree's shift
+// Transients' tails should have exactly (this.Count - this.TailOffset) items, **and the rest should equal Unchecked.defaultof<'T>**
+
+// TODO: One test to write: inserting at the end (at index vec.Length) means the same as appending
 
 let nodeProperties = [
     "All twigs should be at height 1", fun (shift : int) (root : RRBNode<'T>) ->
