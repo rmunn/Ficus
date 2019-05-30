@@ -25,8 +25,8 @@ let rec itemCount shift (node : RRBNode<'T>) =
     else children node |> Seq.sumBy (itemCount (down shift))
 
 let rec height (node : RRBNode<'T>) =
-    if isEmpty node || isLeaf node
-    then 0
+    if isLeaf node then 0
+    elif isEmpty node then 1  // Empty roots are considered at height 1 now
     else 1 + height (node :?> RRBFullNode<'T>).FirstChild
 
 type Fullness = CompletelyFull | FullEnough | NotFull   // Used in node properties

@@ -296,16 +296,16 @@ let localCheck (vec : RRBVector<'T>) =
 let doJoinTest v1 v2 =
     testProperties v1 "v1 in join test"
     testProperties v2 "v2 in join test"
-    let s1 = RRBVector.toSeq v1
-    let s2 = RRBVector.toSeq v2
+    let arr1 = RRBVector.toArray v1
+    let arr2 = RRBVector.toArray v2
     let joined = RRBVector.append v1 v2
     let joined' = RRBVector.append v2 v1
     localCheck joined
     testProperties joined "Joined vector"
     localCheck joined'
     testProperties joined' "Opposite-joined vector"
-    Expect.sequenceEqual (RRBVector.toSeq joined) (Seq.append s1 s2) "Joined vectors did not sequenceEqual equivalent appended seqs"
-    Expect.sequenceEqual (RRBVector.toSeq joined') (Seq.append s2 s1) "Opposite-joined vectors did not sequenceEqual equivalent appended seqs"
+    Expect.equal (RRBVector.toArray joined) (Seq.append arr1 arr2) "Joined vectors did not equal equivalent appended arrays"
+    Expect.equal (RRBVector.toArray joined') (Seq.append arr2 arr1) "Opposite-joined vectors did not equal equivalent appended arrays"
 
 let debugBigJoinTest1 () =
     // This one already is in Expecto, but it's failing and I'm trying to hunt down the failure

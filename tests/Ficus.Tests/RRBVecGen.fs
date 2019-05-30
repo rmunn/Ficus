@@ -212,7 +212,7 @@ let genNode (g : Gen<'a>) level childCount =
     // Ratio is 3:1 because when you generate a full node, it's full all the way down to the leaves.
 
 let genTinyVec<'a> size =
-    // For sizes from 0 to M, call this function
+    // For sizes from 0 to M*2, call this function
     // No randomness here
     Arb.generate<'a> |> Gen.arrayOfLength size |> Gen.map RRBVector.ofArray
 
@@ -252,10 +252,10 @@ let genVec<'a> level childCount =
     }
 
 let genVecOfLength<'a> len =
-    if len <= Literals.blockSize then
+    if len <= Literals.blockSize * 2 then
         len |> genTinyVec<'a>
     else
-        let len' = len - Literals.blockSize
+        let len' = len - Literals.blockSize * 2
         // childCount must be in range 2..Literals.blockSize
         // So we take (Literals.blockSize - 1) and that's the divisor for the mod operation
         let denom = Literals.blockSize - 1
