@@ -132,6 +132,8 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
 
     // abstract member StringRepr : string
     override this.StringRepr = this.ToString()
+    override this.ToString() =
+        sprintf "RRBPersistentVector<length=%d,shift=%d,tailOffset=%d,root=%A,tail=%A>" count shift tailOffset root tail
 
     // abstract member Length : int
     override this.Length = this.Count
@@ -280,6 +282,8 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     override this.Append other =
         match other with
         | :? RRBPersistentVector<'T> as right ->
+            if this.Count = 0 then right :> RRBVector<'T>
+            elif right.Count = 0 then this :> RRBVector<'T> else
             let newLen = this.Count + right.Count
             if right.TailOffset <= 0 then
                 // Right is a tail-only vector
@@ -491,6 +495,8 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
 
     // abstract member StringRepr : string
     override this.StringRepr = this.ToString()
+    override this.ToString() =
+        sprintf "RRBTransientVector<length=%d,shift=%d,tailOffset=%d,root=%A,tail=%A>" count shift tailOffset root tail
 
     // abstract member Length : int
     override this.Length = this.Count
@@ -719,6 +725,15 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             // the entire promise of a persistent data structure. The only safe way to merge two trees and have
             // the result be transient is if they have the same owner token, which can only happen if they
             // came from the same original transient tree that was later split.
+            if this.Count = 0 then
+                // Calling code expects "this" to contain the results, so we steal everything from the right-hand tree
+                this.Root <- right.Root
+                this.Shift <- right.Shift
+                this.Count <- right.Count
+                this.TailOffset <- right.TailOffset
+                this.Tail <- right.Tail
+                this :> RRBVector<'T>
+            elif right.Count = 0 then this :> RRBVector<'T> else
             let newLen = this.Count + right.Count
             if right.TailOffset <= 0 then
                 // Right is a tail-only vector

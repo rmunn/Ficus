@@ -597,7 +597,7 @@ PrependNChildrenS n seq<ch> seq<sz>
                 if this.NodeSize >= Literals.blockSize
                 then None
                 else this.InsertChildS owner shift 0 (this.NewPath owner (down shift) newLeaf) leafLen |> Some
-                // Note that if we're an expanded node, PrependChildS will take care of shrinking old last child and expanding new one
+                // Note that if we're an expanded node, InsertChildS will take care of shrinking old last child and expanding new one
 
     member this.PrependLeaf owner shift (newLeaf : RRBLeafNode<'T>) =
         match this.TryPrependLeaf owner shift newLeaf newLeaf.NodeSize with
@@ -817,7 +817,7 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
             // Splitting child in two, so recurse
             let node' = this.KeepNRight owner shift keep
             let child' = child.SkipNTreeItems owner (down shift) nextTreeIdx
-            (node' :?> RRBFullNode<'T>).UpdateChildSAbs owner shift 0 child' (child'.TreeSize (down shift))
+            (node' :?> RRBFullNode<'T>).UpdateChildSAbs owner shift localIdx child' (child'.TreeSize (down shift))
 
     override this.SplitTree owner shift treeIdx =
         // treeIdx is first index of right-hand tree
@@ -838,7 +838,7 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
             let leftNode = this.MakeLeftNodeForSplit owner shift leftChildren leftSizes
             let childL, childR = child.SplitTree owner (down shift) nextTreeIdx
             let leftNode' = (leftNode :?> RRBFullNode<'T>).AppendChild owner shift childL
-            let rightNode' = (rightNode :?> RRBFullNode<'T>).UpdateChildSAbs owner shift 0 childR (childR.TreeSize (down shift))
+            let rightNode' = (rightNode :?> RRBFullNode<'T>).UpdateChildSAbs owner shift localIdx childR (childR.TreeSize (down shift))
             leftNode', rightNode'
 
     abstract member MakeLeftNodeForSplit : OwnerToken -> int -> RRBNode<'T>[] -> int[] -> RRBNode<'T>
