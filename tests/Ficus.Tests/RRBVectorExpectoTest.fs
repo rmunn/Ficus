@@ -133,6 +133,18 @@ let doSplitTest vec i =
     let repr = RRBVecGen.vecToTreeReprStr vec
     RRBVectorProps.checkProperties vec "Original vector"
     let vL, vR = vec |> RRBVector.split i
+    logger.debug (
+        eventX "After {cmd}, vec1 was {vec} ({rep})"
+        >> setField "cmd" ("split test")
+        >> setField "vec" (sprintf "%A" vL)
+        // >> setField "rep" (RRBVecGen.vecToTreeReprStr vL)
+    )
+    logger.debug (
+        eventX "After {cmd}, vec2 was {vec}"
+        >> setField "cmd" ("split test")
+        >> setField "vec" (sprintf "%A" vR)
+        // >> setField "rep" (RRBVecGen.vecToTreeReprStr vR)
+    )
     RRBVectorProps.checkProperties vL (sprintf "Original vector was %A, split at %d\nRepr: %s\nLeft half of split" vec i repr)
     RRBVectorProps.checkProperties vR (sprintf "Original vector was %A, split at %d\nRepr: %s\nRight half of split" vec i repr)
     doJoinTest vL vR
