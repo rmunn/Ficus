@@ -324,6 +324,8 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
         // Transient vectors may only stay transient if appended to a transient of the same owner; here, we're a persistent
         | :? RRBTransientVector<'T> as right ->
             this.Append (right.Persistent())
+        | _ ->
+            this.Append (other :?> RRBPersistentVector<'T>)  // WILL throw if we create a new subclass. TODO: Decide whether shutting up the compiler like this is really a good idea.
 
     // abstract member Insert : int -> 'T -> RRBVector<'T>
     override this.Insert idx newItem =
@@ -812,6 +814,8 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             this.Persistent().Append (right.Persistent())
         | :? RRBPersistentVector<'T> as right ->
             this.Persistent().Append right
+        | _ ->
+            this.Persistent().Append (other :?> RRBPersistentVector<'T>)  // WILL throw if we create a new subclass. TODO: Decide whether shutting up the compiler like this is really a good idea.
 
     // abstract member Insert : int -> 'T -> RRBVector<'T>
     override this.Insert idx newItem =
