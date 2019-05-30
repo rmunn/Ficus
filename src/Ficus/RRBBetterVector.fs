@@ -7,7 +7,7 @@
 ///
 /// Partly based on work by Jean Niklas L'orange: http://hypirion.com/thesis
 
-module rec Ficus.RRBVector
+module Ficus.RRBVector
 
 open System.Threading
 open RRBArrayExtensions
@@ -892,6 +892,15 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
         else ()
 
 // BASIC API
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module RRBVector =
+    let ofArray (a : 'T[]) =
+        // DEBUG: This implementation is just to get RRBVecGen up and running
+        if a.Length <= Literals.blockSize then
+            RRBPersistentVector<'T>(a.Length, Literals.blockSize, emptyNode, Array.copy a, 0) :> RRBVector<'T>
+        else
+            failwith "Not implemented yet"
+
 (*
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RRBVector =
