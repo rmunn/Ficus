@@ -80,8 +80,8 @@ let mkSpecificRRBTwig itemSrc (childSizes:ListItem) =
     | List items when items |> List.forall (function Int _ -> true | _ -> false) -> // Singleton root node at level 0 gets treated as a leaf
         items
         |> Array.ofList
-        |> Array.map (fun (Int n) ->
-            itemSrc |> mkArray n |> mkLeaf)
+        |> Array.map (function | (Int n) -> itemSrc |> mkArray n |> mkLeaf
+                               | (List _) -> failwith "Can't happen")
         |> mkNode<int> 1
     | _ -> failwith "Incorrect twig spec"
 

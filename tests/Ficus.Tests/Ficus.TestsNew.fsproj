@@ -12,6 +12,7 @@
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="TreeParser.fs" />
     <Compile Include="RRBVecGen.fs" />
+    <Compile Include="RRBVectorProps.fs" />
     <Compile Include="RRBVectorBetterNodesExpectoTest.fs" />
     <Compile Include="Main2.fs" />
   </ItemGroup>

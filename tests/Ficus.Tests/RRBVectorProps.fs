@@ -2,27 +2,34 @@ module ExpectoTemplate.RRBVectorProps
 
 open System
 open Ficus
-open Ficus.RRBVectorNodes
+open Ficus.RRBVectorBetterNodes
 open Ficus.RRBVector
+open Ficus.RRBVectorBetterNodes.RRBMath
 open FsCheck
 
 module Literals = Ficus.Literals
 
-let isEmpty (node : Node) = node.NodeSize <= 0
+let children (node : RRBNode<'T>) = (node :?> RRBFullNode<'T>).Children |> Seq.truncate node.NodeSize
+
+let isEmpty (node : RRBNode<'T>) = node.NodeSize <= 0
 // Note: do NOT call isNotTwig or isTwig on empty nodes!
-let isNotTwig (node : Node) = node.Array.[0] :? Node
-let isTwig (node : Node) = not (isNotTwig node)
-let isRRB  (node : Node) = node :? RRBNode
-let isFull (node : Node) = not (isRRB node)
-let items (node : Node) = if isTwig node then node.Array else [||]
-let children (node : Node) = if isNotTwig node then node.Array else [||]
+let isLeaf (node : RRBNode<'T>) = node :? RRBLeafNode<'T>
+let isNode (node : RRBNode<'T>) = not (isLeaf node)
+let isRelaxed (node : RRBNode<'T>) = node :? RRBRelaxedNode<'T>
+let isFull (node : RRBNode<'T>) = isNode node && not (isRelaxed node)
+let isTwig (node : RRBNode<'T>) = isNode node && children node |> Seq.forall isLeaf
+let isNotTwig (node : RRBNode<'T>) = not (isTwig node)
 
-let rec itemCount<'T> (node : Node) =
-    if isEmpty node then 0
-    elif node |> isTwig then node.Array.[0..node.NodeSize-1] |> Array.sumBy (fun leaf -> (leaf :?> 'T[]).Length)
-    else node.Array.[0..node.NodeSize-1] |> Array.sumBy (fun n -> n :?> Node |> itemCount<'T>)
+let rec itemCount shift (node : RRBNode<'T>) =
+    if shift <= 0 then node.NodeSize
+    else children node |> Seq.sumBy (itemCount (down shift))
 
-let inline down shift = shift - Literals.blockSizeShift
+let rec height (node : RRBNode<'T>) =
+    if isEmpty node || isLeaf node
+    then 0
+    else 1 + height (node :?> RRBFullNode<'T>).FirstChild
+
+type Fullness = CompletelyFull | FullEnough | NotFull   // Used in node properties
 
 // Properties start here
 
@@ -30,340 +37,345 @@ let inline down shift = shift - Literals.blockSizeShift
 // some deformed trees where the shift isn't a proper multiple of Literals.blockSizeShift. If we
 // run into one of those, I don't want to loop forever because we skipped from 1 to -1 and never hit 0.
 
-let properties = [
-    "All leaves should be at the same height", fun (vec : RRBVector<'T>) ->
-        let rec check shift (node : Node) =
+let nodeProperties = [
+    "All twigs should be at height 1", fun (shift : int) (root : RRBNode<'T>) ->
+        let rec check shift (node : RRBNode<'T>) =
             if shift <= Literals.blockSizeShift then
                 not (isEmpty node) && isTwig node
             else
-                not (isEmpty node) && isNotTwig node && node.Array.[0 .. node.NodeSize - 1] |> Array.forall (fun n -> n :? Node && check (down shift) (n :?> Node))
-        match vec with
-        | :? RRBSapling<'T> -> true // Saplings just have root and leaf, both at height 0
-        | :? RRBTree<'T> as tree ->
-            if tree.Root |> isEmpty then true
-            else check tree.Shift tree.Root
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
+                not (isEmpty node) && isNotTwig node && children node |> Seq.forall (fun n -> check (down shift) (n :?> RRBFullNode<'T>))
+        if root |> isEmpty then true
+        else check shift root
 
-    "The total number of items in all leaf nodes combined, plus the tail, should equal the vector length", fun (vec : RRBVector<'T>) ->
-        match vec with
-        | :? RRBSapling<'T> as sapling ->
-            Array.length sapling.Root + Array.length sapling.Tail = sapling.Length
-        | :? RRBTree<'T> as tree ->
-            itemCount<'T> tree.Root + Array.length tree.Tail = tree.Length
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
-
-    "Unless the vector is empty, the tail should never be empty", fun (vec : RRBVector<'T>) ->
-        match vec with
-        | :? RRBSapling<'T> as sapling ->
-            (sapling.Length = 0) = (sapling.Tail.Length = 0)
-        | :? RRBTree<'T> as tree ->
-            (tree.Length = 0) = (tree.Tail.Length = 0)
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
-
-    "The vector's length, shift, and tail offset must not be negative", fun (vec : RRBVector<'T>) ->
-        match vec with
-        | :? RRBSapling<'T> as sapling ->
-            sapling.Length >= 0 && sapling.Shift >= 0 && sapling.TailOffset >= 0
-        | :? RRBTree<'T> as tree ->
-            tree.Length >= 0 && tree.Shift >= 0 && tree.TailOffset >= 0
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
-
-    "The number of items in each node should be <= the branching factor (Literals.blockSize)", fun (vec : RRBVector<'T>) ->
-        let rec check shift (node : Node) =
-            if shift <= Literals.blockSizeShift then
-                node.NodeSize <= Literals.blockSize &&
-                node.Array.[0..node.NodeSize-1] |> Array.forall (fun n -> (n :?> 'T []).Length <= Literals.blockSize)
-            else
-                node.NodeSize <= Literals.blockSize &&
-                node.Array.[0..node.NodeSize-1] |> Array.forall (fun n -> n :?> Node |> check (down shift))
-        match vec with
-        | :? RRBSapling<'T> as sapling ->
-            sapling.Root.Length <= Literals.blockSize
-        | :? RRBTree<'T> as tree ->
-            check tree.Shift tree.Root
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
-
-    "The number of items in the tail should be <= the branching factor (Literals.blockSize)", fun (vec : RRBVector<'T>) ->
-        match vec with
-        | :? RRBSapling<'T> as sapling ->
-            sapling.Tail.Length <= Literals.blockSize
-        | :? RRBTree<'T> as tree ->
-            tree.Tail.Length <= Literals.blockSize
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
-
-    "The size table of any tree node should match the number of items its descendent leaves contain", fun (vec : RRBVector<'T>) ->
-        let rec check shift (node : Node) =
-            match node with
-            | :? RRBNode as n ->
-                let expectedSizeTable =
-                    if shift <= Literals.blockSizeShift then
-                        node.Array.[0 .. node.NodeSize - 1] |> Array.map (fun n -> (n :?> 'T[]).Length) |> Array.scan (+) 0 |> Array.skip 1
-                    else
-                        node.Array.[0 .. node.NodeSize - 1] |> Array.map (fun n -> n :?> Node |> itemCount<'T>) |> Array.scan (+) 0 |> Array.skip 1
-                n.SizeTable = expectedSizeTable
-            | _ -> true
-        match vec with
-        | :? RRBSapling<'T> as sapling -> true // Sapling roots are leaves, which don't have a size table
-        | :? RRBTree<'T> as tree ->
-            check tree.Shift tree.Root
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
-
-    "The size table of any tree node should have as many entries as its # of direct child nodes", fun (vec : RRBVector<'T>) ->
-        let rec check (node : Node) =
-            match node with
-            | :? RRBNode as n -> Array.length n.SizeTable = Array.length n.Array
-            | _ -> true
-        match vec with
-        | :? RRBSapling<'T> as sapling -> true // Sapling roots are leaves, which don't have a size table
-        | :? RRBTree<'T> as tree ->
-            check tree.Root
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
-
-    "A full node should never contain less-than-full children except as its last child", fun (vec : RRBVector<'T>) ->
-        let rec check shift seenFullParent isLastChild (node : Node) =
-            if shift <= 0 then true else
-            if shift <= Literals.blockSizeShift then
-                match node with
-                | :? RRBNode -> isLastChild || not seenFullParent // RRBNode twigs satisfy the property without need for further checking, since their children are leaves... as long as no parent was full, or as long as they were the last child
-                | _ ->
-                    if node.NodeSize <= 1 then true else
-                    node.Array.[..node.NodeSize - 2] |> Array.forall (fun n ->
-                        (n :?> 'T[]).Length = Literals.blockSize)
-            else
-                match node with
-                | :? RRBNode ->
-                    if seenFullParent && not isLastChild then
-                        false
-                    elif shift <= Literals.blockSizeShift then
-                        true // RRBNode twigs satisfy the property without need for further checking, since their children are leaves... as long as no parent was full, or as long as they were the last child
-                    else
-                        node.Children |> Seq.indexed |> Seq.forall (fun (i,n) -> check (down shift) false (i = node.NodeSize - 1) (n :?> Node))
-                | _ ->
-                    let fullCheck (n : Node) =
-                        if shift <= Literals.blockSizeShift then
-                            isFull n && n.NodeSize = Literals.blockSize
-                        else
-                            isFull n
-                    if node.NodeSize = 0 then
-                        true
-                    elif node.NodeSize = 1 then
-                        check (down shift) true true (node.Array.[0] :?> Node)
-                    else
-                        node.Array.[..node.NodeSize - 2] |> Array.forall (fun n ->
-                            fullCheck (n :?> Node) && check (down shift) true false (n :?> Node)
-                        ) && check (down shift) true true ((node.Array.[node.NodeSize - 1]) :?> Node)
-        match vec with
-        | :? RRBSapling<'T> as sapling -> true // Not applicable to saplings
-        | :? RRBTree<'T> as tree ->
-            check tree.Shift false true tree.Root
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
-
-    "The rightmost leaf node of the vector should always be full if its parent is full", fun (vec : RRBVector<'T>) ->
-        // Except under certain conditions, that is... and I want to find out when this property turns out to be false
-        // Right now, we say that this should be true as long as size >= 2*BS. But in fact, I think we need this to be
-        // ALWAYS true as long as there's anything at all in the root, which means taking this into account in the slice algorithm.
-        // Therefore, I need to tweak this property and then fix the cases where it's false.
-        // NOTE: We still allow this to be false for trees of size BS or less, because those should be tail-only trees.
-        match vec with
-        | :? RRBSapling<'T> as sapling -> true  // Saplings are allowed to break the invariant
-        | :? RRBTree<'T> as tree ->
-            let rec check (node : Node) =
-                if node |> isEmpty then
-                    false
-                elif node |> isTwig then
-                    ((node.Array.[node.NodeSize - 1]) :?> 'T[]).Length = Literals.blockSize
-                else
-                    let arr = node.Array
-                    node.NodeSize > 0 && node.Array.[node.NodeSize - 1] |> (fun n -> n :?> Node |> check)
-
-            let twig = RRBHelpers.getRightmostTwig tree.Shift tree.Root
-            match twig with
-            | :? RRBNode -> true // No need for this invariant if last twig has size table
-            | _ -> check tree.Root // TODO: Can rewrite this check to be simpler
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
-
-    "The tail offset should equal (vector length - tail length) at all times, even when the vector is empty", fun (vec : RRBVector<'T>) ->
-        match vec with
-        | :? RRBSapling<'T> as sapling ->
-            sapling.Length - sapling.Tail.Length = sapling.TailOffset
-        | :? RRBTree<'T> as tree ->
-            tree.Length - tree.Tail.Length = tree.TailOffset
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
-
-    "If the vector shift is > Literals.blockSizeShift, then the root node's length should be at least 2", fun (vec : RRBVector<'T>) -> // TODO: Move to "sometimesProperties" list
-        // Except under certain conditions, that is... and I want to find out when this property turns out to be false
-        match vec with
-        | :? RRBSapling<'T> as sapling -> true // Not applicable to saplings
-        | :? RRBTree<'T> as tree ->
-            tree.Shift <= Literals.blockSizeShift || tree.Root.NodeSize >= 2
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
-
-    "Leaf nodes' arrays should all contain items of type 'T, and all other nodes' arrays should contain nodes", fun (vec : RRBVector<'T>) ->
-        match vec with
-        | :? RRBSapling<'T> as sapling -> true  // By the definition of saplings
-        | :? RRBTree<'T> as tree ->
-            let isNode (x:obj) = (x :? Node)
-            let rec check level (node : Node) =
-                if level <= Literals.blockSizeShift then
-                    node.Array.[0 .. node.NodeSize - 1] |> Array.forall (fun (x : obj) -> x :? 'T [])
-                else
-                    node.Array.[0 .. node.NodeSize - 1] |> Array.forall isNode &&
-                    node.Array.[0 .. node.NodeSize - 1] |> Array.forall (fun n -> n :?> Node |> check (level - Literals.blockSizeShift))
-            check tree.Shift tree.Root  // No need to check the tail since it's defined as 'T []
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
-
-    "Internal nodes that are at shift > Literals.blockSizeShift should never be twigs", fun (vec : RRBVector<'T>) ->
+    "All leaves should be at height 0", fun (shift : int) (root : RRBNode<'T>) ->
         let rec check shift node =
-            if shift <= Literals.blockSizeShift then true else
-            node |> isNotTwig && node.Array.[0 .. node.NodeSize - 1] |> Array.forall (fun child -> child :? Node && child :?> Node |> check (shift - Literals.blockSizeShift))
-        match vec with
-        | :? RRBSapling<'T> as sapling -> true // Not applicable to saplings
-        | :? RRBTree<'T> as tree ->
-            if tree.Root |> isEmpty then true else check tree.Shift tree.Root
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
+            if isLeaf node then shift = 0 else not (isEmpty node) && children node |> Seq.forall (check (down shift))
+        check shift root
 
-    "The root node should be empty if (and only if) the tail offset is 0 (i.e., it's a tail-only node)", fun (vec : RRBVector<'T>) ->
-        match vec with
-        | :? RRBSapling<'T> as sapling ->
-            (sapling.Root.Length = 0) = (sapling.TailOffset = 0)
-        | :? RRBTree<'T> as tree ->
-            (tree.Root.NodeSize = 0) = (tree.TailOffset = 0)
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
+    "The number of items in each node and leaf should be <= the branching factor (Literals.blockSize)", fun (shift : int) (root : RRBNode<'T>) ->
+        let rec check shift (node : RRBNode<'T>) =
+            if shift <= 0 then
+                node.NodeSize <= Literals.blockSize
+            else
+                node.NodeSize <= Literals.blockSize &&
+                children node |> Seq.forall (check (down shift))
+        check shift root
 
-    "If vector height > 0, the root node should not be empty", fun (vec : RRBVector<'T>) ->
-        match vec with
-        | :? RRBSapling<'T> as sapling -> true // Not applicable to saplings
-        | :? RRBTree<'T> as tree ->
-            tree.Shift > 0 && tree.Root |> (not << isEmpty)
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
+    "The tree size of any node should match the total number of items its descendent leaves contain", fun (shift : int) (root : RRBNode<'T>) ->
+        let rec check shift (node : RRBNode<'T>) =
+            if shift <= Literals.blockSize
+            then node |> itemCount shift = node.TreeSize shift
+            else node |> itemCount shift = node.TreeSize shift && children node |> Seq.forall (check (down shift))
+        check shift root
 
-    "Iff vector height = 0, the tree should be a sapling", fun (vec : RRBVector<'T>) ->
-        match vec with
-        | :? RRBSapling<'T> as sapling -> sapling.Shift = 0
-        | :? RRBTree<'T> as tree -> tree.Shift > 0
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
+    "The tree size of any leaf should equal its node size", fun (shift : int) (root : RRBNode<'T>) ->
+        let rec check shift (node : RRBNode<'T>) =
+            if shift <= 0
+            then node.NodeSize = node.TreeSize shift
+            else children node |> Seq.forall (check (down shift))
+        check shift root
 
-    "If vector height = 0, the tree should have no more than blockSize * 2 total items in it", fun (vec : RRBVector<'T>) ->
-        match vec with
-        | :? RRBSapling<'T> as sapling ->
-            sapling.Length <= Literals.blockSize * 2
-        | :? RRBTree<'T> as tree -> true // Not applicable to taller trees
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
+    "The size table of any tree node should match the cumulative tree sizes of its children", fun (shift : int) (root : RRBNode<'T>) ->
+        let rec check shift (node : RRBFullNode<'T>) =
+            let sizeTable = if isRelaxed node then (node :?> RRBRelaxedNode<'T>).SizeTable else node.BuildSizeTable shift node.NodeSize (node.NodeSize - 1)
+                            |> Array.truncate node.NodeSize
+            let expectedSizeTable = children node |> Seq.map (fun child -> child.TreeSize (down shift)) |> Seq.scan (+) 0 |> Seq.skip 1 |> Array.ofSeq
+            sizeTable = expectedSizeTable
+        check shift (root :?> RRBFullNode<'T>)
 
-    "If vector height > 0, the tree should not contain any empty nodes", fun (vec : RRBVector<'T>) ->
-        match vec with
-        | :? RRBSapling<'T> as sapling -> true // Not applicable to saplings
-        | :? RRBTree<'T> as tree ->
-            let rec check shift node =
-                if shift <= Literals.blockSizeShift then node |> (not << isEmpty)
-                else node |> (not << isEmpty) && node.Array.[0 .. node.NodeSize - 1] |> Array.forall (fun n -> n :?> Node |> check (down shift))
-            check tree.Shift tree.Root
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
+    "The size table of any tree node should have as many entries as its # of direct child nodes", fun (shift : int) (root : RRBNode<'T>) ->
+        let rec check (node : RRBFullNode<'T>) =
+            if isRelaxed node
+            then Array.length (node :?> RRBRelaxedNode<'T>).SizeTable = Array.length node.Children
+            else true
+        check (root :?> RRBFullNode<'T>)
 
-    // TODO: Think about disabling this property, because in some rare circumstances, it is possible for this to happen.
-    // For example, if we remove from the head of [M M] T1 twice, then inserting into the second leaf once, we'd get a [M] TM vector (height non-0).
-    // But that's really not much of a concern, since a concatenation will deal with it.
-    "If vector height > 0, the root node should contain more than one node", fun (vec : RRBVector<'T>) ->
-        match vec with
-        | :? RRBSapling<'T> as sapling -> true
-        | :? RRBTree<'T> as tree -> tree.Root.NodeSize > 1
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
+    "A full node should never contain less-than-full children except as its last child", fun (shift : int) (root : RRBNode<'T>) ->
+        // Rules:
+        // We distinguish "completely full" and "full enough" from "not full".
+        // A "completely full" node has NO leaf descendants that are not blockSize long, so its tree size is (1 <<< shift).
+        // A "full enough" node has all but its last child be completely full, and its last child can be anything
+        // A full node at height 1, which is NOT the last child of its parent, should contain nothing but full leaves exc
 
-    "If vector length <= (Literals.blockSize * 2), the root node should contain more than one node", fun (vec : RRBVector<'T>) ->
-        match vec with
-        | :? RRBSapling<'T> as sapling -> sapling.Length <= Literals.blockSize * 2
-        | :? RRBTree<'T> as tree -> tree.Length <= Literals.blockSize * 2 || tree.Root.NodeSize > 1
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
+        // If we wrote from the ground up, then we'd keep track of a status called "completely full" and/or "full enough" (and a third, "not full")
+        // A leaf would be either completely full or not full. A node would be completely full if all its children were completely full. If all its
+        // children but the last were completely full but its last child was full enough or not full, then that node would be full enough. Otherwise,
+        // the node would be not full. Yes, that includes if any child besides the last child is "full enough": that would grant a status of "not full"
+        // to the parent.
+        let rec fullness shift (node : RRBNode<'T>) =
+            if shift <= 0 then
+                if node.NodeSize = Literals.blockSize then (CompletelyFull, true) else (NotFull, true)
+            else
+                let c = children node |> Seq.map (fullness (down shift)) |> List.ofSeq
+                let allButLast = c |> Seq.take (node.NodeSize - 1)
+                let last = c |> Seq.skip (node.NodeSize - 1) |> Seq.head
+                let fullnessResult =
+                    if allButLast |> Seq.forall (fst >> (=) CompletelyFull) then
+                        if (fst last) = CompletelyFull then CompletelyFull else FullEnough
+                    else
+                        NotFull
+                let isValid =
+                    (c |> Seq.forall snd) &&
+                    if isFull node then fullnessResult <> NotFull
+                    else true
+                (fullnessResult, isValid)
+        fullness shift root |> snd
 
-    "No RRBNode should contain a \"full\" size table. If the size table was full, it should have been turned into a FullNode.", fun (vec : RRBVector<'T>) ->
-        let rec check shift (node : Node) =
-            if shift <= 0 then true else // No RRBNodes at leaf level
-            match node with
-            | :? RRBNode as n ->
-                if shift <= Literals.blockSizeShift then
-                    not (RRBMath.isSizeTableFullAtShift shift n.SizeTable)  // No need to descend further as there are no RRBNodes at the leaf level
-                else
-                    not (RRBMath.isSizeTableFullAtShift shift n.SizeTable) && n.Array |> Array.forall (fun n -> n :?> Node |> check (down shift))
-            | _ ->
-                if shift <= Literals.blockSizeShift then
-                    true  // No need to descend further as there are no RRBNodes at the leaf level
-                else
-                    node.Array.[0 .. node.NodeSize - 1] |> Array.forall (fun n -> n :?> Node |> check (down shift))
-        match vec with
-        | :? RRBSapling<'T> as sapling -> true // Not applicable to saplings
-        | :? RRBTree<'T> as tree ->
-            check tree.Shift tree.Root
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
+    "All nodes at shift 0 should be leaves", fun (shift : int) (root : RRBNode<'T>) ->
+        let rec check shift node =
+            if shift <= 0 then node |> isLeaf else children node |> Seq.forall (check (down shift))
+        check shift root
 
-    "If the root node is empty, the shift is 0", fun (vec : RRBVector<'T>) ->
-        // Note that the converse is *NOT* true: if shift is 0, it could be a root+tail vector
-        match vec with
-        | :? RRBSapling<'T> as sapling -> true
-        | :? RRBTree<'T> as tree -> not (tree.Root |> isEmpty)
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
+    "Internal nodes that are at shift > 0 should never be leaves", fun (shift : int) (root : RRBNode<'T>) ->
+        let rec check shift node =
+            if shift > 0 then node |> isNode && children node |> Seq.forall (check (down shift)) else true
+        (* if root |> isEmpty then true else *)
+        check shift root
 
-    "The shift of a vector should always be a multiple of Literals.blockSizeShift", fun (vec : RRBVector<'T>) ->
-        match vec with
-        | :? RRBSapling<'T> as sapling ->
-            sapling.Shift % Literals.blockSizeShift = 0
-        | :? RRBTree<'T> as tree ->
-            tree.Shift % Literals.blockSizeShift = 0
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
+    "A tree should not contain any empty nodes", fun (shift : int) (root : RRBNode<'T>) ->
+        let rec check shift node =
+            node |> (not << isEmpty) &&
+            if shift <= 0 then true else children node |> Seq.forall (check (down shift))
+        check shift root
 
-    "The shift of a vector should always be the height from the root to the leaves, multiplied by Literals.blockSizeShift", fun (vec : RRBVector<'T>) ->
-        match vec with
-        | :? RRBSapling<'T> as sapling -> sapling.Shift = 0
-        | :? RRBTree<'T> as tree ->
-            let rec height acc (node : Node) =
-                if isEmpty node || isTwig node then acc else node |> RRBHelpers.getChildNode 0 |> height (acc+1)
-            if tree.Root |> isEmpty then
-                true // We test this condition in the "If the root node is empty ..." check above, not here.
-            else // Non-empty root, so we can meaningfully check the height of the tree
-                (height 1 tree.Root) * Literals.blockSizeShift = tree.Shift
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
+    "No RRBRelaxedNode should contain a \"full\" size table. If the size table was full, it should have been turned into an RRBFullNode.", fun (shift : int) (root : RRBNode<'T>) ->
+        let rec check shift (node : RRBNode<'T>) =
+            if shift <= 0 then true else
+            let nodeValid = if isRelaxed node then not (isSizeTableFullAtShift shift (node :?> RRBRelaxedNode<'T>).SizeTable node.NodeSize) else true
+            nodeValid && children node |> Seq.forall (check (down shift))
+        check shift root
 
-    // TODO: Decide whether these two properties are going to be true invariants applying everywhere (e.g., some splits and merges might affect these)
-    "ExpandedNodes (and ExpandedRRBNodes) should not appear in a tree whose root is not an expanded node variant", fun (vec : RRBVector<'T>) ->
-        let rec check shift (node : Node) =
-            match node with
-            | :? ExpandedNode -> false
-            | :? ExpandedRRBNode -> false
-            | _ ->
-                if shift <= Literals.blockSizeShift then true
-                else node.IterChildren() |> Seq.cast<Node> |> Seq.forall (check (RRBMath.down shift))
-        match vec with
-        | :? RRBSapling<'T> -> true
-        | :? RRBTree<'T> as tree -> check tree.Shift tree.Root
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
+    "The shift of a vector should always be a multiple of Literals.blockSizeShift", fun (shift : int) (root : RRBNode<'T>) ->
+        shift % Literals.blockSizeShift = 0
 
-    "If a tree's root is an expanded Node variant, its right spine should contain expanded nodes but nothing else should", fun (vec : RRBVector<'T>) ->
-        let isExpanded (child : Node) = (child :? ExpandedNode) || (child :? ExpandedRRBNode)
+    "The shift of a vector should always be the height from the root to the leaves, multiplied by Literals.blockSizeShift", fun (shift : int) (root : RRBNode<'T>) ->
+        let rec height acc (node : RRBNode<'T>) =
+            if isLeaf node then acc else (node :?> RRBFullNode<'T>).FirstChild |> height (acc+1)
+        (height 0 root) * Literals.blockSizeShift = shift
 
-        let rec check shift expandedDescendantsAllowed (node : Node) =
-            match node with
-            | :? ExpandedNode
-            | :? ExpandedRRBNode ->
-                let children = node.Children
-                if shift <= Literals.blockSizeShift then
-                    expandedDescendantsAllowed
-                else
-                    expandedDescendantsAllowed &&
-                    children  |> Seq.take (node.NodeSize - 1) |> Seq.cast<Node> |> Seq.forall (not << isExpanded) &&
-                    (children |> Array.last) :?> Node |> isExpanded &&
-                    (children |> Array.last) :?> Node |> check (RRBMath.down shift) expandedDescendantsAllowed
-            | _ ->
-                if shift <= Literals.blockSizeShift then true
-                else
-                    node.IterChildren()
-                    |> Seq.cast<Node>
-                    |> Seq.forall (fun child ->
-                        not (isExpanded child) &&
-                        check (RRBMath.down shift) false child)
-        match vec with
-        | :? RRBSapling<'T> -> true
-        | :? RRBTree<'T> as tree -> check tree.Shift true tree.Root
-        | _ -> failwith "Unknown RRBVector subclass: property checks need to be taught about this variant"
+    "ExpandedNodes (and ExpandedRRBNodes) should not appear in a tree whose root is not an expanded node variant", fun (shift : int) (root : RRBNode<'T>) ->
+        let isExpanded (child : RRBNode<'T>) = (child :? RRBExpandedFullNode<'T>) || (child :? RRBExpandedRelaxedNode<'T>)
+        let rec check shift (node : RRBNode<'T>) =
+            if shift <= 0 then true
+            elif isExpanded node then false
+            else children node |> Seq.forall (check (down shift))
+        if isExpanded root then true else check shift root
+
+    "If a tree's root is an expanded Node variant, its right spine should contain expanded nodes but nothing else should", fun (shift : int) (root : RRBNode<'T>) ->
+        let isExpanded (child : RRBNode<'T>) = (child :? RRBExpandedFullNode<'T>) || (child :? RRBExpandedRelaxedNode<'T>)
+        let rec check shift isLast (node : RRBNode<'T>) =
+            if shift <= 0 then true
+            elif isExpanded node && not isLast then false
+            elif isLast && not (isExpanded node) then false
+            else
+                let checkResultForAllButLast = children node |> Seq.take (node.NodeSize - 1) |> Seq.forall (check (down shift) false)
+                let checkResultForLastChild = children node |> Seq.skip (node.NodeSize - 1) |> Seq.head |> check (down shift) isLast
+                checkResultForAllButLast && checkResultForLastChild
+        if isExpanded root then check shift true root else true
+
+    "ExpandedNodes (and ExpandedRRBNodes) should have exactly as much data in their children & size tables as their node size indicates", fun (shift : int) (root : RRBNode<'T>) ->
+        let isExpanded (child : RRBNode<'T>) = (child :? RRBExpandedFullNode<'T>) || (child :? RRBExpandedRelaxedNode<'T>)
+        let rec check shift (node : RRBNode<'T>) =
+            if shift <= 0 then true else
+            if isExpanded node then
+                let sizeTableClean =
+                    if isRelaxed node then
+                        (node :?> RRBExpandedRelaxedNode<'T>).SizeTable |> Seq.skip node.NodeSize |> Seq.forall ((=) 0) &&
+                        (node :?> RRBExpandedRelaxedNode<'T>).SizeTable |> Seq.take node.NodeSize |> Seq.forall ((<>) 0)
+                    else true
+                let childrenArrayClean =
+                    if isRelaxed node then
+                        (node :?> RRBExpandedRelaxedNode<'T>).Children |> Seq.skip node.NodeSize |> Seq.forall isNull &&
+                        (node :?> RRBExpandedRelaxedNode<'T>).Children |> Seq.take node.NodeSize |> Seq.forall (not << isNull)
+                    else
+                        (node :?> RRBExpandedFullNode<'T>).Children |> Seq.skip node.NodeSize |> Seq.forall isNull &&
+                        (node :?> RRBExpandedFullNode<'T>).Children |> Seq.take node.NodeSize |> Seq.forall (not << isNull)
+                sizeTableClean && childrenArrayClean && children node |> Seq.forall (check (down shift))
+            else
+                children node |> Seq.forall (check (down shift))
+        check shift root
 ]
+
+
+let vectorPropertiesPersistent = [
+    "The total number of items in all leaf nodes combined, plus the tail, should equal the vector length", fun (vec : RRBPersistentVector<'T>) ->
+        let rootSize = itemCount vec.Shift vec.Root
+        let tailLen = vec.Tail.Length
+        rootSize + tailLen = vec.Length
+
+    "Unless the vector is empty, the tail should never be empty", fun (vec : RRBPersistentVector<'T>) ->
+        let tailLen = vec.Tail.Length
+        if vec.Length > 0 then tailLen > 0 else tailLen = 0
+
+    "The vector's length, shift, and tail offset must not be negative", fun (vec : RRBPersistentVector<'T>) ->
+        vec.Length >= 0 && vec.Shift >= 0 && vec.TailOffset >= 0
+
+    "The number of items in the tail should be <= the branching factor (Literals.blockSize)", fun (vec : RRBPersistentVector<'T>) ->
+        let tailLen = vec.Tail.Length
+        tailLen <= Literals.blockSize
+
+    "The rightmost leaf node of the vector should always be full if its parent is full", fun (vec : RRBPersistentVector<'T>) -> // A true vector property because only by calling vector methods can it be achieved
+        if vec.TailOffset = 0 then true else
+        let rec getRightTwig shift (node : RRBFullNode<'T>) =
+            if shift <= Literals.blockSizeShift then node
+            else (node.LastChild :?> RRBFullNode<'T>) |> getRightTwig (RRBMath.down shift)
+        let twig = getRightTwig vec.Shift (vec.Root :?> RRBFullNode<'T>)
+        if isFull twig then twig.LastChild.NodeSize = Literals.blockSize else true
+
+    "If the vector shift is > Literals.blockSizeShift, then the root node's length should be at least 2", fun (vec : RRBPersistentVector<'T>) -> // A true vector property because only by calling vector methods can it be achieved
+        if vec.Shift > Literals.blockSizeShift then vec.Root.NodeSize >= 2 else true
+
+    "The tail offset should equal (vector length - tail length) at all times, even when the vector is empty", fun (vec : RRBPersistentVector<'T>) ->
+        let tailLen = vec.Tail.Length
+        vec.TailOffset = vec.Length - tailLen
+
+    "The tail offset should equal (root.TreeSize this.Shift) at all times, unless the tail offset is 0", fun (vec : RRBPersistentVector<'T>) ->
+        if vec.TailOffset = 0 then true else vec.TailOffset = vec.Root.TreeSize vec.Shift
+
+    "The root node should be empty if (and only if) the tail offset is 0 (i.e., it's a tail-only node)", fun (vec : RRBPersistentVector<'T>) ->
+        (vec.TailOffset = 0) = (vec.Root.NodeSize = 0)
+
+    "If tail offset = 0, the vector length should be blockSize or less", fun (vec : RRBPersistentVector<'T>) ->
+        if vec.TailOffset > 0 then true else vec.Length <= Literals.blockSize
+
+    "The shift of a vector should always be a multiple of Literals.blockSizeShift", fun (vec : RRBPersistentVector<'T>) ->
+        vec.Shift % Literals.blockSizeShift = 0
+
+    "The shift of a vector should always be the height from the root to the leaves, multiplied by Literals.blockSizeShift", fun (vec : RRBPersistentVector<'T>) ->
+        vec.Shift = (height vec.Root) * Literals.blockSizeShift
+
+    "If a tree is Persistent, its root should NOT be an Expanded node variant", fun (vec : RRBPersistentVector<'T>) ->
+        let isExpanded (node : RRBNode<'T>) = (node :? RRBExpandedFullNode<'T>) || (node :? RRBExpandedRelaxedNode<'T>)
+        not (isExpanded vec.Root)
+
+    // The check for the tree's spine, etc., is already handled in the node properties
+]
+
+let vectorPropertiesTransient = [
+    "The total number of items in all leaf nodes combined, plus the tail, should equal the vector length", fun (vec : RRBTransientVector<'T>) ->
+        let rootSize = itemCount vec.Shift vec.Root
+        let tailLen = vec.Length - vec.TailOffset
+        rootSize + tailLen = vec.Length
+
+    "Transients' tails should be full at all times", fun (vec : RRBTransientVector<'T>) ->
+        vec.Tail.Length = Literals.blockSize
+
+    "Transients' tails should have exactly (vec.Length - vec.TailOffset) real items, and the rest should equal Unchecked.defaultof<'T>", fun (vec : RRBTransientVector<'T>) ->
+        let tailLen = vec.Length - vec.TailOffset
+        let mutable result = true
+        for i = tailLen to Literals.blockSize - 1 do
+            result <- result && (vec.Tail.[i] = Unchecked.defaultof<'T>)
+        result
+
+    "Unless the vector is empty, the tail should never be empty", fun (vec : RRBTransientVector<'T>) ->
+        let tailLen = vec.Length - vec.TailOffset
+        if vec.Length > 0 then tailLen > 0 else tailLen = 0
+
+    "The vector's length, shift, and tail offset must not be negative", fun (vec : RRBTransientVector<'T>) ->
+        vec.Length >= 0 && vec.Shift >= 0 && vec.TailOffset >= 0
+
+    "The number of items in the tail should be <= the branching factor (Literals.blockSize)", fun (vec : RRBTransientVector<'T>) ->
+        let tailLen = vec.Length - vec.TailOffset
+        tailLen <= Literals.blockSize
+
+    "The rightmost leaf node of the vector should always be full if its parent is full", fun (vec : RRBTransientVector<'T>) -> // A true vector property because only by calling vector methods can it be achieved
+        if vec.TailOffset = 0 then true else
+        let rec getRightTwig shift (node : RRBFullNode<'T>) =
+            if shift <= Literals.blockSizeShift then node
+            else (node.LastChild :?> RRBFullNode<'T>) |> getRightTwig (RRBMath.down shift)
+        let twig = getRightTwig vec.Shift (vec.Root :?> RRBFullNode<'T>)
+        if isFull twig then twig.LastChild.NodeSize = Literals.blockSize else true
+
+    "If the vector shift is > Literals.blockSizeShift, then the root node's length should be at least 2", fun (vec : RRBTransientVector<'T>) -> // A true vector property because only by calling vector methods can it be achieved
+        if vec.Shift > Literals.blockSizeShift then vec.Root.NodeSize >= 2 else true
+
+    "The tail offset should equal (vector length - tail length) at all times, even when the vector is empty", fun (vec : RRBTransientVector<'T>) ->
+        let tailLen = vec.Length - vec.TailOffset
+        vec.TailOffset = vec.Length - tailLen
+
+    "The tail offset should equal (root.TreeSize this.Shift) at all times, unless the tail offset is 0", fun (vec : RRBTransientVector<'T>) ->
+        if vec.TailOffset = 0 then true else vec.TailOffset = vec.Root.TreeSize vec.Shift
+
+    "The root node should be empty if (and only if) the tail offset is 0 (i.e., it's a tail-only node)", fun (vec : RRBTransientVector<'T>) ->
+        (vec.TailOffset = 0) = (vec.Root.NodeSize = 0)
+
+    "If tail offset = 0, the vector length should be blockSize or less", fun (vec : RRBTransientVector<'T>) ->
+        if vec.TailOffset > 0 then true else vec.Length <= Literals.blockSize
+
+    "The shift of a vector should always be a multiple of Literals.blockSizeShift", fun (vec : RRBTransientVector<'T>) ->
+        vec.Shift % Literals.blockSizeShift = 0
+
+    "The shift of a vector should always be the height from the root to the leaves, multiplied by Literals.blockSizeShift", fun (vec : RRBTransientVector<'T>) ->
+        vec.Shift = (height vec.Root) * Literals.blockSizeShift
+
+    "If a tree is Transient, its root should be an Expanded node variant", fun (vec : RRBTransientVector<'T>) ->
+        let isExpanded (node : RRBNode<'T>) = (node :? RRBExpandedFullNode<'T>) || (node :? RRBExpandedRelaxedNode<'T>)
+        isExpanded vec.Root
+
+    // The check for the tree's spine, etc., is already handled in the node properties
+]
+
+
+
+type PropResult = string list
+
+let checkNodeProperty name pred shift root =
+    try
+        // logger.debug(eventX "Checking property {name} on root {root}" >> setField "name" name >> setField "root" (sprintf "%A" root))
+        if pred shift root then [] else [name]
+    with
+    | :? System.InvalidCastException ->
+        ["Invalid cast while checking " + name]
+    | :? System.IndexOutOfRangeException ->
+        ["Index out of range while checking " + name]
+
+let checkVectorProperty name pred vec =
+    try
+        // logger.debug(eventX "Checking property {name} on vector {vec}" >> setField "name" name >> setField "vec" (sprintf "%A" vec))
+        if pred vec then [] else [name]
+    with
+    | :? System.InvalidCastException ->
+        ["Invalid cast while checking " + name]
+    | :? System.IndexOutOfRangeException ->
+        ["Index out of range while checking " + name]
+
+// TODO: Can probably use List.collect instead of List.fold combine
+let combine r1 r2 = (r1 @ r2)
+
+let getNodePropertyResults shift root =
+    nodeProperties |> List.map (fun (name,pred) -> checkNodeProperty name pred shift root) |> List.fold combine []
+
+let checkNodeProperties shift root label =
+    let result = getNodePropertyResults shift root
+    match result with
+    | [] -> ()
+    | errors -> Expecto.Tests.failtestf "%s with shift=%d and root=%A\nfailed the following RRBVector invariants:\n%A" label shift root errors
+
+let checkNodePropertiesSimple shift root = checkNodeProperties shift root "Node"
+
+let getVecPropertyResults props vec =
+    props |> List.map (fun (name,pred) -> checkVectorProperty name pred vec) |> List.fold combine []
+
+let getVecAndNodePropertyResults props shift (root : RRBNode<'T>) vec =
+    let vecProps = getVecPropertyResults props vec
+    let nodeProps = if root.NodeSize > 0 then getNodePropertyResults shift root else []
+    vecProps @ nodeProps
+
+let getAllPropertyResults (vec : RRBVector<'T>) =
+    match vec with
+    | :? RRBPersistentVector<'T> as v -> getVecAndNodePropertyResults vectorPropertiesPersistent v.Shift v.Root v
+    | :? RRBTransientVector<'T>  as v -> getVecAndNodePropertyResults vectorPropertiesTransient v.Shift v.Root v
+    | _ -> failwith "Unknown vector type"
+
+let checkAllProperties (vec : RRBVector<'T>) label =
+    let result = getAllPropertyResults vec
+    match result with
+    | [] -> ()
+    | errors -> Expecto.Tests.failtestf "%s %A\nfailed the following RRBVector invariants:\n%A" label vec errors
+
+// Convenience function for tests written against the previous API
+let checkProperties vec label = checkAllProperties vec label
+let checkPropertiesSimple vec = checkAllProperties vec "Vector"
 
 // Other properties to add at some point:
 // The number of extra steps we have to take in any node shall be no more than "e", where e is usually 2.
@@ -374,27 +386,3 @@ let properties = [
 //   If a vector has a tail of length 1, popping one item from it will produce a vector with a tail of length Literals.blockSize.
 // Both of those will be tested only if the condition is true.
 // TODO: Might want more conditional properties as well.
-
-type PropResult = string list
-
-let checkProperty name pred vec =
-    try
-        if pred vec then [] else [name]
-    with
-    | :? System.InvalidCastException ->
-        ["Invalid cast while checking " + name]
-    | :? System.IndexOutOfRangeException ->
-        ["Index out of range while checking " + name]
-
-let combine r1 r2 = (r1 @ r2)
-
-let getPropertyResults vec =
-    properties |> List.map (fun (name,pred) -> checkProperty name pred vec) |> List.fold combine []
-
-let checkProperties vec label =
-    let result = getPropertyResults vec
-    match result with
-    | [] -> ()
-    | errors -> Expecto.Tests.failtestf "%s %A\nRepr: %s\nfailed the following RRBVector invariants:\n%A" label vec (RRBVecGen.vecToTreeReprStr vec) errors
-
-let checkPropertiesSimple vec = checkProperties vec "Vector"
