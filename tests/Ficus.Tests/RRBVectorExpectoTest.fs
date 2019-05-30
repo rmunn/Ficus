@@ -1278,6 +1278,7 @@ let nodeVecGenerationTests =
 
 let longRunningTests =
   testList "Long-running tests, skipped by default" [
+(*
     // joining two unrelated vectors is equivalent to array-appending their array equivalents passed in 00:03:42.0410000
     // Skipped because it takes too long
     ptestProp (*694921142, 296602124*) "joining two unrelated vectors is equivalent to array-appending their array equivalents" <| fun (v1 : RRBVector<int>) (v2 : RRBVector<int>) ->
@@ -1319,7 +1320,7 @@ let longRunningTests =
         Expect.equal (joined' |> RRBVector.toArray) (Seq.append s2 s1 |> Array.ofSeq) "Opposite-joined vectors did not equal equivalent appended seqs"
 
     // TODO: Decide whether we need all three of those
-
+*)
     // split+join recreates same vector passed in 00:05:44.0870000
     ftestProp (704273653, 296602124) "split+join recreates same vector" <| fun (vec : RRBVector<int>) (i : int) ->
         let i = (abs i) % (RRBVector.length vec + 1)
@@ -1327,7 +1328,7 @@ let longRunningTests =
         let vec' = RRBVector.append vL vR
         RRBVectorProps.checkProperties vec' "Joined vector"
         Expect.vecEqual vec' vec "Vector halves after split, when put back together, did not equal original vector"
-
+(*
     // split+reverse+join recreates reverse vector passed in 00:07:54.1070000
     ftestProp (708756850, 296602124) "split+reverse+join recreates reverse vector" <| fun (vec : RRBVector<int>) (i : int) ->
         let i = (abs i) % (RRBVector.length vec + 1)
@@ -1438,7 +1439,7 @@ let longRunningTests =
         let joined = RRBVector.append vL' vR
         RRBVectorProps.checkProperties joined "Joined vector"
         Expect.vecEqual joined vec' "Split + push left + joined vectors did not equal insertion into original vector"
-
+*)
   ]
 (* Operational tests not yet ported to new API
 open RRBVectorMoreCommands.ParameterizedVecCommands
@@ -1652,6 +1653,7 @@ let fullSaplingTests = mkTestSuite "Tests on full saplings" ({ 1 .. Literals.blo
 let fullSaplingPlusOneTests = mkTestSuite "Tests on full saplings plus one" ({ 0 .. Literals.blockSize * 2} |> RRBVector.ofSeq)
 let threeLevelVectorTests = mkTestSuite "Tests on three-level vector" (RRBVecGen.treeReprStrToVec "[[M*M]*M]*3 TM/2")
 
+(*
 [<Tests>]
 let tests =
   testList "All tests" [
@@ -1687,3 +1689,8 @@ let tests =
 
     // perfTests
   ]
+*)
+
+[<Tests>]
+let tests =
+  testList "Just a few" [longRunningTests]
