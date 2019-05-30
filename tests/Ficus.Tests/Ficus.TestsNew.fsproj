@@ -14,6 +14,7 @@
     <Compile Include="RRBVecGen.fs" />
     <Compile Include="RRBVectorProps.fs" />
     <Compile Include="RRBVectorBetterNodesExpectoTest.fs" />
+    <Compile Include="RRBVectorExpectoTest.fs" />
     <Compile Include="Main2.fs" />
   </ItemGroup>
   <Import Project="..\..\netfx.props" />
