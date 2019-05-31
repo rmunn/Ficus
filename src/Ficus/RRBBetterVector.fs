@@ -199,10 +199,9 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
 
     // abstract member Take : int -> RRBVector<'T>
     override this.Take idx =
-        this.EnsureValidIndexLengthAllowed idx  // TODO: Allow taking more than the total items in the vector, which just means returning the vector unchanged
-        if idx = this.Count then
+        if idx >= this.Count then
             this :> RRBVector<'T>
-        elif idx = 0 then  // TODO: Allow taking negative items, which is like Skip (negative count + length), i.e. Take -5 will return the last five items of the list
+        elif idx <= 0 then  // TODO: Allow taking negative items, which is like Skip (negative count + length), i.e. Take -5 will return the last five items of the list
             this.Empty()
         elif idx = this.TailOffset then
             // Dropping the tail and nothing else, so we promote a new tail
@@ -219,10 +218,9 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
 
     // abstract member Skip : int -> RRBVector<'T>
     override this.Skip idx =
-        this.EnsureValidIndexLengthAllowed idx
-        if idx = 0 then
+        if idx <= 0 then
             this :> RRBVector<'T>
-        elif idx = this.Count then
+        elif idx >= this.Count then
             this.Empty()
         elif idx = this.TailOffset then
             // Splitting exactly at the tail means we'll have an empty root
@@ -589,10 +587,9 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
 
     // abstract member Take : int -> RRBVector<'T>
     override this.Take idx =
-        this.EnsureValidIndexLengthAllowed idx  // TODO: Allow taking more than the total items in the vector, which just means returning the vector unchanged
-        if idx = this.Count then
+        if idx >= this.Count then
             this :> RRBVector<'T>
-        elif idx = 0 then  // TODO: Allow taking negative items, which is like Skip (negative count + length), i.e. Take -5 will return the last five items of the list
+        elif idx <= 0 then  // TODO: Allow taking negative items, which is like Skip (negative count + length), i.e. Take -5 will return the last five items of the list
             this.Empty()
         elif idx = this.TailOffset then
             // Dropping the tail and nothing else, so we promote a new tail
@@ -621,10 +618,9 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
 
     // abstract member Skip : int -> RRBVector<'T>
     override this.Skip idx =
-        this.EnsureValidIndexLengthAllowed idx
-        if idx = 0 then
+        if idx <= 0 then
             this :> RRBVector<'T>
-        elif idx = this.Count then
+        elif idx >= this.Count then
             this.Empty()
         elif idx = this.TailOffset then
             // Splitting exactly at the tail means we'll have an empty root
