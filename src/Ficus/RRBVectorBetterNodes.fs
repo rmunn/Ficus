@@ -754,7 +754,7 @@ PrependNChildrenS n seq<ch> seq<sz>
                 this.RemoveChild owner shift localIdx
             else
                 this.UpdateChildSRel owner shift localIdx child' -1
-        if shouldCheckForRebalancing && false then  // TODO: Replace "false" with something that checks the need for a rebalance. TODO: Write that function
+        if shouldCheckForRebalancing && node'.NeedsRebalance shift then
             item, (node' :?> RRBFullNode<'T>).Rebalance owner shift
             // TODO: Decide whether we need to deal with expanding the node here or not.
         else

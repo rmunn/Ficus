@@ -351,10 +351,10 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
 
     // abstract member Remove : int -> RRBVector<'T>
     override this.Remove idx =
-        this.RemoveImpl idx false
+        this.RemoveImpl idx true
 
     member internal this.RemoveWithoutRebalance idx =
-        this.RemoveImpl idx true
+        this.RemoveImpl idx false
 
     member internal this.RemoveImpl idx shouldCheckForRebalancing =
         this.EnsureValidIndex idx
@@ -857,10 +857,10 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
 
     // abstract member Remove : int -> RRBVector<'T>
     override this.Remove idx =
-        this.RemoveImpl idx false
+        this.RemoveImpl idx true
 
     member internal this.RemoveWithoutRebalance idx =
-        this.RemoveImpl idx true
+        this.RemoveImpl idx false
 
     member internal this.RemoveImpl idx shouldCheckForRebalancing =
         this.EnsureValidIndex idx
