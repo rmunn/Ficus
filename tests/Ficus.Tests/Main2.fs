@@ -172,8 +172,9 @@ let main argv =
         printfn "%s - %A - %s - %s" name.Name version releaseDate githash
     if argv |> Array.contains "--debug-vscode" then
         printfn "Debugging"
-        debugSplitTest()
-        0
+        runTestsWithArgs defaultConfig (argv |> Array.except ["--debug-vscode"]) <| testList "Nodes and vectors" [ RRBVectorBetterNodesExpectoTest.tests; RRBVectorExpectoTest.tests ]
+        // debugSplitTest2()
+        // 0
     elif argv |> Array.contains "--stress" || argv |> Array.contains "--fscheck-only" then
         printfn "Running only FsCheck tests%s" (if argv |> Array.contains "--stress" then " for stress testing" else "")
         let noop = TestList([], Pending)
@@ -199,5 +200,5 @@ let main argv =
         let config = { defaultConfig with filter = filter }
         runTestsWithArgs config (argv |> Array.filter ((<>) "--fscheck-only")) RRBVectorBetterNodesExpectoTest.tests
     else
-        runTestsWithArgs defaultConfig argv RRBVectorBetterNodesExpectoTest.tests
+        runTestsWithArgs defaultConfig argv <| testList "Nodes and vectors" [ RRBVectorBetterNodesExpectoTest.tests; RRBVectorExpectoTest.tests ]
         // runTestsWithArgs defaultConfig argv experimentalTests
