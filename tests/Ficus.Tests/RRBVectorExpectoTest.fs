@@ -133,21 +133,9 @@ let doSplitTest vec i =
     let repr = RRBVecGen.vecToTreeReprStr vec
     RRBVectorProps.checkProperties vec "Original vector"
     let vL, vR = vec |> RRBVector.split i
-    logger.debug (
-        eventX "After {cmd}, vec1 was {vec} ({rep})"
-        >> setField "cmd" ("split test")
-        >> setField "vec" (sprintf "%A" vL)
-        // >> setField "rep" (RRBVecGen.vecToTreeReprStr vL)
-    )
-    logger.debug (
-        eventX "After {cmd}, vec2 was {vec}"
-        >> setField "cmd" ("split test")
-        >> setField "vec" (sprintf "%A" vR)
-        // >> setField "rep" (RRBVecGen.vecToTreeReprStr vR)
-    )
     RRBVectorProps.checkProperties vL (sprintf "Original vector was %A, split at %d\nRepr: %s\nLeft half of split" vec i repr)
     RRBVectorProps.checkProperties vR (sprintf "Original vector was %A, split at %d\nRepr: %s\nRight half of split" vec i repr)
-    doJoinTest vL vR
+    // doJoinTest vL vR  // Nope; if we want to do a join test as well, we'll do it explicitly in the unit test
     vL, vR
 
 let splitTest vec i =
@@ -1665,7 +1653,6 @@ let fullSaplingTests = mkTestSuite "Tests on full saplings" ({ 1 .. Literals.blo
 let fullSaplingPlusOneTests = mkTestSuite "Tests on full saplings plus one" ({ 0 .. Literals.blockSize * 2} |> RRBVector.ofSeq)
 let threeLevelVectorTests = mkTestSuite "Tests on three-level vector" (RRBVecGen.treeReprStrToVec "[[M*M]*M]*3 TM/2")
 
-(*
 [<Tests>]
 let tests =
   testList "All tests" [
@@ -1682,7 +1669,7 @@ let tests =
     mergeTests
     // apiTests
 
-    longRunningTests
+    // longRunningTests
 
     transientResidueTests
     moreTransientResidueTests
@@ -1701,8 +1688,7 @@ let tests =
 
     // perfTests
   ]
-*)
 
-[<Tests>]
-let tests =
-  testList "Just a few" [longRunningTests]
+// [<Tests>]
+// let tests =
+//   testList "Just a few" [longRunningTests]

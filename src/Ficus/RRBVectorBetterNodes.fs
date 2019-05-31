@@ -263,7 +263,8 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
         if shift <= Literals.blockSizeShift then
             this.UpdateChildSRel owner shift (this.NodeSize - 1) newLeaf sizeDiff
         else
-            (this.LastChild :?> RRBFullNode<'T>).ReplaceLastLeaf owner (down shift) newLeaf sizeDiff
+            let lastChild' = (this.LastChild :?> RRBFullNode<'T>).ReplaceLastLeaf owner (down shift) newLeaf sizeDiff
+            this.UpdateChildSRel owner shift (this.NodeSize - 1) lastChild' sizeDiff
 
     abstract member ToRelaxedNodeIfNeeded : int -> RRBNode<'T>
     default this.ToRelaxedNodeIfNeeded shift =
@@ -738,7 +739,7 @@ PrependNChildrenS n seq<ch> seq<sz>
                 | _ ->
                     // No room left or right, so split
                     let newNode = this.UpdateChildSAbs owner shift localIdx newLeftChild (newLeftChild.TreeSize (down shift)) :?> RRBFullNode<'T>
-                    let newLeft, newRight = newNode.InsertAndSplitNode owner shift localIdx newRightChild
+                    let newLeft, newRight = newNode.InsertAndSplitNode owner shift (localIdx + 1) newRightChild
                     SplitNode (newLeft, newRight)
 
     override this.GetTreeItem shift treeIdx =
@@ -1074,6 +1075,7 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
     // TODO: Write "member this.NewParent" for other types of nodes (because expanded nodes will want to create an expanded parent)
     // TODO: Nope, we've done that but now we need to **change the API** because "this" might not always be the left node
     // So instead, the API needs to become "siblings" as an array instead of "rightSibling"
+    // NOTE: "shift" in NewParent is the shift of the *siblings*; the new parent will be at (up shift)
     abstract member NewParent : OwnerToken -> int -> RRBNode<'T> [] -> RRBNode<'T>
     default this.NewParent owner shift siblings =
         RRBNode<'T>.MkNode owner (up shift) siblings

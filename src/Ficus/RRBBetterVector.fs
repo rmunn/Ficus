@@ -85,8 +85,8 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
         RRBTransientVector<'T>(this.Count, this.Shift, newRoot, newTail, this.TailOffset)
 
     member internal this.AdjustTree() =
-        // let v : RRBVector<'T> = this.ShiftNodesFromTailIfNeeded()
-        (this :?> RRBPersistentVector<'T>).ShortenTree()
+        let v : RRBVector<'T> = this.ShiftNodesFromTailIfNeeded()
+        (v :?> RRBPersistentVector<'T>).ShortenTree()
 
     member internal this.ShortenTree() =
         if this.Shift <= Literals.blockSizeShift then this :> RRBVector<'T>
@@ -122,7 +122,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                 RRBPersistentVector<'T>(this.Count, this.Shift, newRoot, newTail, this.TailOffset - removedLeaf.NodeSize).ShiftNodesFromTailIfNeeded()
             else
                 let itemsToShift, newTail = this.Tail |> Array.splitAt shiftCount
-                let newLeaf = RRBLeafNode<'T>(this.Root.Owner, lastLeaf.Items |> Array.append itemsToShift)
+                let newLeaf = RRBLeafNode<'T>(this.Root.Owner, Array.append lastLeaf.Items itemsToShift)
                 let newRoot = (this.Root :?> RRBFullNode<'T>).ReplaceLastLeaf this.Root.Owner this.Shift newLeaf shiftCount
                 // No need to recurse here
                 RRBPersistentVector<'T>(this.Count, this.Shift, newRoot, newTail, this.TailOffset + shiftCount) :> RRBVector<'T>
@@ -188,6 +188,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     // abstract member Pop : unit -> RRBVector<'T>
     override this.Pop() =
         if this.Count <= 0 then failwith "Can't pop from an empty vector"
+        elif this.Count = 1 then this.Empty()
         else
             if this.Tail.Length > 1 then
                 let newTail = this.Tail |> Array.copyAndPop
@@ -269,7 +270,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
 
     // abstract member Slice : int * int -> RRBVector<'T>
     override this.Slice (start, stop) =
-        (this.Skip start).Take stop
+        (this.Skip start).Take (stop - start + 1)
 
     // abstract member GetSlice : int option * int option -> RRBVector<'T>
     override this.GetSlice (start, stop) =
@@ -319,8 +320,8 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                 | newRoot, None ->
                     RRBPersistentVector<'T>(newLen, max this.Shift right.Shift, newRoot, right.Tail, this.Count + right.TailOffset) :> RRBVector<'T>
                 | newLeft, Some newRight ->
-                    let newRoot = (newLeft :?> RRBFullNode<'T>).NewParent this.Root.Owner this.Shift [|newLeft; newRight|]
                     let oldShift = max this.Shift right.Shift
+                    let newRoot = (newLeft :?> RRBFullNode<'T>).NewParent this.Root.Owner oldShift [|newLeft; newRight|]
                     RRBPersistentVector<'T>(newLen, (RRBMath.up oldShift), newRoot, right.Tail, this.Count + right.TailOffset) :> RRBVector<'T>
         // Transient vectors may only stay transient if appended to a transient of the same owner; here, we're a persistent
         | :? RRBTransientVector<'T> as right ->
@@ -476,7 +477,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                 for i = 0 to shiftCount - 1 do
                     this.Tail.[i] <- this.Tail.[i + shiftCount]
                 Array.fill this.Tail shiftCount (tailLen - shiftCount) Unchecked.defaultof<'T>
-                let newLeaf = RRBLeafNode<'T>(this.Root.Owner, lastLeaf.Items |> Array.append itemsToShift)
+                let newLeaf = RRBLeafNode<'T>(this.Root.Owner, Array.append lastLeaf.Items itemsToShift)
                 let newRoot = (this.Root :?> RRBFullNode<'T>).ReplaceLastLeaf this.Root.Owner this.Shift newLeaf shiftCount
                 if not <| isSameObj newRoot this.Root then
                     this.Root <- newRoot
@@ -570,6 +571,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
     // abstract member Pop : unit -> RRBVector<'T>
     override this.Pop() =
         if this.Count <= 0 then failwith "Can't pop from an empty vector"
+        elif this.Count = 1 then this.Empty()
         else
             let tailLen = this.Count - this.TailOffset
             if tailLen > 1 then
@@ -708,7 +710,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
 
     // abstract member Slice : int * int -> RRBVector<'T>
     override this.Slice (start, stop) =
-        (this.Skip start).Take stop
+        (this.Skip start).Take (stop - start + 1)
 
     // abstract member GetSlice : int option * int option -> RRBVector<'T>
     override this.GetSlice (start, stop) =
@@ -802,8 +804,8 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                     | newRoot, None ->
                         newRoot, (max this.Shift right.Shift)
                     | newLeft, Some newRight ->
-                        let newRoot = (newLeft :?> RRBFullNode<'T>).NewParent this.Root.Owner this.Shift [|newLeft; newRight|]
                         let oldShift = max this.Shift right.Shift
+                        let newRoot = (newLeft :?> RRBFullNode<'T>).NewParent this.Root.Owner oldShift [|newLeft; newRight|]
                         newRoot, (RRBMath.up oldShift)
                 this.TailOffset <- this.Count + right.TailOffset
                 this.Count <- newLen
