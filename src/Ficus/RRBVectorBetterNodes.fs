@@ -817,7 +817,7 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
             // Splitting child in two, so recurse
             let node' = this.KeepNRight owner shift keep
             let child' = child.SkipNTreeItems owner (down shift) nextTreeIdx
-            (node' :?> RRBFullNode<'T>).UpdateChildSAbs owner shift localIdx child' (child'.TreeSize (down shift))
+            (node' :?> RRBFullNode<'T>).UpdateChildSAbs owner shift 0 child' (child'.TreeSize (down shift))
 
     override this.SplitTree owner shift treeIdx =
         // treeIdx is first index of right-hand tree
@@ -838,7 +838,7 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
             let leftNode = this.MakeLeftNodeForSplit owner shift leftChildren leftSizes
             let childL, childR = child.SplitTree owner (down shift) nextTreeIdx
             let leftNode' = (leftNode :?> RRBFullNode<'T>).AppendChild owner shift childL
-            let rightNode' = (rightNode :?> RRBFullNode<'T>).UpdateChildSAbs owner shift localIdx childR (childR.TreeSize (down shift))
+            let rightNode' = (rightNode :?> RRBFullNode<'T>).UpdateChildSAbs owner shift 0 childR (childR.TreeSize (down shift))
             leftNode', rightNode'
 
     abstract member MakeLeftNodeForSplit : OwnerToken -> int -> RRBNode<'T>[] -> int[] -> RRBNode<'T>

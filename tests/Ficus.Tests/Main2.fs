@@ -4,7 +4,7 @@ open System.Reflection
 open Ficus
 open Ficus.RRBVectorBetterNodes
 open Ficus.RRBArrayExtensions
-// open Ficus.RRBVector
+open Ficus.RRBVector
 
 module AssemblyInfo =
 
@@ -85,6 +85,31 @@ let debugTest2() =
     let arrs = arrSeqs |> Array.ofSeq
     printfn "%A" arrs
 
+let debugSplitTest() =
+    let vec = seq { 1..14338 } |> RRBVector.ofSeq
+    let l, r = vec |> RRBVector.splitAt 33
+    let propertyFailures = RRBVectorProps.getAllPropertyResults l
+    if propertyFailures.Length > 0 then
+        printfn "L = %A had some property failures" l
+        printfn "Failed properties: %A" propertyFailures
+    let propertyFailures = RRBVectorProps.getAllPropertyResults r
+    if propertyFailures.Length > 0 then
+        printfn "R = %A had some property failures" r
+        printfn "Failed properties: %A" propertyFailures
+    let joined = RRBVector.append l r
+    let propertyFailures = RRBVectorProps.getAllPropertyResults joined
+    if propertyFailures.Length > 0 then
+        printfn "Joined %A had some property failures" joined
+        printfn "Failed properties: %A" propertyFailures
+    let arrL = RRBVector.toArray l
+    let arrR = RRBVector.toArray r
+    let arrJoined = Array.append arrL arrR
+    if arrJoined = (joined |> RRBVector.toArray) && arrJoined = [| 1..14338 |] then
+        printfn "Good"
+    else
+        printfn "Failed"
+    printfn "Done"
+
 
 [<EntryPoint>]
 let main argv =
@@ -97,7 +122,7 @@ let main argv =
         printfn "%s - %A - %s - %s" name.Name version releaseDate githash
     if argv |> Array.contains "--debug-vscode" then
         printfn "Debugging"
-        debugSkipTest()
+        debugSplitTest()
         0
     elif argv |> Array.contains "--stress" || argv |> Array.contains "--fscheck-only" then
         printfn "Running only FsCheck tests%s" (if argv |> Array.contains "--stress" then " for stress testing" else "")
