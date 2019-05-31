@@ -1307,7 +1307,7 @@ let longRunningTests =
     // TODO: Decide whether we need all three of those
 
     // split+join recreates same vector passed in 00:05:44.0870000
-    ftestProp (704273653, 296602124) "split+join recreates same vector" <| fun (vec : RRBVector<int>) (i : int) ->
+    testProp "split+join recreates same vector" <| fun (vec : RRBVector<int>) (i : int) ->
         let i = (abs i) % (RRBVector.length vec + 1)
         let vL, vR = doSplitTest vec i
         let vec' = RRBVector.append vL vR
@@ -1360,7 +1360,7 @@ let longRunningTests =
             Expect.vecEqual joined (RRBVector.remove 0 vec) "Split + remove idx 0 of left + joined vectors did not equal original vector with its idx 0 removed"
 
     // split + pop right + join = pop entire passed in 00:03:57.7930000
-    ftestProp (716506908, 296602124) "split + pop right + join = pop entire" <| fun (vec : RRBVector<int>) (i: int) ->
+    testProp "split + pop right + join = pop entire" <| fun (vec : RRBVector<int>) (i: int) ->
         if vec.Length > 0 then
             let i = (abs i) % (RRBVector.length vec + 1)
             let vL, vR = doSplitTest vec i
@@ -1413,7 +1413,7 @@ let longRunningTests =
             Expect.vecEqual joined (RRBVector.remove 0 joinedOrig) "remove idx 0 of left + join did not equal join + remove idx 0"
 
     // insert item at idx = split at idx + push item onto end of left + join passed in 00:02:03.4830000
-    ftestProp (748491796, 296602124) "insert item at idx = split at idx + push item onto end of left + join" <| fun (vec : RRBVector<int>) (i: int) ->
+    testProp "insert item at idx = split at idx + push item onto end of left + join" <| fun (vec : RRBVector<int>) (i: int) ->
 // Big vector represented by [M M M M 30 M M M 29 M M M M M M M-1 M M 27 M M-1 M 30 M-1 29 M M M M M 30 M] [M 28 M M M-1 M-1 M M 29 M M M M 29 M M 28 M M M M M M 30 M M M M] [M 29 M 29 29 M-1 27 25 M M-1 M-1 26 M M M-1 M M-1 30 M M M M 30 26 25 M 30 22] [28 M 29 M M M 29 M 30 28 26 30 24 M 28 M M M-1 M M M 23] [M-1 M 26 25 M-1 M 29 30 M-1 M 28 M 30 M M M-1 M M-1 30 28 28 27 M M M-1 29 29] [M M 27 M M M M 30 M M M M M 30 M M 30 27 M M M M M 28 26 27 28 M M M-1 M] [28 29 M M-1 26 M-1 27 25 30 23 M 29 M M M M M M M M M M M M M M M] [M M 28 M M M 30 M M M M M M-1 M M 30 24 M M M M 28 M-1 M M M M 29 M-1 M M] [M M 30 M 30 27 29 M M-1 30 27 28 M M 29 M 29 M M-1 M M M M M] [M M M M M-1 30 M M M M M M M 28 30 M-1 M M 30 28 M M] [M M M M M M M M M M M M M-1 M M M M 23 30 25 M M M M M M M 30 M] [M M M M M M M M M M M M 30 M M M-1 M M M M M-1 M M M M M M 30 M M] [M M M M M M M M 30 28 28 M M M M M M M M M M M M M M M M M-1 M M M M] T31 <Expecto>
 // TODO: Make that a separate unit test
         let i = (abs i) % (RRBVector.length vec + 1)
