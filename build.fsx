@@ -149,9 +149,9 @@ Target.create "DotnetTest" <| fun ctx ->
         let args =
             [
                 "--no-build"
-                "/p:AltCover=true"
-                sprintf "/p:AltCoverThreshold=%d" coverageThresholdPercent
-                sprintf "/p:AltCoverAssemblyExcludeFilter=%s" excludeCoverage
+                // "/p:AltCover=true"
+                // sprintf "/p:AltCoverThreshold=%d" coverageThresholdPercent
+                // sprintf "/p:AltCoverAssemblyExcludeFilter=%s" excludeCoverage
             ] |> String.concat " "
         { c with
             Configuration = configuration (ctx.Context.AllExecutingTargets)
