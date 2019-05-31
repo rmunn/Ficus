@@ -767,21 +767,6 @@ let splitJoinTests =
         RRBVectorProps.checkProperties vec' (sprintf "Joined vector from reprL %A and reprR %A" reprL reprR)
         Expect.vecEqual vec' vec "Vector halves after split, when put back together, did not equal original vector"
 
-    testCase "A vector that is root+tail after splitting will end up with a shift of 0" <| fun _ ->
-        let vec = RRBVecGen.treeReprStrToVec "12 10 5 M TM/2"
-        let vL, vR = doSplitTest vec 27
-        RRBVectorProps.checkProperties vL "Left half of split"
-        RRBVectorProps.checkProperties vR "Right half of split"
-        let vLShift = (vL :?> RRBPersistentVector<int>).Shift
-        let vRShift = (vR :?> RRBPersistentVector<int>).Shift
-        Expect.notEqual (vLShift) 0 "Left half should not end up with shift 0"  // Because a vector of "12 10 T5" should not trigger a rebalance
-        Expect.equal (vRShift) 0 "Right half should have ended up with shift 0"
-        let vec' = RRBVector.append vL vR
-        let reprL = RRBVecGen.vecToTreeReprStr vL
-        let reprR = RRBVecGen.vecToTreeReprStr vR
-        RRBVectorProps.checkProperties vec' (sprintf "Joined vector from reprL %A and reprR %A" reprL reprR)
-        Expect.vecEqual vec' vec "Vector halves after split, when put back together, did not equal original vector"
-
     testCase "Manual test for one scenario that failed the \"split + remove idx 0 of left + join = remove idx 0 of entire\" property" <| fun _ ->
         let vecRepr = "5 M*M-1 T7"
         let vec = RRBVecGen.treeReprStrToVec vecRepr
