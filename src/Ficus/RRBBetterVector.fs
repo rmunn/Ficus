@@ -85,8 +85,8 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
         RRBTransientVector<'T>(this.Count, this.Shift, newRoot, newTail, this.TailOffset)
 
     member internal this.AdjustTree() =
-        let v : RRBVector<'T> = this.ShiftNodesFromTailIfNeeded()
-        (v :?> RRBPersistentVector<'T>).ShortenTree()
+        // let v : RRBVector<'T> = this.ShiftNodesFromTailIfNeeded()
+        (this :?> RRBPersistentVector<'T>).ShortenTree()
 
     member internal this.ShortenTree() =
         if this.Shift <= Literals.blockSizeShift then this :> RRBVector<'T>
