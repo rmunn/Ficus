@@ -823,12 +823,12 @@ let splitJoinTests =
 
     testCase "remove can shorten trees even when it doesn't rebalance" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "[M/2 M/2+1] T1" :?> RRBPersistentVector<int>
-        RRBVectorProps.checkProperties vec "Original vector"  // TODO: Originally the original vector was *not* compliant, but I think it's compliant now. Let's find out.
+        // RRBVectorProps.checkProperties vec "Original vector"  // Original vector is *not* compliant with the "vectors shouldn't be too tall" property
         Expect.equal vec.Shift (Literals.blockSizeShift * 2) "Original vector should have height of 2"
         let vec' = vec |> RRBVector.remove 0 :?> RRBPersistentVector<int>
         RRBVectorProps.checkProperties vec' "Vector after one item removed at idx 0"
         Expect.equal vec'.Shift Literals.blockSizeShift "After removal, vector should have height of 1"
-        Expect.equal vec'.Root.NodeSize 2 "Removal should not rebalance this tree"
+        Expect.equal (vec'.Root :?> RRBFullNode<_>).FirstChild.NodeSize 2 "Removal should not rebalance this tree"
 
     testCase "pop will slide nodes into tail if it needs to" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "[M*M-1 M-1] [M] T1" :?> RRBPersistentVector<int>
