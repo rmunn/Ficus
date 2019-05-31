@@ -684,14 +684,14 @@ let manualVectorTests =
         RRBVectorProps.checkProperties vec "9-item vector"
         Expect.equal (RRBVector.length vec) 9 "9-item vector should have length 9"
     )
-    testCase "Inserting into tail of short-root, full-tail sapling will shift nodes from tail to make full root" <| fun _ ->
+    testCase "Inserting into tail of short-leaf, full-tail sapling will shift nodes from tail to make full leaf" <| fun _ ->
         let vec = RRBVector.ofArray [|1..(Literals.blockSize * 2)|]
         RRBVectorProps.checkProperties vec "Full sapling"
         let vec2 = vec.Remove 0
-        RRBVectorProps.checkProperties vec2 "Sapling with short root"
+        RRBVectorProps.checkProperties vec2 "Sapling with short leaf"
         let vec3 = vec2.Insert (vec2.Length - 2) 65 :?> RRBPersistentVector<int>
-        RRBVectorProps.checkProperties vec3 "Sapling with formerly short root, after a tail insert, which should be a full sapling"
-        Expect.equal vec3.Root.NodeSize Literals.blockSize "Root length should be BlockSize"
+        RRBVectorProps.checkProperties vec3 "Sapling with formerly short leaf, after a tail insert, which should be a full sapling"
+        Expect.equal (vec3.Root :?> RRBFullNode<_>).LastChild.NodeSize Literals.blockSize "Leaf length should be BlockSize"
         Expect.equal vec3.Tail.Length Literals.blockSize "Tail length should be BlockSize"
   ]
 
