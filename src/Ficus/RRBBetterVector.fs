@@ -109,23 +109,27 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                     node <- (node :?> RRBFullNode<'T>).LastChild
                     shift <- RRBMath.down shift
                 node
-            let lastLeaf = (lastTwig :?> RRBFullNode<'T>).LastChild :?> RRBLeafNode<'T>
-            let shiftCount = Literals.blockSize - lastLeaf.NodeSize
-            let tailLen = this.Count - this.TailOffset
-            if shiftCount <= 0 then
+            // If parent of last leaf is a relaxed node, this automatically satisfies the invariant
+            if lastTwig :? RRBRelaxedNode<'T> then
                 this :> RRBVector<'T>
-            elif shiftCount >= tailLen then
-                // Would shift everything out of the tail, so instead we'll promote a new tail
-                let removedLeaf, newRoot = (this.Root :?> RRBFullNode<'T>).RemoveLastLeaf this.Root.Owner this.Shift
-                let newTail = this.Tail |> Array.append removedLeaf.Items
-                // In certain rare cases, we might need to recurse. For example, the vector [M 5] [5] T1 will become [M 5] T6, which then needs to become M T11.
-                RRBPersistentVector<'T>(this.Count, this.Shift, newRoot, newTail, this.TailOffset - removedLeaf.NodeSize).ShiftNodesFromTailIfNeeded()
             else
-                let itemsToShift, newTail = this.Tail |> Array.splitAt shiftCount
-                let newLeaf = RRBLeafNode<'T>(this.Root.Owner, Array.append lastLeaf.Items itemsToShift)
-                let newRoot = (this.Root :?> RRBFullNode<'T>).ReplaceLastLeaf this.Root.Owner this.Shift newLeaf shiftCount
-                // No need to recurse here
-                RRBPersistentVector<'T>(this.Count, this.Shift, newRoot, newTail, this.TailOffset + shiftCount) :> RRBVector<'T>
+                let lastLeaf = (lastTwig :?> RRBFullNode<'T>).LastChild :?> RRBLeafNode<'T>
+                let shiftCount = Literals.blockSize - lastLeaf.NodeSize
+                let tailLen = this.Count - this.TailOffset
+                if shiftCount <= 0 then
+                    this :> RRBVector<'T>
+                elif shiftCount >= tailLen then
+                    // Would shift everything out of the tail, so instead we'll promote a new tail
+                    let removedLeaf, newRoot = (this.Root :?> RRBFullNode<'T>).RemoveLastLeaf this.Root.Owner this.Shift
+                    let newTail = this.Tail |> Array.append removedLeaf.Items
+                    // In certain rare cases, we might need to recurse. For example, the vector [M 5] [5] T1 will become [M 5] T6, which then needs to become M T11.
+                    RRBPersistentVector<'T>(this.Count, this.Shift, newRoot, newTail, this.TailOffset - removedLeaf.NodeSize).ShiftNodesFromTailIfNeeded()
+                else
+                    let itemsToShift, newTail = this.Tail |> Array.splitAt shiftCount
+                    let newLeaf = RRBLeafNode<'T>(this.Root.Owner, Array.append lastLeaf.Items itemsToShift)
+                    let newRoot = (this.Root :?> RRBFullNode<'T>).ReplaceLastLeaf this.Root.Owner this.Shift newLeaf shiftCount
+                    // No need to recurse here
+                    RRBPersistentVector<'T>(this.Count, this.Shift, newRoot, newTail, this.TailOffset + shiftCount) :> RRBVector<'T>
 
     // abstract member Empty : RRBVector<'T>  // Or maybe it should be unit -> RRBVector<'T>
     override this.Empty() = RRBPersistentVector<'T>(0, Literals.blockSizeShift, emptyNode, Array.empty, 0) :> RRBVector<'T>
@@ -455,33 +459,37 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                     node <- (node :?> RRBFullNode<'T>).LastChild
                     shift <- RRBMath.down shift
                 node
-            let lastLeaf = (lastTwig :?> RRBFullNode<'T>).LastChild :?> RRBLeafNode<'T>
-            let shiftCount = Literals.blockSize - lastLeaf.NodeSize
-            let tailLen = this.Count - this.TailOffset
-            if shiftCount <= 0 then
+            // If parent of last leaf is a relaxed node, this automatically satisfies the invariant
+            if lastTwig :? RRBRelaxedNode<'T> then
                 this :> RRBVector<'T>
-            elif shiftCount >= tailLen then
-                // Would shift everything out of the tail, so instead we'll promote a new tail
-                let removedLeaf, newRoot = (this.Root :?> RRBFullNode<'T>).RemoveLastLeaf this.Root.Owner this.Shift
-                // let newTail = this.Tail |> Array.append removedLeaf.Items
-                removedLeaf.Items.CopyTo(this.Tail, tailLen)
-                this.TailOffset <- this.TailOffset - removedLeaf.NodeSize
-                if not <| isSameObj newRoot this.Root then
-                    this.Root <- newRoot
-                // In certain rare cases, we might need to recurse. For example, the vector [M 5] [5] T1 will become [M 5] T6, which then needs to become M T11.
-                this.ShiftNodesFromTailIfNeeded()
             else
-                let itemsToShift = Array.sub this.Tail 0 shiftCount
-                for i = 0 to shiftCount - 1 do
-                    this.Tail.[i] <- this.Tail.[i + shiftCount]
-                Array.fill this.Tail shiftCount (tailLen - shiftCount) Unchecked.defaultof<'T>
-                let newLeaf = RRBLeafNode<'T>(this.Root.Owner, Array.append lastLeaf.Items itemsToShift)
-                let newRoot = (this.Root :?> RRBFullNode<'T>).ReplaceLastLeaf this.Root.Owner this.Shift newLeaf shiftCount
-                if not <| isSameObj newRoot this.Root then
-                    this.Root <- newRoot
-                this.TailOffset <- this.TailOffset + shiftCount
-                // No need to recurse here
-                this :> RRBVector<'T>
+                let lastLeaf = (lastTwig :?> RRBFullNode<'T>).LastChild :?> RRBLeafNode<'T>
+                let shiftCount = Literals.blockSize - lastLeaf.NodeSize
+                let tailLen = this.Count - this.TailOffset
+                if shiftCount <= 0 then
+                    this :> RRBVector<'T>
+                elif shiftCount >= tailLen then
+                    // Would shift everything out of the tail, so instead we'll promote a new tail
+                    let removedLeaf, newRoot = (this.Root :?> RRBFullNode<'T>).RemoveLastLeaf this.Root.Owner this.Shift
+                    // let newTail = this.Tail |> Array.append removedLeaf.Items
+                    removedLeaf.Items.CopyTo(this.Tail, tailLen)
+                    this.TailOffset <- this.TailOffset - removedLeaf.NodeSize
+                    if not <| isSameObj newRoot this.Root then
+                        this.Root <- newRoot
+                    // In certain rare cases, we might need to recurse. For example, the vector [M 5] [5] T1 will become [M 5] T6, which then needs to become M T11.
+                    this.ShiftNodesFromTailIfNeeded()
+                else
+                    let itemsToShift = Array.sub this.Tail 0 shiftCount
+                    for i = 0 to shiftCount - 1 do
+                        this.Tail.[i] <- this.Tail.[i + shiftCount]
+                    Array.fill this.Tail shiftCount (tailLen - shiftCount) Unchecked.defaultof<'T>
+                    let newLeaf = RRBLeafNode<'T>(this.Root.Owner, Array.append lastLeaf.Items itemsToShift)
+                    let newRoot = (this.Root :?> RRBFullNode<'T>).ReplaceLastLeaf this.Root.Owner this.Shift newLeaf shiftCount
+                    if not <| isSameObj newRoot this.Root then
+                        this.Root <- newRoot
+                    this.TailOffset <- this.TailOffset + shiftCount
+                    // No need to recurse here
+                    this :> RRBVector<'T>
 
     // abstract member Empty : unit -> RRBVector<'T>
     override this.Empty() =
