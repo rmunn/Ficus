@@ -6,6 +6,9 @@
         <LiteralNames>
           <Enabled>false</Enabled>
         </LiteralNames>
+        <MemberNames>
+          <Naming></Naming>
+        </MemberNames>
       </Rules>
     </NameConventions>
   </Analysers>
