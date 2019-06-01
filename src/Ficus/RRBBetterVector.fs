@@ -74,8 +74,8 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     new () =
         RRBPersistentVector<'T>(0, Literals.blockSizeShift, emptyNode, Array.empty, 0)
 
-    static member MkEmpty() = RRBTransientVector<'T>()
-    static member internal MkEmptyWithToken token = RRBTransientVector<'T>(token)
+    static member MkEmpty() = RRBPersistentVector<'T>()
+    static member internal MkEmptyWithToken token = RRBPersistentVector<'T>(token)
 
     member this.Transient() =
         let newToken = mkOwnerToken()
@@ -102,18 +102,12 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
             // Empty root, so no need to shift any nodes
             this :> RRBVector<'T>
         else
-            let lastTwig =
-                let mutable shift = this.Shift
-                let mutable node = this.Root
-                while shift > Literals.blockSizeShift do
-                    node <- (node :?> RRBFullNode<'T>).LastChild
-                    shift <- RRBMath.down shift
-                node
+            let lastTwig = (this.Root :?> RRBFullNode<'T>).RightmostTwig this.Shift
             // If parent of last leaf is a relaxed node, this automatically satisfies the invariant
             if lastTwig :? RRBRelaxedNode<'T> then
                 this :> RRBVector<'T>
             else
-                let lastLeaf = (lastTwig :?> RRBFullNode<'T>).LastChild :?> RRBLeafNode<'T>
+                let lastLeaf = lastTwig.LastChild :?> RRBLeafNode<'T>
                 let shiftCount = Literals.blockSize - lastLeaf.NodeSize
                 let tailLen = this.Count - this.TailOffset
                 if shiftCount <= 0 then
@@ -318,7 +312,15 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                 // TODO FIXME: Determine if there are any merge scenarios which break the invariant, by running lots of merges that hit this code branch (Original code had .AdjustTree everywhere, but is it needed?)
                 // One scenario I can think of is a left tree of [M*M-1] TM, while the right tree is [M] T5 or something. TODO: Work that out more precisely.
                 let tailNode = RRBNode<'T>.MkLeaf this.Root.Owner this.Tail :?> RRBLeafNode<'T>
-                match (this.Root :?> RRBFullNode<'T>).MergeTree this.Root.Owner this.Shift (Some tailNode) right.Shift (right.Root :?> RRBFullNode<'T>) false with
+                // Can the tail be merged into the two twig nodes? Now's the time to find out, while we can still push it down to form a new root
+                let tailCanFit = ((this.Root :?> RRBFullNode<'T>).RightmostTwig this.Shift).HasRoomToMergeTheTail Literals.blockSizeShift tailNode ((right.Root :?> RRBFullNode<'T>).LeftmostTwig right.Shift)
+                let mergedTree =
+                    if tailCanFit
+                    then (this.Root :?> RRBFullNode<'T>).MergeTree this.Root.Owner this.Shift (Some tailNode) right.Shift (right.Root :?> RRBFullNode<'T>) false
+                    else
+                        let tmpRoot, tmpShift = (this.Root :?> RRBFullNode<'T>).AppendLeaf this.Root.Owner this.Shift tailNode
+                        (tmpRoot :?> RRBFullNode<'T>).MergeTree this.Root.Owner tmpShift None right.Shift (right.Root :?> RRBFullNode<'T>) false
+                match mergedTree with
                 | newRoot, None ->
                     RRBPersistentVector<'T>(newLen, max this.Shift right.Shift, newRoot, right.Tail, this.Count + right.TailOffset) :> RRBVector<'T>
                 | newLeft, Some newRight ->
@@ -366,6 +368,8 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
             if this.Count - this.TailOffset > 1 then
                 let newTail = this.Tail |> Array.copyAndRemoveAt (idx - this.TailOffset)
                 RRBPersistentVector<'T>(this.Count - 1, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
+            elif this.Count = 1 then
+                this.Empty()
             else
                 // Tail is now empty, so promote a new tail
                 let newTailNode, newRoot = (this.Root :?> RRBFullNode<'T>).PopLastLeaf this.Root.Owner this.Shift
@@ -452,18 +456,12 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             // Empty root, so no need to shift any nodes
             this :> RRBVector<'T>
         else
-            let lastTwig =
-                let mutable shift = this.Shift
-                let mutable node = this.Root
-                while shift > Literals.blockSizeShift do
-                    node <- (node :?> RRBFullNode<'T>).LastChild
-                    shift <- RRBMath.down shift
-                node
+            let lastTwig = (this.Root :?> RRBFullNode<'T>).RightmostTwig this.Shift
             // If parent of last leaf is a relaxed node, this automatically satisfies the invariant
             if lastTwig :? RRBRelaxedNode<'T> then
                 this :> RRBVector<'T>
             else
-                let lastLeaf = (lastTwig :?> RRBFullNode<'T>).LastChild :?> RRBLeafNode<'T>
+                let lastLeaf = lastTwig.LastChild :?> RRBLeafNode<'T>
                 let shiftCount = Literals.blockSize - lastLeaf.NodeSize
                 let tailLen = this.Count - this.TailOffset
                 if shiftCount <= 0 then
@@ -803,8 +801,16 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                     if tailLen < Literals.blockSize
                     then RRBNode<'T>.MkLeaf this.Root.Owner (this.Tail |> Array.truncate tailLen) :?> RRBLeafNode<'T>
                     else RRBNode<'T>.MkLeaf this.Root.Owner this.Tail :?> RRBLeafNode<'T>
+                // Can the tail be merged into the two twig nodes? Now's the time to find out, while we can still push it down to form a new root
+                let tailCanFit = ((this.Root :?> RRBFullNode<'T>).RightmostTwig this.Shift).HasRoomToMergeTheTail Literals.blockSizeShift tailNode ((right.Root :?> RRBFullNode<'T>).LeftmostTwig right.Shift)
                 let newRoot, newShift =
-                    match (this.Root :?> RRBFullNode<'T>).MergeTree this.Root.Owner this.Shift (Some tailNode) right.Shift (right.Root :?> RRBFullNode<'T>) true with
+                    let mergedTree =
+                        if tailCanFit
+                        then (this.Root :?> RRBFullNode<'T>).MergeTree this.Root.Owner this.Shift (Some tailNode) right.Shift (right.Root :?> RRBFullNode<'T>) true
+                        else
+                            let tmpRoot, tmpShift = (this.Root :?> RRBFullNode<'T>).AppendLeaf this.Root.Owner this.Shift tailNode
+                            (tmpRoot :?> RRBFullNode<'T>).MergeTree this.Root.Owner tmpShift None right.Shift (right.Root :?> RRBFullNode<'T>) true
+                    match mergedTree with
                     | newRoot, None ->
                         newRoot, (max this.Shift right.Shift)
                     | newLeft, Some newRight ->
@@ -881,6 +887,8 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                 this.Tail.[tailLen - 1] <- Unchecked.defaultof<'T>
                 this.Count <- this.Count - 1
                 this :> RRBVector<'T>
+            elif this.Count = 1 then
+                this.Empty()
             else
                 // Tail is now empty, so promote a new tail
                 let newTailNode, newRoot = (this.Root :?> RRBFullNode<'T>).PopLastLeaf this.Root.Owner this.Shift

@@ -386,8 +386,10 @@ let regressionTests =
     testCase "Pairwise should not throw for 0 or 1-length vectors" <| fun _ ->
         let empty = RRBVector.empty
         let singleton = empty |> RRBVector.push 42
-        Expect.equal (RRBVector.pairwise empty) RRBVector.empty "Pairwise with 0 input items should return empty vector"
-        Expect.equal (RRBVector.pairwise singleton) RRBVector.empty "Pairwise with 1 input item should return empty vector"
+        let pe = RRBVector.pairwise empty
+        let ps = RRBVector.pairwise singleton
+        Expect.equal (pe |> RRBVector.length) 0 "Pairwise with 0 input items should return empty vector"
+        Expect.equal (ps |> RRBVector.length) 0 "Pairwise with 1 input item should return empty vector"
 
     testCase "Testing skipWhile" <| fun _ ->  // TODO: Move this to its appropriate place. And the pairwise test above
         let vec = [|-5..5|] |> RRBVector.ofArray
@@ -828,7 +830,7 @@ let splitJoinTests =
         let vec' = vec |> RRBVector.remove 0 :?> RRBPersistentVector<int>
         RRBVectorProps.checkProperties vec' "Vector after one item removed at idx 0"
         Expect.equal vec'.Shift Literals.blockSizeShift "After removal, vector should have height of 1"
-        Expect.equal (vec'.Root :?> RRBFullNode<_>).FirstChild.NodeSize 2 "Removal should not rebalance this tree"
+        Expect.equal vec'.Root.NodeSize 2 "Removal should not rebalance this tree"
 
     testCase "pop will slide nodes into tail if it needs to" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "[M*M-1 M-1] [M] T1" :?> RRBPersistentVector<int>
@@ -850,7 +852,7 @@ let splitJoinTests =
         let vec'' = vec' |> RRBVector.remove 0 :?> RRBPersistentVector<int>
         RRBVectorProps.checkProperties vec'' "Vector after second item removed at idx 0"
         Expect.equal vec''.Shift Literals.blockSizeShift "After second removal, vector should have height of 1"
-        Expect.equal vec''.Root.NodeSize 3 "Second removal should rebalance this tree"
+        Expect.isLessThan vec''.Root.NodeSize 4 "Second removal should rebalance this tree"
 
     testCase "removeWithoutRebalance can remove without rebalancing trees that the normal remove would have rebalanced" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "M/4 M/4+1 M/4+1 M/4 T1" :?> RRBPersistentVector<int>
@@ -1599,9 +1601,9 @@ let mkTestSuite name startingVec =
     mkTest "distinct" (RRBVector.distinct)
     mkTest "map id" (RRBVector.map id)
     mkTest "scan (+)" (RRBVector.scan (+) 0)
-    mkTest "scanBack (+)" (RRBVector.scan (+) 0)
-    mkTest "mergeL tail-only" (RRBVector.append (RRBVecGen.treeReprStrToVec "0 T28"))
-    mkTest "mergeR tail-only" (fun vec -> RRBVector.append vec (RRBVecGen.treeReprStrToVec "0 T28"))
+    mkTest "scanBack (+)" (RRBVector.scanBack 0 (+))
+    mkTest "mergeL tail-only" (RRBVector.append (RRBVecGen.treeReprStrToVec "T28"))
+    mkTest "mergeR tail-only" (fun vec -> RRBVector.append vec (RRBVecGen.treeReprStrToVec "T28"))
     mkTest "mergeL sapling" (RRBVector.append (RRBVecGen.treeReprStrToVec "M T28"))
     mkTest "mergeR sapling" (fun vec -> RRBVector.append vec (RRBVecGen.treeReprStrToVec "M T28"))
     mkTest "mergeL small non-sapling" (RRBVector.append (RRBVecGen.treeReprStrToVec "M M T28"))

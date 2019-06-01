@@ -190,6 +190,16 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
     member this.FirstChild = this.Children.[0]
     member this.LastChild  = this.Children.[this.NodeSize - 1]
 
+    // Used in merging
+    member this.LeftmostTwig shift =
+        if shift > Literals.blockSizeShift
+        then (this.FirstChild :?> RRBFullNode<'T>).LeftmostTwig (down shift)
+        else this
+    member this.RightmostTwig shift =
+        if shift > Literals.blockSizeShift
+        then (this.LastChild :?> RRBFullNode<'T>).RightmostTwig (down shift)
+        else this
+
     override this.NodeSize = children.Length
     override this.TreeSize shift =
         // A full node is allowed to have an incomplete rightmost entry, but all but its rightmost entry must be complete.
