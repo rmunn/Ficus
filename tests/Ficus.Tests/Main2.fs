@@ -29,6 +29,12 @@ module AssemblyInfo =
 open ExpectoTemplate.RRBVectorBetterNodesExpectoTest
 let mkLeaf counter n = ExpectoTemplate.RRBVectorBetterNodesExpectoTest.mkLeaf counter n :> RRBNode<int>
 
+let viewPropertyFailures name vec =
+    let propertyFailures = RRBVectorProps.getAllPropertyResults vec
+    if propertyFailures.Length > 0 then
+        printfn "%s %A had some property failures" name vec
+        printfn "Failed properties: %A" propertyFailures
+
 let debugTest() =
     let counter = mkCounter()
     // let L = [|28; 32; 29; 32; 31; 32; 32; 32; 17; 32; 26; 30; 32; 17; 32; 16; 32; 20|]
@@ -88,19 +94,10 @@ let debugTest2() =
 let debugSplitTest() =
     let vec = seq { 1..14338 } |> RRBVector.ofSeq
     let l, r = vec |> RRBVector.splitAt 33
-    let propertyFailures = RRBVectorProps.getAllPropertyResults l
-    if propertyFailures.Length > 0 then
-        printfn "L = %A had some property failures" l
-        printfn "Failed properties: %A" propertyFailures
-    let propertyFailures = RRBVectorProps.getAllPropertyResults r
-    if propertyFailures.Length > 0 then
-        printfn "R = %A had some property failures" r
-        printfn "Failed properties: %A" propertyFailures
+    viewPropertyFailures "L =" l
+    viewPropertyFailures "R =" r
     let joined = RRBVector.append l r
-    let propertyFailures = RRBVectorProps.getAllPropertyResults joined
-    if propertyFailures.Length > 0 then
-        printfn "Joined %A had some property failures" joined
-        printfn "Failed properties: %A" propertyFailures
+    viewPropertyFailures "Joined" joined
     let arrL = RRBVector.toArray l
     let arrR = RRBVector.toArray r
     let arrJoined = Array.append arrL arrR
@@ -146,18 +143,10 @@ let debugSplitTest2() =
         [32 32 27 32 32 22 32 29 30 32 32 31 32 32 27 32 32 30 32 32 29 32 32 28 32 32 32 30]
         T26"""
     let vec = RRBVecGen.treeReprStrToVec (vecRepr.Trim().Replace("\n", " ").Replace("         ", " "))
-    let propertyFailures = RRBVectorProps.getAllPropertyResults vec
-    if propertyFailures.Length > 0 then
-        printfn "Vector %A had some property failures" vec
-        printfn "Failed properties: %A" propertyFailures
-    else
-        printfn "Good"
+    viewPropertyFailures "Vector" vec
     let l, r = vec |> RRBVector.split 33
     let joined = RRBVector.append l r
-    let propertyFailures = RRBVectorProps.getAllPropertyResults joined
-    if propertyFailures.Length > 0 then
-        printfn "Joined %A had some property failures" joined
-        printfn "Failed properties: %A" propertyFailures
+    viewPropertyFailures "Joined" joined
     printfn "Done"
 
 
