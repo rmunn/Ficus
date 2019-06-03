@@ -1652,6 +1652,11 @@ let tests =
             vec <- vec.Push i :?> RRBTransientVector<_>
         RRBVectorProps.checkProperties vec <| sprintf "Transient vector of size %d" size
         Expect.equal vec.Length size <| sprintf "Vector should have gotten %d items pushed" size
+        let v2 = vec
+        logger.warn (
+            eventX "Tree {vec} passed all the checks"
+            >> setField "vec" (sprintf "%A" v2)
+        )
         vec <- vec.Push (size + 1) :?> RRBTransientVector<_>
         RRBVectorProps.checkProperties vec <| sprintf "Transient vector of size %d" (size + 1)
         Expect.equal vec.Length size <| sprintf "Vector should have gotten %d items pushed after one last push" (size + 1)

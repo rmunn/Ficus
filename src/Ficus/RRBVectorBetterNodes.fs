@@ -115,6 +115,7 @@ type RRBNode<'T>(ownerToken : OwnerToken) =
 
     abstract member Shrink : OwnerToken -> RRBNode<'T>
     abstract member Expand : OwnerToken -> RRBNode<'T>
+    abstract member ShrinkRightSpine : OwnerToken -> int -> RRBNode<'T>
 
     abstract member NodeSize : int          // How many children does this single node have?
     abstract member TreeSize : int -> int   // How many total items are found in this node's entire descendant tree?
@@ -245,7 +246,7 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
         let node' = this.GetEditableNode owner :?> RRBFullNode<'T>
         RRBExpandedFullNode<'T>(owner, node'.Children) :> RRBNode<'T>
 
-    member this.ShrinkRightSpine owner shift =
+    override this.ShrinkRightSpine owner shift =
         if shift <= Literals.blockSizeShift || this.NodeSize = 0 then
             this.Shrink owner
         else
@@ -1473,7 +1474,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         // Expanded nodes always have their rightmost child, and only that child, expanded
         if oldSize > 0 then
             let lastChild = node'.LastChild
-            let shrunkLastChild = lastChild.Shrink owner
+            let shrunkLastChild = lastChild.ShrinkRightSpine owner (down shift)
             if not (isSameObj lastChild shrunkLastChild) then
                 node'.Children.[oldSize - 1] <- shrunkLastChild
         node'.Children.[oldSize] <- newChild.Expand owner
@@ -2183,6 +2184,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBLeafNode<'T>(ownerToken : Own
 
     override this.Shrink owner = this.GetEditableNode owner  // TODO: For efficiency, return "this" if owner is same as ours *even* if it's nullOwner
     override this.Expand owner = this.GetEditableNode owner
+    override this.ShrinkRightSpine owner _shift = this.GetEditableNode owner
 
     override this.GetEditableNode owner =
         if this.IsEditableBy owner
