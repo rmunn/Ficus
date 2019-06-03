@@ -553,9 +553,9 @@ PrependNChildrenS n seq<ch> seq<sz>
             sizeTable'.[i] <- sizeTable'.[i] + lastSizeTableEntry
         RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
 
-    abstract member ExpandLastChildIfNeeded : OwnerToken -> RRBNode<'T>
-    default this.ExpandLastChildIfNeeded owner =
-        this :> RRBNode<'T>   // TODO: Decide whether this should be a side-effecting-only function and return unit
+    abstract member MaybeExpand : OwnerToken -> RRBNode<'T>
+    default this.MaybeExpand owner =
+        this :> RRBNode<'T>
 
     // ===== END of NODE MANIPULATION functions =====
 
@@ -569,13 +569,21 @@ PrependNChildrenS n seq<ch> seq<sz>
         let fullSize = 1 <<< shift
         Array.init count (fun idx -> if idx = lastIdx then fullSize * idx + this.Children.[idx].TreeSize (down shift) else fullSize * (idx + 1))
 
-    member this.NewPath<'T> owner endShift (leaf : RRBLeafNode<'T>) =
-        // NOTE that this does *not* expand any nodes, because it might be called for a left path. It's the caller's responsibility to expand nodes as needed.
+    member this.NewPathL<'T> owner endShift (leaf : RRBLeafNode<'T>) =
+        // NOTE that this does *not* expand any nodes, because it is being called for a left path.
         let rec loop shift node =
             if shift >= endShift
             then node
             else let shift' = (up shift) in loop shift' (RRBNode<'T>.MkNode owner shift' [|node|])
         loop Literals.blockSizeShift (RRBNode<'T>.MkNode owner Literals.blockSizeShift [|leaf|])
+
+    member this.NewPathR<'T> owner endShift (leaf : RRBLeafNode<'T>) =
+        // NOTE that this *does* expand nodes, but only if we are an expanded node ourselves (i.e., it calls MaybeExpand)
+        let rec loop shift (node : RRBFullNode<'T>) =
+            if shift >= endShift
+            then node.MaybeExpand owner
+            else let shift' = (up shift) in loop shift' (RRBNode<'T>.MkNode owner shift' [|node.MaybeExpand owner|] :?> RRBFullNode<'T>)
+        loop Literals.blockSizeShift (RRBNode<'T>.MkNode owner Literals.blockSizeShift [|leaf|] :?> RRBFullNode<'T>)
 
     member this.TryAppendLeaf owner shift (newLeaf : RRBLeafNode<'T>) leafLen =
         if shift <= Literals.blockSizeShift then
@@ -587,15 +595,21 @@ PrependNChildrenS n seq<ch> seq<sz>
             | None -> // Child's subtree had no room to append leaf
                 if this.NodeSize >= Literals.blockSize
                 then None
-                else this.AppendChildS owner shift (this.NewPath owner (down shift) newLeaf) leafLen |> Some
+                else this.AppendChildS owner shift (this.NewPathR owner (down shift) newLeaf) leafLen |> Some
                 // Note that if we're an expanded node, AppendChildS will take care of shrinking old last child and expanding new one
 
     member this.AppendLeaf owner shift (newLeaf : RRBLeafNode<'T>) =
         match this.TryAppendLeaf owner shift newLeaf newLeaf.NodeSize with
         | Some node' -> node', shift
         | None ->
-            let newRight = this.NewPath owner shift newLeaf
-            this.NewParent owner shift [|this; newRight|], up shift
+            let newRight = this.NewPathR owner shift newLeaf :?> RRBFullNode<'T>
+            let newParent = this.NewParent owner shift [|this.ShrinkRightSpine owner shift; newRight.MaybeExpand owner|]
+            let newParent' = (newParent :?> RRBFullNode<'T>).MaybeExpand owner
+            // TODO: Expand newRight iff we're an expanded node ourselves. Perhaps we need a MaybeExpand function in our API?
+            // Because this is the root (heh) of the problem: the second node we create is a FullNode even if we were an ExpandedNode,
+            // at which point we've violated the promise that an expanded node will always have an expanded right spine. And so our
+            // tree starts being inefficient, and also the full node ends up with expanded twig children, and so on.
+            newParent', up shift
 
     member this.TryPrependLeaf owner shift (newLeaf : RRBLeafNode<'T>) leafLen =
         if shift <= Literals.blockSizeShift then
@@ -607,14 +621,14 @@ PrependNChildrenS n seq<ch> seq<sz>
             | None -> // Child's subtree had no room to prepend leaf
                 if this.NodeSize >= Literals.blockSize
                 then None
-                else this.InsertChildS owner shift 0 (this.NewPath owner (down shift) newLeaf) leafLen |> Some
+                else this.InsertChildS owner shift 0 (this.NewPathL owner (down shift) newLeaf) leafLen |> Some
                 // Note that if we're an expanded node, InsertChildS will take care of shrinking old last child and expanding new one
 
     member this.PrependLeaf owner shift (newLeaf : RRBLeafNode<'T>) =
         match this.TryPrependLeaf owner shift newLeaf newLeaf.NodeSize with
         | Some node' -> node', shift
         | None ->
-            let newLeft = this.NewPath owner shift newLeaf :?> RRBFullNode<'T>
+            let newLeft = this.NewPathL owner shift newLeaf :?> RRBFullNode<'T>
             this.NewParent owner shift [|newLeft; this|], up shift
 
     member this.SlideChildrenLeft owner shift n (leftSibling : RRBFullNode<'T>) =
@@ -885,7 +899,7 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
 
     // --- REBALANCING ---
 
-    // TODO: We might need one more low-level function to use in here: ExpandLastChildIfNeeded, which is a no-op in compact nodes but does something in expanded nodes.
+    // TODO: We might need one more low-level function to use in here: MaybeExpand, which is a no-op in compact nodes but does something in expanded nodes.
     // DESIGN: Two approaches possible. One would use SlideChildrenLeft/Right to move things around... but that doesn't (currently) exist for leaves.
     // Another approach would be to always build arrays and then rebuild size tables. Which is better? We'll just have to try it.
 
@@ -1088,6 +1102,12 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
     // NOTE: "shift" in NewParent is the shift of the *siblings*; the new parent will be at (up shift)
     abstract member NewParent : OwnerToken -> int -> RRBNode<'T> [] -> RRBNode<'T>
     default this.NewParent owner shift siblings =
+        let size = siblings |> Array.length
+#if DEBUG
+        if size <= 0 then failwith <| sprintf "Empty array passed to this.NewParent -- not allowed! owner=%A shift=%A this=%A" owner shift this
+#endif
+        for i = 0 to size - 2 do
+            siblings.[i] <- (siblings.[i] :?> RRBFullNode<'T>).ShrinkRightSpine owner shift
         RRBNode<'T>.MkNode owner (up shift) siblings
 (*
 
@@ -1742,7 +1762,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         else
             RRBExpandedRelaxedNode<'T>(owner, node'.Children, sizeTable', newSize) :> RRBNode<'T>
 
-    override this.ExpandLastChildIfNeeded owner =
+    override this.MaybeExpand owner =
         // TODO: Turn this into ExpandRightSpineIfNeeded by calling recursively on the (newly?)-expanded child
         if this.NodeSize = 0 then this :> RRBNode<'T> else
         let node' = this.GetEditableNode owner :?> RRBExpandedFullNode<'T>
@@ -1785,8 +1805,8 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         if size <= 0 then failwith <| sprintf "Empty array passed to this.NewParent -- not allowed! owner=%A shift=%A this=%A" owner shift this
 #endif
         for i = 0 to size - 2 do
-            arr.[i] <- siblings.[i].Shrink owner
-        arr.[size - 1] <- siblings.[size - 1].Expand owner
+            arr.[i] <- (siblings.[i] :?> RRBFullNode<'T>).ShrinkRightSpine owner shift
+        arr.[size - 1] <- (siblings.[size - 1] :?> RRBFullNode<'T>).ExpandRightSpine owner shift
         // TODO: Examine the logic of this "if" statement and see if we can instead write a static RRBExpandedRelaxedNode.Create method that will take care of this
         if size = 1 || (this.NodeSize = Literals.blockSize && this.FullNodeIsTrulyFull shift) then
             RRBExpandedFullNode<'T>(owner, arr, size) :> RRBNode<'T>
@@ -2097,7 +2117,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         node'.SetNodeSize newSize
         node' :> RRBNode<'T>
 
-    override this.ExpandLastChildIfNeeded owner =
+    override this.MaybeExpand owner =
         if this.NodeSize = 0 then this :> RRBNode<'T> else
         let node' = this.GetEditableNode owner :?> RRBExpandedRelaxedNode<'T>
         let lastChild = this.LastChild
@@ -2132,8 +2152,8 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         if size <= 0 then failwith <| sprintf "Empty array passed to this.NewParent -- not allowed! owner=%A shift=%A this=%A" owner shift this
 #endif
         for i = 0 to size - 2 do
-            arr.[i] <- siblings.[i].Shrink owner
-        arr.[size - 1] <- siblings.[size - 1].Expand owner
+            arr.[i] <- (siblings.[i] :?> RRBFullNode<'T>).ShrinkRightSpine owner shift
+        arr.[size - 1] <- (siblings.[size - 1] :?> RRBFullNode<'T>).ExpandRightSpine owner shift
         // TODO: Examine the logic of this "if" statement and see if we can instead write a static RRBExpandedRelaxedNode.Create method that will take care of this
         if size = 1 || (this.NodeSize = Literals.blockSize && this.FullNodeIsTrulyFull shift) then
             RRBExpandedFullNode<'T>(owner, arr, size) :> RRBNode<'T>
