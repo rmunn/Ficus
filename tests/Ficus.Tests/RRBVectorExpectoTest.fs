@@ -1643,21 +1643,18 @@ let threeLevelVectorTests = mkTestSuite "Tests on three-level vector" (RRBVecGen
 [<Tests>]
 let tests =
   testList "All tests" [
-    // arrayTests
-    simpleVectorTests
-    manualVectorTests
-    constructedVectorSplitTests
-    splitJoinTests
-    insertTests
-    // operationTests // Operational tests not yet ported to new API
-    vectorTests
-    nodeVecGenerationTests
-    regressionTests
-    mergeTests
-    // apiTests
-
     // longRunningTests
-
+    testCase "Single isolated test for pushing in transients" <| fun _ ->
+        let size = 98320
+        let mutable vec = RRBTransientVector()
+        RRBVectorProps.checkProperties vec "Empty transient vector"
+        for i = 1 to size do
+            vec <- vec.Push i :?> RRBTransientVector<_>
+            RRBVectorProps.checkProperties vec <| sprintf "Transient vector of size %d" i
+        Expect.equal vec.Length size <| sprintf "Vector should have gotten %d items pushed" size
+  ]
+ignore
+  [
     transientResidueTests
     moreTransientResidueTests
 
@@ -1672,6 +1669,19 @@ let tests =
     fullSaplingTests
     fullSaplingPlusOneTests
     threeLevelVectorTests
+
+    // arrayTests
+    simpleVectorTests
+    manualVectorTests
+    constructedVectorSplitTests
+    splitJoinTests
+    insertTests
+    // operationTests // Operational tests not yet ported to new API
+    vectorTests
+    nodeVecGenerationTests
+    regressionTests
+    mergeTests
+    // apiTests
 
     // perfTests
   ]
