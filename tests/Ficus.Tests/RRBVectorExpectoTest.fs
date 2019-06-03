@@ -1645,13 +1645,16 @@ let tests =
   testList "All tests" [
     // longRunningTests
     testCase "Single isolated test for pushing in transients" <| fun _ ->
-        let size = 98320
+        let size = 65568
         let mutable vec = RRBTransientVector()
         RRBVectorProps.checkProperties vec "Empty transient vector"
         for i = 1 to size do
             vec <- vec.Push i :?> RRBTransientVector<_>
-            RRBVectorProps.checkProperties vec <| sprintf "Transient vector of size %d" i
+        RRBVectorProps.checkProperties vec <| sprintf "Transient vector of size %d" size
         Expect.equal vec.Length size <| sprintf "Vector should have gotten %d items pushed" size
+        vec <- vec.Push (size + 1) :?> RRBTransientVector<_>
+        RRBVectorProps.checkProperties vec <| sprintf "Transient vector of size %d" (size + 1)
+        Expect.equal vec.Length size <| sprintf "Vector should have gotten %d items pushed after one last push" (size + 1)
   ]
 ignore
   [

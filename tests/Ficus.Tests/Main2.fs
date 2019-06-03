@@ -149,6 +149,10 @@ let debugSplitTest2() =
     viewPropertyFailures "Joined" joined
     printfn "Done"
 
+let debugBigFullVec () =
+    let vec = { 1 .. 98321 } |> RRBVector.ofSeq
+    viewPropertyFailures "Full three-level vector" vec
+    printfn "Done"
 
 [<EntryPoint>]
 let main argv =
@@ -163,6 +167,7 @@ let main argv =
         printfn "Debugging"
         runTestsWithArgs defaultConfig (argv |> Array.except ["--debug-vscode"]) <| testList "Nodes and vectors" [ RRBVectorBetterNodesExpectoTest.tests; RRBVectorExpectoTest.tests ]
         // debugSplitTest2()
+        // debugBigFullVec()
         // 0
     elif argv |> Array.contains "--stress" || argv |> Array.contains "--fscheck-only" then
         printfn "Running only FsCheck tests%s" (if argv |> Array.contains "--stress" then " for stress testing" else "")
