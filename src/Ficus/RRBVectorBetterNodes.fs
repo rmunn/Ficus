@@ -163,11 +163,11 @@ type RRBNode<'T>(ownerToken : OwnerToken) =
     abstract member SplitTree : OwnerToken -> int -> int -> RRBNode<'T> * RRBNode<'T>
 
     member this.NeedsRebalance shift =
-        let slots = if shift > Literals.blockSize then this.SlotCount else this.TwigSlotCount
+        let slots = if shift > Literals.blockSizeShift then this.SlotCount else this.TwigSlotCount
         slots <= ((this.NodeSize - Literals.eMaxPlusOne) <<< Literals.blockSizeShift)
 
     member this.NeedsRebalance2 shift (right : RRBNode<'T>) =
-        let slots = if shift > Literals.blockSize then this.SlotCount + right.SlotCount else this.TwigSlotCount + right.TwigSlotCount
+        let slots = if shift > Literals.blockSizeShift then this.SlotCount + right.SlotCount else this.TwigSlotCount + right.TwigSlotCount
         slots <= ((this.NodeSize + right.NodeSize - Literals.eMaxPlusOne) <<< Literals.blockSizeShift)
 
     member this.NeedsRebalance2PlusLeaf shift (leafLen : int) (right : RRBNode<'T>) =
@@ -1413,10 +1413,10 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
                                               (if this.NodeSize >= Literals.blockSize then "" else sprintf " (plus %d nulls)" (Literals.blockSize - this.NodeSize))
 
     override this.Shrink owner =
-        if this.IsEditableBy owner then
+        let size = this.NodeSize
+        if this.IsEditableBy owner && size = Literals.blockSize then
             RRBFullNode<'T>(owner, this.Children) :> RRBNode<'T>
         else
-            let size = this.NodeSize
             let children' =
                 if size = Literals.blockSize
                 then Array.copy this.Children
@@ -1811,10 +1811,10 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
                                               (if this.NodeSize >= Literals.blockSize then "" else sprintf " (plus %d nulls)" (Literals.blockSize - this.NodeSize))
 
     override this.Shrink owner =
-        if this.IsEditableBy owner then
+        let size = this.NodeSize
+        if this.IsEditableBy owner && size = Literals.blockSize then
             RRBRelaxedNode<'T>(owner, this.Children, this.SizeTable) :> RRBNode<'T>
         else
-            let size = this.NodeSize
             let children' =
                 if size = Literals.blockSize
                 then Array.copy this.Children
