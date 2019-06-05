@@ -249,8 +249,8 @@ let vectorPropertiesPersistent = [
         let isExpanded (node : RRBNode<'T>) = (node :? RRBExpandedFullNode<'T>) || (node :? RRBExpandedRelaxedNode<'T>)
         not (isExpanded vec.Root)
 
-    "If a tree is Persistent, the owner token of its root must be nullOwner", fun (vec : RRBPersistentVector<'T>) ->
-        isSameObj vec.Root.Owner nullOwner
+    // "If a tree is Persistent, the owner token of its root must be nullOwner", fun (vec : RRBPersistentVector<'T>) ->
+    //     isSameObj vec.Root.Owner nullOwner
 
     // The check for the tree's spine, etc., is already handled in the node properties
 ]
@@ -316,8 +316,8 @@ let vectorPropertiesTransient = [
         let isExpanded (node : RRBNode<'T>) = (node :? RRBExpandedFullNode<'T>) || (node :? RRBExpandedRelaxedNode<'T>)
         isExpanded vec.Root
 
-    "If a tree is Transient, the owner token of its root must NOT be nullOwner", fun (vec : RRBTransientVector<'T>) ->
-        not <| isSameObj vec.Root.Owner nullOwner
+    "If a tree is Transient, its owner token must NOT be nullOwner", fun (vec : RRBTransientVector<'T>) ->
+        not <| isSameObj vec.Owner nullOwner
 
     // The check for the tree's spine, etc., is already handled in the node properties
 ]
