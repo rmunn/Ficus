@@ -154,6 +154,15 @@ let debugBigFullVec () =
     viewPropertyFailures "Full three-level vector" vec
     printfn "Done"
 
+let debugSmallishTransientVec () =
+    let mutable vec = RRBTransientVector()
+    for i = 1 to Literals.blockSize * Literals.blockSize + Literals.blockSize do
+        vec <- vec.Push i :?> RRBTransientVector<_>
+    viewPropertyFailures "Transient vector" vec
+    let pvec = vec.Persistent()
+    viewPropertyFailures "Persistent vector" pvec
+    printfn "Done"
+
 [<EntryPoint>]
 let main argv =
     if argv |> Seq.contains ("--version") then
@@ -168,6 +177,7 @@ let main argv =
         runTestsWithArgs defaultConfig (argv |> Array.except ["--debug-vscode"]) <| testList "Nodes and vectors" [ RRBVectorBetterNodesExpectoTest.tests; RRBVectorExpectoTest.tests ]
         // debugSplitTest2()
         // debugBigFullVec()
+        // debugSmallishTransientVec()
         // 0
     elif argv |> Array.contains "--stress" || argv |> Array.contains "--fscheck-only" then
         printfn "Running only FsCheck tests%s" (if argv |> Array.contains "--stress" then " for stress testing" else "")

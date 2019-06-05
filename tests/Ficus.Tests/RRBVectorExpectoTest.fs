@@ -1579,6 +1579,7 @@ T26
 
 let mkTestSuite name startingVec =
   let runTest testName f =
+    RRBVectorProps.checkProperties startingVec <| sprintf "Starting vector in %s test in %A suite" testName name
     let result = startingVec |> f
     RRBVectorProps.checkProperties result <| sprintf "Result of %s test in %A suite" testName name
 
@@ -1613,15 +1614,16 @@ let mkTestSuite name startingVec =
     // testProp "Command tests from constructed vector" <| fun _ -> (Command.toProperty (RRBVectorMoreCommands.specFromData startingVec))
   ]
 
-let transientResidueTests =
-  let startingVec =
+let startingVecForTransientResidueTests =
     let mutable current = { 0..(Literals.blockSize * Literals.blockSize + Literals.blockSize) } |> RRBVector.ofSeq
-    for i = 0 to Literals.blockSize do
-      current <- current.Pop()
+    // for i = 0 to Literals.blockSize do
+    //   current <- current.Pop()
     // We now have a vector of one ExpandedNode and a tail, and the ExpandedNode has a single null in its last array element.
+    // RRBVectorProps.checkProperties current "StartingVec"
     current
 
-  mkTestSuite "Tests on transient-residue vectors" startingVec
+let transientResidueTests =
+    mkTestSuite "Tests on transient-residue vectors" startingVecForTransientResidueTests
 
 let moreTransientResidueTests =
   { 0..(Literals.blockSize * (Literals.blockSize - 3)) }
@@ -1659,12 +1661,33 @@ let tests =
         )
         vec <- vec.Push (size + 1) :?> RRBTransientVector<_>
         RRBVectorProps.checkProperties vec <| sprintf "Transient vector of size %d" (size + 1)
-        Expect.equal vec.Length size <| sprintf "Vector should have gotten %d items pushed after one last push" (size + 1)
+        Expect.equal vec.Length (size + 1) <| sprintf "Vector should have gotten %d items pushed after one last push" (size + 1)
+
+    testCase "Single isolated test for popping in persistents" <| fun _ ->
+        let mutable current = { 0..(Literals.blockSize * Literals.blockSize + Literals.blockSize) } |> RRBVector.ofSeq
+        RRBVectorProps.checkProperties current "Persistent vector before pops"
+        for i = 0 to Literals.blockSize do
+          current <- current.Pop()
+          RRBVectorProps.checkProperties current "Persistent vector during pops"
+        // We now have a vector of one ExpandedNode and a tail, and the ExpandedNode has a single null in its last array element.
+        // let size = Literals.blockSize * Literals.blockSize + Literals.blockSize + 1
+        // let mutable vec = { 1..size } |> RRBVector.ofSeq
+        // RRBVectorProps.checkProperties vec "Persistent vector before pops"
+        // for i = 1 to Literals.blockSize+2 do
+        //     vec <- vec.Pop() :?> RRBPersistentVector<_>
+        //     RRBVectorProps.checkProperties vec <| sprintf "Persistent vector of size %d" (size - i)
+        // let v2 = vec
+        // logger.warn (
+        //     eventX "Tree {vec} passed all the checks"
+        //     >> setField "vec" (sprintf "%A" v2)
+        // )
+        // Expect.equal vec.Length (size - Literals.blockSize - 1) <| sprintf "Vector has wrong size after pops"
+
+    testSequenced transientResidueTests
+    testSequenced moreTransientResidueTests
   ]
 ignore
   [
-    transientResidueTests
-    moreTransientResidueTests
 
     // isolatedTest
     emptyTests

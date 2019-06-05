@@ -128,7 +128,7 @@ type RRBNode<'T>(ownerToken : OwnerToken) =
     abstract member GetEditableNodeOfBlockSizeLength : OwnerToken -> RRBNode<'T>
 
     member this.IsEditableBy (owner : OwnerToken) =
-        isSameObj owner ownerToken && not (isNull !ownerToken)
+        isSameObj owner ownerToken && not (isNull !owner)
         // Note that this test is NOT "if owner = owner".
 
     static member PopulateSizeTableS (shift : int) (array:RRBNode<'T>[]) (len : int) (sizeTable : int[]) =
@@ -583,8 +583,8 @@ PrependNChildrenS n seq<ch> seq<sz>
         let rec loop shift (node : RRBFullNode<'T>) =
             if shift >= endShift
             then node.MaybeExpand owner
-            else let shift' = (up shift) in loop shift' (RRBNode<'T>.MkNode owner shift' [|node.MaybeExpand owner|] :?> RRBFullNode<'T>)
-        loop Literals.blockSizeShift (RRBNode<'T>.MkNode owner Literals.blockSizeShift [|leaf|] :?> RRBFullNode<'T>)
+            else let shift' = (up shift) in loop shift' (this.NewParent owner shift' [|node.MaybeExpand owner|] :?> RRBFullNode<'T>)
+        loop Literals.blockSizeShift (this.NewParent owner Literals.blockSizeShift [|leaf|] :?> RRBFullNode<'T>)
 
     member this.TryAppendLeaf owner shift (newLeaf : RRBLeafNode<'T>) leafLen =
         if shift <= Literals.blockSizeShift then
@@ -1807,7 +1807,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
 #endif
         for i = 0 to size - 2 do
             arr.[i] <- (siblings.[i] :?> RRBFullNode<'T>).ShrinkRightSpine owner shift
-        arr.[size - 1] <- (siblings.[size - 1] :?> RRBFullNode<'T>).ExpandRightSpine owner shift
+        arr.[size - 1] <- siblings.[size - 1].Expand owner
         // TODO: Examine the logic of this "if" statement and see if we can instead write a static RRBExpandedRelaxedNode.Create method that will take care of this
         if size = 1 || (this.NodeSize = Literals.blockSize && this.FullNodeIsTrulyFull shift) then
             RRBExpandedFullNode<'T>(owner, arr, size) :> RRBNode<'T>
@@ -2154,7 +2154,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
 #endif
         for i = 0 to size - 2 do
             arr.[i] <- (siblings.[i] :?> RRBFullNode<'T>).ShrinkRightSpine owner shift
-        arr.[size - 1] <- (siblings.[size - 1] :?> RRBFullNode<'T>).ExpandRightSpine owner shift
+        arr.[size - 1] <- siblings.[size - 1].Expand owner
         // TODO: Examine the logic of this "if" statement and see if we can instead write a static RRBExpandedRelaxedNode.Create method that will take care of this
         if size = 1 || (this.NodeSize = Literals.blockSize && this.FullNodeIsTrulyFull shift) then
             RRBExpandedFullNode<'T>(owner, arr, size) :> RRBNode<'T>
