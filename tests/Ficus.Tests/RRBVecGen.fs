@@ -39,7 +39,6 @@ let distribute slots childCount = gen {
 }
 
 open TreeParser // Pull in TreeRepresentation and ListItem types
-open Ficus.RRBVector
 
 let treeReprHeight treeRepr =
     let rec loop h = function
@@ -269,3 +268,118 @@ let sizedGenVec<'a> = Gen.sized <| fun s -> gen {
     let! vec = genVecOfLength<'a> len
     return vec
 }
+
+// TODO: Write functions that will generate a vector *representation* (in structured form), and use that in our tests
+// Then we can FAR more easily write shrinkers that don't depend on the code under test (e.g., to shrink a vector would need to call .Remove)
+// And the shrinkers can start by shrinking entire top-level nodes at a time, and if that doesn't work, go on to shrink lower-level nodes
+
+(*
+type ListItem =
+    | Int of int
+    | List of ListItem list
+
+type TreeRepresentation =
+    { Root: ListItem
+      Tail: int option }
+*)
+
+// let genLeafRepr maxSize = Gen.choose(1, maxSize) |> Gen.map ListItem.Int
+// let rec genNodeRepr height maxSizes =
+//     let maxSize = List.head maxSizes
+//     if height <= 0 then genLeafRepr maxSize
+//     else
+//         gen {
+//             let! size = Gen.choose(1, maxSize)
+//             let! lst = Gen.listOfLength size (genNodeRepr (height - 1) (List.tail maxSizes))
+//             return ListItem.List lst
+//         }
+
+let genLeafRepr size = Gen.constant (size |> ListItem.Int)
+let rec genNodeReprImpl level childSizes g = gen {
+    let childrenGenerators =
+        if level > 1 then
+            childSizes |> Array.map (g (level - 1))
+        else
+            childSizes |> Array.map genLeafRepr
+    let! children = Gen.sequence childrenGenerators
+    let node = children |> ListItem.List
+    return node
+}
+
+let rec genRelaxedNodeRepr level childCount = gen {
+    let! slotCount = genSlotCount childCount
+    let! childSizes = distribute slotCount childCount
+    return! genNodeReprImpl level childSizes genRelaxedNodeRepr
+}  // TODO: This should be able to be turned into a non-CE function
+
+let rec genFullNodeRepr level childCount = gen {
+    let childSizes = Array.create childCount Literals.blockSize
+    return! genNodeReprImpl level childSizes genFullNodeRepr
+}  // TODO: This should be able to be turned into a non-CE function
+
+let genNodeRepr level childCount =
+    Gen.frequency [3, genRelaxedNodeRepr level childCount
+                   1, genFullNodeRepr level childCount]
+
+let rec shrinkNodeRepr node =
+    match node with
+    | Int n -> Arb.shrink n |> Seq.filter (fun n -> n > 0 (* Empty leaves are not allowed *)) |> Seq.map Int
+    | List l -> Arb.shrink l |> Seq.filter (not << List.isEmpty) (* Empty nodes are not allowed *) |> Seq.map List
+
+let arbTreeRepr =
+    { new Arbitrary<ListItem>() with
+        override x.Generator = (genNodeRepr 2 4)
+        override x.Shrinker t = shrinkNodeRepr t }
+
+let arb2TreeRepr = Arb.fromGenShrink (genNodeRepr 2 4, shrinkNodeRepr)
+// TODO: Make a genTree that picks good values for genNodeRepr; I think we already have one, actually
+(*
+let genVec<'a> level childCount =
+    if level <= 0 then failwith "genVec needs to have level 1+. For level 0, use genTinyVec"
+    if childCount < 2 then failwith "genVec needs to have childCount 2+. For level 0, use genTinyVec"
+    gen {
+        let g = Arb.generate<'a>
+        let! root = genNode g level childCount
+        let! root' = (root :?> RRBFullNode<'a>) |> fleshOutRightmostLeafIfNecessary g level
+        let! tailSize = Gen.choose(1,Literals.blockSize)
+        let! tail = Gen.arrayOfLength tailSize g
+        let shift = level * Literals.blockSizeShift
+        let rootSize = root'.TreeSize shift
+        let totalSize = rootSize + Array.length tail
+        let vec = RRBPersistentVector<'a>(totalSize, shift, root', tail, rootSize) :> RRBVector<'a>
+        return vec
+    }
+*)
+// let fleshOutRightmostLeafOfReprIfNecessary (root : ListItem) (tailSize : int) =
+// TODO: This is tricky in list representations, since we don't have the vector manipulation functions we need here to figure out if nodes are completely full and do ShiftNodesIntoTail, etc.
+// Maybe we'll just call AdjustTree() on the vector after creating it
+//  let getRightTwigCount = function
+//                         | List [] -> failwith "Empty list has no twig"
+//                         | List l when l |> List.forall (function | Int _ -> true | List _ -> false) ->
+//  gen {
+//     let twig = root |> getRightTwig (level * Literals.blockSizeShift)
+//     let leaf = twig.LastChild
+//     let missingItemCount = Literals.blockSize - leaf.NodeSize
+//     if missingItemCount <= 0 || twig :? RRBRelaxedNode<'a> then
+//         return root
+//     else
+//         let! newLeaf = gen {
+//             let! newItems = Gen.arrayOfLength missingItemCount g
+//             return (Array.append (leaf :?> RRBLeafNode<'a>).Items newItems) |> mkLeaf
+//         }
+//         return (root.ReplaceLastLeaf nullOwner (level * Literals.blockSizeShift) (newLeaf :?> RRBLeafNode<'a>) missingItemCount) :?> RRBFullNode<'a>
+//  }
+
+// let genTreeReprOfLength<'a> len =
+//     if len <= Literals.blockSize then
+//         Gen.constant { Root = List []; Tail = Some len }
+//     elif len <= Literals.blockSize * 2 then
+//         Gen.constant { Root = List [Int Literals.blockSize]; Tail = Some (len - Literals.blockSize) }
+//     else
+//         let len' = len - Literals.blockSize * 2
+//         // childCount must be in range 2..Literals.blockSize
+//         // So we take (Literals.blockSize - 1) and that's the divisor for the mod operation
+//         let denom = Literals.blockSize - 1
+//         let level = len' / denom + 1
+//         let childCount = len' % denom + 2
+//         let root = genNodeRepr level childCount
