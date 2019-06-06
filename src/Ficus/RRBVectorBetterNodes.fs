@@ -95,7 +95,12 @@ type OwnerToken = string ref
 
 let nullOwner : OwnerToken = ref null
 
-let mkOwnerToken() = ref ""
+// Was: let mkOwnerToken() = ref ""
+let mkOwnerToken : unit -> OwnerToken =  // Use while debugging, so that we get visible representations of each owner. Once done debugging, go back to `ref ""` for memory efficiency.
+  let mutable counter = 0
+  fun () ->
+    counter <- counter + 1
+    ref (sprintf "%d" counter)
 
 // Summary of type hierarchy of nodes
 //
