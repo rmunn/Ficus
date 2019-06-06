@@ -1281,50 +1281,51 @@ let longRunningTests =
         Expect.vecEqualArr joined' (Array.append a2 a1) "Opposite-joined vectors did not equal equivalent appended arrays"
 
     // joining two unrelated vectors is equivalent to list-appending their list equivalents passed in 00:02:44.0550000
-    ftestProp (694926509, 296602124) (*796556019, 296483453*) "joining two unrelated vectors is equivalent to list-appending their list equivalents" <| fun (v1 : RRBVector<int>) (v2 : RRBVector<int>) ->
-        let l1 = RRBVector.toList v1
-        let l2 = RRBVector.toList v2
-        let joined = RRBVector.append v1 v2
-        let joined' = RRBVector.append v2 v1
-        let r1 = RRBVecGen.vecToTreeReprStr v1
-        let r2 = RRBVecGen.vecToTreeReprStr v2
-        RRBVectorProps.checkProperties joined (sprintf "Joined vector from %A and %A" r1 r2)
-        RRBVectorProps.checkProperties joined' (sprintf "Opposite-joined vector from %A and %A" r2 r1)
-        Expect.equal (joined |> RRBVector.toList) (List.append l1 l2) "Joined vectors did not equal equivalent appended lists"
-        Expect.equal (joined' |> RRBVector.toList) (List.append l2 l1) "Opposite-joined vectors did not equal equivalent appended lists"
+    // ftestProp (694926509, 296602124) (*796556019, 296483453*) "joining two unrelated vectors is equivalent to list-appending their list equivalents" <| fun (v1 : RRBVector<int>) (v2 : RRBVector<int>) ->
+    //     let l1 = RRBVector.toList v1
+    //     let l2 = RRBVector.toList v2
+    //     let joined = RRBVector.append v1 v2
+    //     let joined' = RRBVector.append v2 v1
+    //     let r1 = RRBVecGen.vecToTreeReprStr v1
+    //     let r2 = RRBVecGen.vecToTreeReprStr v2
+    //     RRBVectorProps.checkProperties joined (sprintf "Joined vector from %A and %A" r1 r2)
+    //     RRBVectorProps.checkProperties joined' (sprintf "Opposite-joined vector from %A and %A" r2 r1)
+    //     Expect.equal (joined |> RRBVector.toList) (List.append l1 l2) "Joined vectors did not equal equivalent appended lists"
+    //     Expect.equal (joined' |> RRBVector.toList) (List.append l2 l1) "Opposite-joined vectors did not equal equivalent appended lists"
 
     // joining two unrelated vectors is equivalent to seq-appending their seq equivalents passed in 00:04:09.4570000
-    ftestProp (698935516, 296602124) (*812315557, 296483453*) "joining two unrelated vectors is equivalent to seq-appending their seq equivalents" <| fun (v1 : RRBVector<int>) (v2 : RRBVector<int>) ->
-        let s1 = RRBVector.toSeq v1
-        let s2 = RRBVector.toSeq v2
-        let joined = RRBVector.append v1 v2
-        let joined' = RRBVector.append v2 v1
-        let r1 = RRBVecGen.vecToTreeReprStr v1
-        let r2 = RRBVecGen.vecToTreeReprStr v2
-        RRBVectorProps.checkProperties joined (sprintf "Joined vector from %A and %A" r1 r2)
-        RRBVectorProps.checkProperties joined' (sprintf "Opposite-joined vector from %A and %A" r2 r1)
-        Expect.equal (joined |> RRBVector.toArray) (Seq.append s1 s2 |> Array.ofSeq) "Joined vectors did not equal equivalent appended seqs"
-        Expect.equal (joined' |> RRBVector.toArray) (Seq.append s2 s1 |> Array.ofSeq) "Opposite-joined vectors did not equal equivalent appended seqs"
+    // ftestProp (698935516, 296602124) (*812315557, 296483453*) "joining two unrelated vectors is equivalent to seq-appending their seq equivalents" <| fun (v1 : RRBVector<int>) (v2 : RRBVector<int>) ->
+    //     let s1 = RRBVector.toSeq v1
+    //     let s2 = RRBVector.toSeq v2
+    //     let joined = RRBVector.append v1 v2
+    //     let joined' = RRBVector.append v2 v1
+    //     let r1 = RRBVecGen.vecToTreeReprStr v1
+    //     let r2 = RRBVecGen.vecToTreeReprStr v2
+    //     RRBVectorProps.checkProperties joined (sprintf "Joined vector from %A and %A" r1 r2)
+    //     RRBVectorProps.checkProperties joined' (sprintf "Opposite-joined vector from %A and %A" r2 r1)
+    //     Expect.equal (joined |> RRBVector.toArray) (Seq.append s1 s2 |> Array.ofSeq) "Joined vectors did not equal equivalent appended seqs"
+    //     Expect.equal (joined' |> RRBVector.toArray) (Seq.append s2 s1 |> Array.ofSeq) "Opposite-joined vectors did not equal equivalent appended seqs"
 
     // TODO: Decide whether we need all three of those
 
     // split+join recreates same vector passed in 00:05:44.0870000
-    testProp "split+join recreates same vector" <| fun (vec : RRBVector<int>) (i : int) ->
+    ftestProp (348380723, 296604576) "split+join recreates same vector" <| fun (vec : RRBVector<int>) (i : int) ->
         let i = (abs i) % (RRBVector.length vec + 1)
         let vL, vR = doSplitTest vec i
+        logger.warn (eventX "vR = {vec}" >> setField "vec" (RRBVecGen.vecToTreeReprStr vR))
         let vec' = RRBVector.append vL vR
         RRBVectorProps.checkProperties vec' "Joined vector"
         Expect.vecEqual vec' vec "Vector halves after split, when put back together, did not equal original vector"
 
     // split+reverse+join recreates reverse vector passed in 00:07:54.1070000
-    ftestProp (708756850, 296602124) "split+reverse+join recreates reverse vector" <| fun (vec : RRBVector<int>) (i : int) ->
-        let i = (abs i) % (RRBVector.length vec + 1)
-        let vL, vR = doSplitTest vec i
-        let revL = RRBVector.rev vL
-        let revR = RRBVector.rev vR
-        let vec' = RRBVector.append revR revL
-        RRBVectorProps.checkProperties vec' "Joined vector"
-        Expect.vecEqual vec' (RRBVector.rev vec) "Vector halves after split+reverse, when put back together, did not equal reversed vector"
+    // ftestProp (708756850, 296602124) "split+reverse+join recreates reverse vector" <| fun (vec : RRBVector<int>) (i : int) ->
+    //     let i = (abs i) % (RRBVector.length vec + 1)
+    //     let vL, vR = doSplitTest vec i
+    //     let revL = RRBVector.rev vL
+    //     let revR = RRBVector.rev vR
+    //     let vec' = RRBVector.append revR revL
+    //     RRBVectorProps.checkProperties vec' "Joined vector"
+    //     Expect.vecEqual vec' (RRBVector.rev vec) "Vector halves after split+reverse, when put back together, did not equal reversed vector"
 
     // big join, test 1 passed in 00:03:27.6860000
     testCase "big join, test 1" <| fun _ ->
@@ -1334,7 +1335,7 @@ let longRunningTests =
         doJoinTest v1 v2
 
     // big join, test 2 passed in 00:00:40.3750000
-    testCase "big join, test 2" <| fun _ ->
+    ptestCase "big join, test 2" <| fun _ ->
         let bigNum = 1 <<< (Literals.blockSizeShift * 3)
         let v1 = RRBVecGen.treeReprStrToVec "M M-1 M*M-5 M-1*2 M T4"
         let v2 = seq {0..bigNum+2} |> RRBVector.ofSeq
@@ -1347,19 +1348,19 @@ let longRunningTests =
         doJoinTest v1 v2
 
     // split + remove idx 0 of left + join = remove idx 0 of entire passed in 00:02:39.1100000
-    ftestProp (715522567, 296602124) "split + remove idx 0 of left + join = remove idx 0 of entire" <| fun (vec : RRBVector<int>) (i: int) ->
-        if vec.Length > 0 then
-            let i = (abs i) % (RRBVector.length vec)
-            let vL, vR = doSplitTest vec i
-            let vL', vR' =
-                if vL.Length > 0 then
-                    RRBVector.remove 0 vL, vR
-                else
-                    // Can't remove from an empty vector -- but in this case, we know the right vector is non-empty
-                    vL, RRBVector.remove 0 vR
-            let joined = RRBVector.append vL' vR'
-            RRBVectorProps.checkProperties joined "Joined vector"
-            Expect.vecEqual joined (RRBVector.remove 0 vec) "Split + remove idx 0 of left + joined vectors did not equal original vector with its idx 0 removed"
+    // ftestProp (715522567, 296602124) "split + remove idx 0 of left + join = remove idx 0 of entire" <| fun (vec : RRBVector<int>) (i: int) ->
+    //     if vec.Length > 0 then
+    //         let i = (abs i) % (RRBVector.length vec)
+    //         let vL, vR = doSplitTest vec i
+    //         let vL', vR' =
+    //             if vL.Length > 0 then
+    //                 RRBVector.remove 0 vL, vR
+    //             else
+    //                 // Can't remove from an empty vector -- but in this case, we know the right vector is non-empty
+    //                 vL, RRBVector.remove 0 vR
+    //         let joined = RRBVector.append vL' vR'
+    //         RRBVectorProps.checkProperties joined "Joined vector"
+    //         Expect.vecEqual joined (RRBVector.remove 0 vec) "Split + remove idx 0 of left + joined vectors did not equal original vector with its idx 0 removed"
 
     // split + pop right + join = pop entire passed in 00:03:57.7930000
     testProp "split + pop right + join = pop entire" <| fun (vec : RRBVector<int>) (i: int) ->
@@ -1406,13 +1407,13 @@ let longRunningTests =
         doJoinTest vL vR
 
     // starting with 2 vectors, remove idx 0 of left + join = remove idx 0 of entire passed in 00:03:26.0550000
-    ftestProp (735163095, 296602124) "starting with 2 vectors, remove idx 0 of left + join = remove idx 0 of entire" <| fun (vL : RRBVector<int>) (vR : RRBVector<int>) ->
-        if vL.Length > 0 then
-            let vL' = RRBVector.remove 0 vL
-            let joinedOrig = RRBVector.append vL vR
-            let joined = RRBVector.append vL' vR
-            RRBVectorProps.checkProperties joined "Joined vector"
-            Expect.vecEqual joined (RRBVector.remove 0 joinedOrig) "remove idx 0 of left + join did not equal join + remove idx 0"
+    // ftestProp (735163095, 296602124) "starting with 2 vectors, remove idx 0 of left + join = remove idx 0 of entire" <| fun (vL : RRBVector<int>) (vR : RRBVector<int>) ->
+    //     if vL.Length > 0 then
+    //         let vL' = RRBVector.remove 0 vL
+    //         let joinedOrig = RRBVector.append vL vR
+    //         let joined = RRBVector.append vL' vR
+    //         RRBVectorProps.checkProperties joined "Joined vector"
+    //         Expect.vecEqual joined (RRBVector.remove 0 joinedOrig) "remove idx 0 of left + join did not equal join + remove idx 0"
 
     // insert item at idx = split at idx + push item onto end of left + join passed in 00:02:03.4830000
     testProp "insert item at idx = split at idx + push item onto end of left + join" <| fun (vec : RRBVector<int>) (i: int) ->
@@ -1655,10 +1656,10 @@ let tests =
         RRBVectorProps.checkProperties vec <| sprintf "Transient vector of size %d" size
         Expect.equal vec.Length size <| sprintf "Vector should have gotten %d items pushed" size
         let v2 = vec
-        logger.warn (
-            eventX "Tree {vec} passed all the checks"
-            >> setField "vec" (sprintf "%A" v2)
-        )
+        // logger.warn (
+        //     eventX "Tree {vec} passed all the checks"
+        //     >> setField "vec" (sprintf "%A" v2)
+        // )
         vec <- vec.Push (size + 1) :?> RRBTransientVector<_>
         RRBVectorProps.checkProperties vec <| sprintf "Transient vector of size %d" (size + 1)
         Expect.equal vec.Length (size + 1) <| sprintf "Vector should have gotten %d items pushed after one last push" (size + 1)
@@ -1683,11 +1684,13 @@ let tests =
         // )
         // Expect.equal vec.Length (size - Literals.blockSize - 1) <| sprintf "Vector has wrong size after pops"
 
-    testSequenced transientResidueTests
-    testSequenced moreTransientResidueTests
-  ]
-ignore
-  [
+    longRunningTests
+    threeLevelVectorTests
+    transientResidueTests
+    moreTransientResidueTests
+//   ]
+// ignore
+//   [
 
     // isolatedTest
     emptyTests
@@ -1699,7 +1702,6 @@ ignore
     fullSaplingMinusOneTests
     fullSaplingTests
     fullSaplingPlusOneTests
-    threeLevelVectorTests
 
     // arrayTests
     simpleVectorTests
