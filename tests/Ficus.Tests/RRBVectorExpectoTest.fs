@@ -19,6 +19,8 @@ type ArrayAndIdx = ArrayAndIdx of arr:int[] * idx:int
 type NonEmptyArrayAndIdx = NonEmptyArrayAndIdx of arr:int[] * idx:int
 type VecPlusArrAndIdx = VecPlusArrAndIdx of vec:RRBVector<int> * arr:int[] * idx:int
 type NonEmptyVecPlusArrAndIdx = NonEmptyVecPlusArrAndIdx of vec:RRBVector<int> * arr:int[] * idx:int
+type VecAndIdx = VecAndIdx of vec:RRBVector<int> * idx:int
+type NonEmptyVecAndIdx = NonEmptyVecAndIdx of vec:RRBVector<int> * idx:int
 
 // TODO: Determine if we can use Arb.from<PositiveInt> here, or Gen.nonEmptyListOf, or something
 let genArray = Gen.sized <| fun s -> gen {
@@ -45,8 +47,13 @@ let genNonEmptyArraySimpler = gen {
 let mapArrAndIdxToVec (ArrayAndIdx (arr,idx)) = VecPlusArrAndIdx (RRBVector.ofArray arr,arr,idx)
 let mapNEArrAndIdxToNEVec (NonEmptyArrayAndIdx (arr,idx)) = NonEmptyVecPlusArrAndIdx (RRBVector.ofArray arr,arr,idx)
 
+let mapArrAndIdxToVecAndIdx (ArrayAndIdx (arr,idx)) = VecAndIdx (RRBVector.ofArray arr,idx)
+let mapNEArrAndIdxToNEVecAndIdx (NonEmptyArrayAndIdx (arr,idx)) = NonEmptyVecAndIdx (RRBVector.ofArray arr,idx)
+
 let genVecPlusArrAndIdx = genArraySimpler |> Gen.map mapArrAndIdxToVec
 let genNonEmptyVecPlusArrAndIdx = genNonEmptyArraySimpler |> Gen.map mapNEArrAndIdxToNEVec
+let genVecAndIdx = genArraySimpler |> Gen.map mapArrAndIdxToVecAndIdx
+let genNonEmptyVecAndIdx = genNonEmptyArraySimpler |> Gen.map mapNEArrAndIdxToNEVecAndIdx
 
 let rec shrink (ArrayAndIdx (arr:int[],idx:int)) = seq {
     if arr.Length <= 0 then yield! Seq.empty else
@@ -66,6 +73,10 @@ let shrinkVec (VecPlusArrAndIdx (vec,arr,idx)) =
     shrink (ArrayAndIdx (arr,idx)) |> Seq.map mapArrAndIdxToVec
 let shrinkNonEmptyVec (NonEmptyVecPlusArrAndIdx (vec,arr,idx)) =
     shrinkNonEmpty (NonEmptyArrayAndIdx (arr,idx)) |> Seq.map mapNEArrAndIdxToNEVec
+let shrinkVecAndIdx (VecPlusArrAndIdx (vec,arr,idx)) =
+    shrink (ArrayAndIdx (arr,idx)) |> Seq.map mapArrAndIdxToVecAndIdx
+let shrinkNonEmptyVecAndIdx (NonEmptyVecPlusArrAndIdx (vec,arr,idx)) =
+    shrinkNonEmpty (NonEmptyArrayAndIdx (arr,idx)) |> Seq.map mapNEArrAndIdxToNEVecAndIdx
 
 type MyGenerators =
     static member arbArrayAndIdx() =
