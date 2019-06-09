@@ -968,7 +968,7 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
         // In expanded nodes, this will return "this" -- but first setting the length and zeroing out any remaining children since the length probably shrank
         RRBNode<'T>.MkNode owner shift arr
 
-    member this.ApplyRebalancePlanImpl<'C> sizes (mergeStart, mergeLen, sizeReduction) (childrenEnum : System.Collections.Generic.IEnumerator<RRBNode<'T>>) (getGrandChildren : RRBNode<'T> -> 'C []) (mkNode : 'C [] -> RRBNode<'T>) =
+    member this.ApplyRebalancePlanImpl<'C> sizes (mergeStart, mergeLen, sizeReduction) (childrenEnum : System.Collections.Generic.IEnumerator<RRBNode<'T>>) (getGrandChildren : RRBNode<'T> -> 'C []) (mkChildNode : 'C [] -> RRBNode<'T>) =
         let totalSlots = sizes |> Seq.skip mergeStart |> Seq.truncate mergeLen |> Seq.sum
 #if DEBUG
         let arrayCount = totalSlots / Literals.blockSize
@@ -985,7 +985,7 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
                     yield! (getGrandChildren child)
             }
         let arraysSeq = Array.createManyFromSeq grandChildrenSeq totalSlots Literals.blockSize
-        let nodesSeq = arraysSeq |> Seq.map mkNode
+        let nodesSeq = arraysSeq |> Seq.map mkChildNode
         nodesSeq
 
     member this.ApplyRebalancePlan owner shift sizes (mergeStart, mergeLen, sizeReduction) childrenEnum =
