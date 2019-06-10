@@ -314,19 +314,18 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                 let tailNode = RRBNode<'T>.MkLeaf nullOwner this.Tail :?> RRBLeafNode<'T>
                 // Can the tail be merged into the two twig nodes? Now's the time to find out, while we can still push it down to form a new root
                 let tailCanFit = ((this.Root :?> RRBFullNode<'T>).RightmostTwig this.Shift).HasRoomToMergeTheTail Literals.blockSizeShift tailNode ((right.Root :?> RRBFullNode<'T>).LeftmostTwig right.Shift)
-                let mergedTree =
+                let mergedShift, mergedTree =
                     if tailCanFit
-                    then (this.Root :?> RRBFullNode<'T>).MergeTree nullOwner this.Shift (Some tailNode) right.Shift (right.Root :?> RRBFullNode<'T>) false
+                    then max this.Shift right.Shift, (this.Root :?> RRBFullNode<'T>).MergeTree nullOwner this.Shift (Some tailNode) right.Shift (right.Root :?> RRBFullNode<'T>) false
                     else
                         let tmpRoot, tmpShift = (this.Root :?> RRBFullNode<'T>).AppendLeaf nullOwner this.Shift tailNode
-                        (tmpRoot :?> RRBFullNode<'T>).MergeTree nullOwner tmpShift None right.Shift (right.Root :?> RRBFullNode<'T>) false
+                        max tmpShift right.Shift, (tmpRoot :?> RRBFullNode<'T>).MergeTree nullOwner tmpShift None right.Shift (right.Root :?> RRBFullNode<'T>) false
                 match mergedTree with
                 | newRoot, None ->
-                    RRBPersistentVector<'T>(newLen, max this.Shift right.Shift, newRoot, right.Tail, this.Count + right.TailOffset) :> RRBVector<'T>
+                    RRBPersistentVector<'T>(newLen, mergedShift, newRoot, right.Tail, this.Count + right.TailOffset) :> RRBVector<'T>
                 | newLeft, Some newRight ->
-                    let oldShift = max this.Shift right.Shift
-                    let newRoot = (newLeft :?> RRBFullNode<'T>).NewParent nullOwner oldShift [|newLeft; newRight|]
-                    RRBPersistentVector<'T>(newLen, (RRBMath.up oldShift), newRoot, right.Tail, this.Count + right.TailOffset) :> RRBVector<'T>
+                    let newRoot = (newLeft :?> RRBFullNode<'T>).NewParent nullOwner mergedShift [|newLeft; newRight|]
+                    RRBPersistentVector<'T>(newLen, (RRBMath.up mergedShift), newRoot, right.Tail, this.Count + right.TailOffset) :> RRBVector<'T>
         // Transient vectors may only stay transient if appended to a transient of the same owner; here, we're a persistent
         | :? RRBTransientVector<'T> as right ->
             this.Append (right.Persistent())
