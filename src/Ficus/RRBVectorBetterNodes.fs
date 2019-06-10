@@ -1067,7 +1067,7 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
             | child', None ->
                 let parentL = this.UpdateChildSAbs owner shift (this.NodeSize - 1) child' (child'.TreeSize (down shift))
                 if right.NodeSize > 1 then
-                    let parentR = right.RemoveChild owner shift 0
+                    let parentR = right.RemoveChild owner rightShift 0
                     (parentL :?> RRBFullNode<'T>).ConcatNodes owner shift (parentR :?> RRBFullNode<'T>)
                     |> shrinkLeftNode owner shouldKeepExpandedLeftNode
                 else
@@ -1075,14 +1075,14 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
                     |> shrinkLeftNode owner shouldKeepExpandedLeftNode
             | childL', Some childR' ->
                 let parentL = this.UpdateChildSAbs owner shift (this.NodeSize - 1) childL' (childL'.TreeSize (down shift))
-                let parentR = right.UpdateChildSAbs owner shift 0 childR' (childR'.TreeSize (down rightShift))
+                let parentR = right.UpdateChildSAbs owner rightShift 0 childR' (childR'.TreeSize (down rightShift))
                 (parentL :?> RRBFullNode<'T>).ConcatNodes owner shift (parentR :?> RRBFullNode<'T>)
                 |> shrinkLeftNode owner shouldKeepExpandedLeftNode
         elif shift < rightShift then
             let childR = right.FirstChild :?> RRBFullNode<'T>
             match this.MergeTree owner shift tailOpt (down rightShift) childR shouldKeepExpandedLeftNode with
             | child', None ->
-                let parentR = right.UpdateChildSAbs owner shift 0 child' (child'.TreeSize (down rightShift))
+                let parentR = right.UpdateChildSAbs owner rightShift 0 child' (child'.TreeSize (down rightShift))
                 (parentR, None)  // TODO: Test this: do I need to shrink parentR?
                 |> shrinkLeftNode owner shouldKeepExpandedLeftNode
             | childL', Some childR' ->

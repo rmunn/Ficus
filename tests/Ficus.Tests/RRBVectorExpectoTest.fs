@@ -1358,6 +1358,11 @@ let longRunningTests =
         let v2 = RRBVecGen.treeReprStrToVec "[M*M] [M-1*M-1]*M-2 [M-1 M-2 M*M-4] T6"
         doJoinTest v1 v2
 
+    testCase "joining vectors may end up with a full node as root" <| fun _ ->
+        let v1 = RRBVecGen.treeReprStrToVec "M TM"
+        let v2 = RRBVecGen.treeReprStrToVec "[M*30] [M*M] T3"
+        doJoinTest v1 v2
+
     // split + remove idx 0 of left + join = remove idx 0 of entire passed in 00:02:39.1100000
     // ftestProp (715522567, 296602124) "split + remove idx 0 of left + join = remove idx 0 of entire" <| fun (vec : RRBVector<int>) (i: int) ->
     //     if vec.Length > 0 then
