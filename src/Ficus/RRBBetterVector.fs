@@ -146,7 +146,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     // abstract member RevIterLeaves : unit -> seq<'T []>
     override this.RevIterLeaves() = seq {
         yield this.Tail
-        yield! (this.Root :?> RRBFullNode<'T>).LeavesSeq this.Shift |> Seq.map (fun leaf -> leaf.Items)
+        yield! (this.Root :?> RRBFullNode<'T>).RevLeavesSeq this.Shift |> Seq.map (fun leaf -> leaf.Items)
     }
 
     // abstract member IterItems : unit -> seq<'T>
