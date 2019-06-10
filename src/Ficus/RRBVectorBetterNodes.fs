@@ -223,8 +223,7 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
 
     override this.SetNodeSize _ = ()  // No-op; only used in expanded nodes
 
-    // member this.StringRepr : string = sprintf "length=%d, children=%A" this.NodeSize this.Children
-    member this.StringRepr : string = sprintf "length=%d" this.NodeSize
+    member this.StringRepr : string = sprintf "length=%d, children=%A" this.NodeSize this.Children
 
     member this.FullNodeIsTrulyFull shift =
         this.NodeSize = 0 || this.LastChild.TreeSize (down shift) >= (1 <<< shift)
@@ -1178,8 +1177,7 @@ and [<StructuredFormatDisplay("RelaxedNode({StringRepr})")>] RRBRelaxedNode<'T>(
         // In a relaxed twig node, the last entry in the size table is all we need to look up
         if this.NodeSize = 0 then 0 else this.SizeTable.[this.NodeSize - 1]
 
-    // member this.StringRepr : string = sprintf "length=%d, sizetable=%A, children=%A" this.NodeSize this.SizeTable this.Children
-    member this.StringRepr : string = sprintf "length=%d, sizetable=%A" this.NodeSize this.SizeTable
+    member this.StringRepr : string = sprintf "length=%d, sizetable=%A, children=%A" this.NodeSize this.SizeTable this.Children
 
     override this.GetEditableNode owner =
         if this.IsEditableBy owner
@@ -1435,11 +1433,10 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
     override this.NodeSize = this.CurrentLength
     override this.SlotCount = this.Children |> Seq.take this.NodeSize |> Seq.sumBy (fun child -> child.NodeSize)
 
-    // member this.StringRepr : string = sprintf "length=%d, children=%A%s"
-    //                                           this.NodeSize
-    //                                           (this.Children |> Array.truncate this.NodeSize)
-    //                                           (if this.NodeSize >= Literals.blockSize then "" else sprintf " (plus %d nulls)" (Literals.blockSize - this.NodeSize))
-    member this.StringRepr : string = sprintf "length=%d" this.NodeSize
+    member this.StringRepr : string = sprintf "length=%d, children=%A%s"
+                                              this.NodeSize
+                                              (this.Children |> Array.truncate this.NodeSize)
+                                              (if this.NodeSize >= Literals.blockSize then "" else sprintf " (plus %d nulls)" (Literals.blockSize - this.NodeSize))
 
     override this.Shrink owner =
         let size = this.NodeSize
@@ -1832,15 +1829,11 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
     override this.NodeSize = this.CurrentLength
     override this.SlotCount = this.Children |> Seq.take this.NodeSize |> Seq.sumBy (fun child -> child.NodeSize)
 
-    // member this.StringRepr : string = sprintf "length=%d, sizetable=%A%s, children=%A%s"
-    //                                           this.NodeSize
-    //                                           (this.SizeTable |> Array.truncate this.NodeSize)
-    //                                           (if this.NodeSize >= Literals.blockSize then "" else sprintf " (plus %d nulls)" (Literals.blockSize - this.NodeSize))
-    //                                           (this.Children |> Array.truncate this.NodeSize)
-    //                                           (if this.NodeSize >= Literals.blockSize then "" else sprintf " (plus %d nulls)" (Literals.blockSize - this.NodeSize))
-    member this.StringRepr : string = sprintf "length=%d, sizetable=%A%s"
+    member this.StringRepr : string = sprintf "length=%d, sizetable=%A%s, children=%A%s"
                                               this.NodeSize
                                               (this.SizeTable |> Array.truncate this.NodeSize)
+                                              (if this.NodeSize >= Literals.blockSize then "" else sprintf " (plus %d nulls)" (Literals.blockSize - this.NodeSize))
+                                              (this.Children |> Array.truncate this.NodeSize)
                                               (if this.NodeSize >= Literals.blockSize then "" else sprintf " (plus %d nulls)" (Literals.blockSize - this.NodeSize))
 
     override this.Shrink owner =

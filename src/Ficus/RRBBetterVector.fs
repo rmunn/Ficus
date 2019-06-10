@@ -64,8 +64,8 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     member this.Tail = tail
     member this.TailOffset = tailOffset
 
-    // override this.ToString() =
-    //     sprintf "RRBPersistentVector<length=%d,shift=%d,tailOffset=%d,root=%A,tail=%A>" count shift tailOffset root tail
+    override this.ToString() =
+        sprintf "RRBPersistentVector<length=%d,shift=%d,tailOffset=%d,root=%A,tail=%A>" count shift tailOffset root tail
 
     internal new (token : OwnerToken) =
         let root = RRBFullNode<'T>(token, Array.empty)
@@ -417,8 +417,8 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
     member val TailOffset = tailOffset with get, set
     member val internal Owner = root.Owner with get, set
 
-    // override this.ToString() =
-    //     sprintf "RRBTransientVector<owner=%s,length=%d,shift=%d,tailOffset=%d,root=%A,tail=%A>" (if !this.Owner |> isNull then "<null>" else !this.Owner) this.Count this.Shift this.TailOffset this.Root this.Tail
+    override this.ToString() =
+        sprintf "RRBTransientVector<owner=%s,length=%d,shift=%d,tailOffset=%d,root=%A,tail=%A>" (if !this.Owner |> isNull then "<null>" else !this.Owner) this.Count this.Shift this.TailOffset this.Root this.Tail
 
     // new() = RRBTransientVector(0, 5, emptyNode, Array.empty, 0)
     internal new (token : OwnerToken) =
