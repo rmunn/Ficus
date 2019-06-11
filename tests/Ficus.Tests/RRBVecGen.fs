@@ -321,36 +321,11 @@ let genNodeRepr level childCount =
     Gen.frequency [3, genRelaxedNodeRepr level childCount
                    1, genFullNodeRepr level childCount]
 
-let rec shrinkNodeRepr node =
+let shrinkNodeRepr node =
     match node with
     | Int n -> Arb.shrink n |> Seq.filter (fun n -> n > 0 (* Empty leaves are not allowed *)) |> Seq.map Int
     | List l -> Arb.shrink l |> Seq.filter (not << List.isEmpty) (* Empty nodes are not allowed *) |> Seq.map List
 
-let arbTreeRepr =
-    { new Arbitrary<ListItem>() with
-        override x.Generator = (genNodeRepr 2 4)
-        override x.Shrinker t = shrinkNodeRepr t }
-
-// let arb2TreeRepr = Arb.fromGenShrink (genNodeRepr 2 4, shrinkNodeRepr)
-// TODO: Make a genTree that picks good values for genNodeRepr; I think we already have one, actually
-(*
-let genVec<'a> level childCount =
-    if level <= 0 then failwith "genVec needs to have level 1+. For level 0, use genTinyVec"
-    if childCount < 2 then failwith "genVec needs to have childCount 2+. For level 0, use genTinyVec"
-    gen {
-        let g = Arb.generate<'a>
-        let! root = genNode g level childCount
-        let! root' = (root :?> RRBFullNode<'a>) |> fleshOutRightmostLeafIfNecessary g level
-        let! tailSize = Gen.choose(1,Literals.blockSize)
-        let! tail = Gen.arrayOfLength tailSize g
-        let shift = level * Literals.blockSizeShift
-        let rootSize = root'.TreeSize shift
-        let totalSize = rootSize + Array.length tail
-        let vec = RRBPersistentVector<'a>(totalSize, shift, root', tail, rootSize) :> RRBVector<'a>
-        return vec
-    }
-*)
-// module Literals = let blockSize = 32
 let fleshOutRightmostLeafOfRepr (root : ListItem) =
     let rec getRightmostLeaves root =
         match root with
@@ -370,7 +345,8 @@ let fleshOutRightmostLeafOfRepr (root : ListItem) =
             if not isFull then
                 root
             else
-                // Recursively build up a new tree up to the root, with a different leaf count in the end... and don't bother adjusting the tail, for simplicity
+                // Recursively build up a new tree up to the root, with a different leaf count in the end
+                // Note that we don't bother adjusting the tail, for simplicity.
                 let rec buildNewTree root =
                     match root with
                     | Int _ -> Int Literals.blockSize
@@ -382,46 +358,43 @@ let fleshOutRightmostLeafOfRepr (root : ListItem) =
                         List (List.ofArray a)
                 buildNewTree root
 
-let fleshOutRightmostLeafOfReprPreviousAttempt (root : ListItem) =
-    let rec getRightmostLeafSize = function
-                            | Int n -> n
-                            | List [] -> Literals.blockSize  // So that empty roots won't be adjusted below
-                            | List l -> List.last l |> getRightmostLeafSize
-    let leafSize = root |> getRightmostLeafSize
-    if leafSize >= Literals.blockSize
-    then root
+let genTreeRepr level childCount =
+    if level <= 0 then failwith "genVec needs to have level 1+. For level 0, use genTinyVec"
+    if childCount < 2 then failwith "genVec needs to have childCount 2+. For level 0, use genTinyVec"
+    gen {
+        let! root = genNodeRepr level childCount
+        let root' = root |> fleshOutRightmostLeafOfRepr
+        let! tailSize = Gen.choose(1,Literals.blockSize)
+        let tree = { Root = root' ; Tail = Some tailSize }
+        return tree
+    }
+
+let shrinkTreeRoot root =
+    shrinkNodeRepr root |> Seq.map fleshOutRightmostLeafOfRepr
+
+let shrinkTreeRepr (tree : TreeRepresentation) =
+    let roots = shrinkTreeRoot tree.Root |> Seq.map (fun root -> { tree with Root = root })
+    let tailSizes = match tree.Tail with
+                    | None -> Seq.empty
+                    | Some tailSize -> Arb.shrinkNumber tailSize
+    let tails = tailSizes |> Seq.filter (fun n -> n > 0) |> Seq.map (fun size -> { tree with Tail = Some size })
+    Seq.append roots tails
+
+let genTreeReprOfLength len =
+    if len <= Literals.blockSize then
+        Gen.constant { Root = List []; Tail = Some len }
+    elif len <= Literals.blockSize * 2 then
+        Gen.constant { Root = List [Int Literals.blockSize]; Tail = Some (len - Literals.blockSize) }
     else
-        // Recursively build up a new tree up to the root, with a different leaf count in the end... and don't bother adjusting the tail, for simplicity
-        let rec buildNewTree root =
-            match root with
-            | Int _ -> Int Literals.blockSize
-            | List [] -> root // Empty roots shouldn't be touched
-            | List [Int _] -> List [Int Literals.blockSize]
-            | List (x::xs) when x = Int Literals.blockSize ->
-                let (List l) = buildNewTree (List xs)
-                List (x::l)
-            | List (Int _::xs) -> root  // If we hit an Int that isn't blockSize, last twig isn't full so no changes
-            | List l ->
-                let a = Array.ofList l
-                let i = a.Length - 1
-                a.[i] <- a.[i] |> buildNewTree
-                List (List.ofArray a)
-        buildNewTree root
+        let len' = len - Literals.blockSize * 2
+        // childCount must be in range 2..Literals.blockSize
+        // So we take (Literals.blockSize - 1) and that's the divisor for the mod operation
+        let denom = Literals.blockSize - 1
+        let level = len' / denom + 1
+        let childCount = len' % denom + 2
+        genTreeRepr level childCount
 
-// fleshOutRightmostLeafOfRepr <| Int 5
-// fleshOutRightmostLeafOfRepr <| List [Int 5; Int 32; Int 5; Int 27]
-// fleshOutRightmostLeafOfRepr <| List [List [Int 5; Int 32; Int 5; Int 32]; List [Int 32; Int 32; Int 32; Int 22]]
-
-// let genTreeReprOfLength<'a> len =
-//     if len <= Literals.blockSize then
-//         Gen.constant { Root = List []; Tail = Some len }
-//     elif len <= Literals.blockSize * 2 then
-//         Gen.constant { Root = List [Int Literals.blockSize]; Tail = Some (len - Literals.blockSize) }
-//     else
-//         let len' = len - Literals.blockSize * 2
-//         // childCount must be in range 2..Literals.blockSize
-//         // So we take (Literals.blockSize - 1) and that's the divisor for the mod operation
-//         let denom = Literals.blockSize - 1
-//         let level = len' / denom + 1
-//         let childCount = len' % denom + 2
-//         let root = genNodeRepr level childCount
+let arbTreeRepr =
+    { new Arbitrary<TreeRepresentation>() with
+        override x.Generator = Gen.sized genTreeReprOfLength
+        override x.Shrinker t = shrinkTreeRepr t }
