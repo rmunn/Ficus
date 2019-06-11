@@ -11,15 +11,15 @@ open Expecto.Logging.Message
 
 let logger = Log.create "Expecto"
 
+let mkLeaf items = RRBNode<'T>.MkLeaf nullOwner items
 let mkNode<'T> level items =
     if level = 0
-        then failwith "Don't call RRBVecGen.mkNode at level 0" // RRBHelpers.mkNode items // Leaves never need to be RRBNodes
+        then failwith "Don't call RRBVecGen.mkNode at level 0" // Leaves have 'T children, whereas nodes have RRBNode<'T> children
         else RRBNode<'T>.MkNode nullOwner (level * Literals.blockSizeShift) items
 
 let mkEmptyNode<'T>() =
     RRBNode<'T>.MkFullNode nullOwner Array.empty
 
-let mkLeaf items = RRBNode<'T>.MkLeaf nullOwner items
 let minSlots childCount = (childCount - Literals.eMaxPlusOne) * Literals.blockSize + 1 |> max childCount
 let maxSlots childCount = childCount * Literals.blockSize
 
@@ -43,7 +43,7 @@ open TreeParser // Pull in TreeRepresentation and ListItem types
 let treeReprHeight treeRepr =
     let rec loop h = function
         | Int _ -> h
-        | List [] -> h
+        | List [] -> h+1  // Empty roots are considered height 1
         | List (x::xs) -> loop (h+1) x
     loop 0 treeRepr.Root
 
@@ -76,7 +76,7 @@ let peek counter = counter 0  // Returns what the next value would be, but doesn
 
 let mkSpecificRRBTwig itemSrc (childSizes:ListItem) =
     match childSizes with
-    | List items when items |> List.forall (function Int _ -> true | _ -> false) -> // Singleton root node at level 0 gets treated as a leaf
+    | List items when items |> List.forall isInt -> // This also succeeds on empty root node, which is good
         items
         |> Array.ofList
         |> Array.map (function | (Int n) -> itemSrc |> mkArray n |> mkLeaf
@@ -88,10 +88,10 @@ let rec mkSpecificRRBNode itemSrc level (childSizes:ListItem) =
     if level = 1 then
         match childSizes with
         | Int n -> failwith "Individual ints should have been handled as part of their component lists"
-        | List items when items |> List.forall (function Int _ -> true | _ -> false) -> // Singleton root node at level 0 gets treated as a leaf
+        | List items when items |> List.forall isInt -> // This also succeeds on empty root node, which is good
             mkSpecificRRBTwig itemSrc childSizes
         | List _ ->
-            failwith "Shouldn't be at level 0 here"
+            failwith "Shouldn't be at level 1 here"
     else
         match childSizes with
         | Int _ -> failwith "Ints in tree reprs should only be found at level 0"
@@ -105,16 +105,16 @@ let mkSpecificTree treeRepr =
     let height = treeReprHeight treeRepr
     let items = mkCounter()
     let tailSize = defaultArg treeRepr.Tail 1  // Tail required to be present, so default to 1 if not specified
-    if height = 0 then
-        // Empty root (tail-only tree) is represented as being of height 1 so that the root is never a leaf
-        let tail = items |> mkArray tailSize
-        RRBPersistentVector(tailSize, Literals.blockSizeShift, mkEmptyNode(), tail, 0) :> RRBVector<_>
-    else
-        let rootNode = mkSpecificRRBNode items height treeRepr.Root
-        let tailItems = items |> mkArray tailSize
-        let vecLen = peek items
-        let tail = tailItems
-        RRBPersistentVector(vecLen, height * Literals.blockSizeShift, rootNode, tail, vecLen - tailSize) :> RRBVector<_>
+    // if height = 0 then
+    //     // Empty root (tail-only tree) is represented as being of height 1 so that the root is never a leaf
+    //     let tail = items |> mkArray tailSize
+    //     RRBPersistentVector(tailSize, Literals.blockSizeShift, mkEmptyNode(), tail, 0) :> RRBVector<_>
+    // else
+    let rootNode = mkSpecificRRBNode items height treeRepr.Root
+    let tailItems = items |> mkArray tailSize
+    let vecLen = peek items
+    let tail = tailItems
+    RRBPersistentVector(vecLen, height * Literals.blockSizeShift, rootNode, tail, vecLen - tailSize) :> RRBVector<_>
 
 let treeReprStrToVec s =
     let treeRepr =
@@ -331,7 +331,7 @@ let arbTreeRepr =
         override x.Generator = (genNodeRepr 2 4)
         override x.Shrinker t = shrinkNodeRepr t }
 
-let arb2TreeRepr = Arb.fromGenShrink (genNodeRepr 2 4, shrinkNodeRepr)
+// let arb2TreeRepr = Arb.fromGenShrink (genNodeRepr 2 4, shrinkNodeRepr)
 // TODO: Make a genTree that picks good values for genNodeRepr; I think we already have one, actually
 (*
 let genVec<'a> level childCount =
@@ -350,25 +350,67 @@ let genVec<'a> level childCount =
         return vec
     }
 *)
-// let fleshOutRightmostLeafOfReprIfNecessary (root : ListItem) (tailSize : int) =
-// TODO: This is tricky in list representations, since we don't have the vector manipulation functions we need here to figure out if nodes are completely full and do ShiftNodesIntoTail, etc.
-// Maybe we'll just call AdjustTree() on the vector after creating it
-//  let getRightTwigCount = function
-//                         | List [] -> failwith "Empty list has no twig"
-//                         | List l when l |> List.forall (function | Int _ -> true | List _ -> false) ->
-//  gen {
-//     let twig = root |> getRightTwig (level * Literals.blockSizeShift)
-//     let leaf = twig.LastChild
-//     let missingItemCount = Literals.blockSize - leaf.NodeSize
-//     if missingItemCount <= 0 || twig :? RRBRelaxedNode<'a> then
-//         return root
-//     else
-//         let! newLeaf = gen {
-//             let! newItems = Gen.arrayOfLength missingItemCount g
-//             return (Array.append (leaf :?> RRBLeafNode<'a>).Items newItems) |> mkLeaf
-//         }
-//         return (root.ReplaceLastLeaf nullOwner (level * Literals.blockSizeShift) (newLeaf :?> RRBLeafNode<'a>) missingItemCount) :?> RRBFullNode<'a>
-//  }
+// module Literals = let blockSize = 32
+let fleshOutRightmostLeafOfRepr (root : ListItem) =
+    let rec getRightmostLeaves root =
+        match root with
+        | Int n -> None
+        | List [] -> None
+        | List l when l |> List.forall isInt -> Some l
+        | List l -> List.last l |> getRightmostLeaves
+    match getRightmostLeaves root with
+    | None -> root
+    | Some leafList ->
+        let leaves = leafList |> Array.ofList
+        let len = Array.length leaves
+        if len <= 0 || leaves.[len - 1] = Int Literals.blockSize then
+            root
+        else
+            let isFull = leaves |> Seq.take (len - 1) |> Seq.forall ((=) (Int Literals.blockSize))
+            if not isFull then
+                root
+            else
+                // Recursively build up a new tree up to the root, with a different leaf count in the end... and don't bother adjusting the tail, for simplicity
+                let rec buildNewTree root =
+                    match root with
+                    | Int _ -> Int Literals.blockSize
+                    | List [] -> root // Empty roots shouldn't be touched
+                    | List l ->
+                        let a = Array.ofList l
+                        let i = a.Length - 1
+                        a.[i] <- a.[i] |> buildNewTree
+                        List (List.ofArray a)
+                buildNewTree root
+
+let fleshOutRightmostLeafOfReprPreviousAttempt (root : ListItem) =
+    let rec getRightmostLeafSize = function
+                            | Int n -> n
+                            | List [] -> Literals.blockSize  // So that empty roots won't be adjusted below
+                            | List l -> List.last l |> getRightmostLeafSize
+    let leafSize = root |> getRightmostLeafSize
+    if leafSize >= Literals.blockSize
+    then root
+    else
+        // Recursively build up a new tree up to the root, with a different leaf count in the end... and don't bother adjusting the tail, for simplicity
+        let rec buildNewTree root =
+            match root with
+            | Int _ -> Int Literals.blockSize
+            | List [] -> root // Empty roots shouldn't be touched
+            | List [Int _] -> List [Int Literals.blockSize]
+            | List (x::xs) when x = Int Literals.blockSize ->
+                let (List l) = buildNewTree (List xs)
+                List (x::l)
+            | List (Int _::xs) -> root  // If we hit an Int that isn't blockSize, last twig isn't full so no changes
+            | List l ->
+                let a = Array.ofList l
+                let i = a.Length - 1
+                a.[i] <- a.[i] |> buildNewTree
+                List (List.ofArray a)
+        buildNewTree root
+
+// fleshOutRightmostLeafOfRepr <| Int 5
+// fleshOutRightmostLeafOfRepr <| List [Int 5; Int 32; Int 5; Int 27]
+// fleshOutRightmostLeafOfRepr <| List [List [Int 5; Int 32; Int 5; Int 32]; List [Int 32; Int 32; Int 32; Int 22]]
 
 // let genTreeReprOfLength<'a> len =
 //     if len <= Literals.blockSize then

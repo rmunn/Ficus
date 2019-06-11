@@ -8,6 +8,14 @@ type ListItem =
     | Int of int
     | List of ListItem list
 
+let isInt = function
+    | Int _ -> true
+    | List _ -> false
+
+let isList = function
+    | Int _ -> false
+    | List _ -> true
+
 type TreeRepresentation =
     { Root: ListItem
       Tail: int option }
