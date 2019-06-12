@@ -13,6 +13,9 @@
     <Compile Include="TreeParser.fs" />
     <Compile Include="RRBVecGen.fs" />
     <Compile Include="RRBVectorProps.fs" />
+    <Compile Include="ExperimentalFsCheckCommands.fs" />
+    <Compile Include="RRBVectorFsCheckCommands.fs" />
+    <Compile Include="RRBVectorMoreCommands.fs" />
     <Compile Include="RRBVectorBetterNodesExpectoTest.fs" />
     <Compile Include="RRBVectorExpectoTest.fs" />
     <Compile Include="Main2.fs" />

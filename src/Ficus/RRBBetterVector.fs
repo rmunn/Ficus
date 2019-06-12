@@ -1171,7 +1171,7 @@ module RRBVector =
         let mutable falseItems = RRBTransientVector<'T>.MkEmpty()
         for item in vec do
             if pred item then trueItems <- trueItems.Push item :?> RRBTransientVector<'T> else falseItems <- falseItems.Push item :?> RRBTransientVector<'T>
-        trueItems.Persistent(), falseItems.Persistent()
+        trueItems.Persistent() :> RRBVector<'T>, falseItems.Persistent() :> RRBVector<'T>
 
     let permute f (vec : RRBVector<'T>) = // TODO: Implement a better version once we have transient RRBVectors, so we don't have to build an intermediate array
         let arr = Array.zeroCreate vec.Length

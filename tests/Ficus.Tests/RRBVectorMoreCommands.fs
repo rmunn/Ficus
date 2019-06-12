@@ -3,7 +3,7 @@ module ExpectoTemplate.RRBVectorMoreCommands
 // https://fscheck.github.io/FsCheck/StatefulTesting.html
 
 open Ficus.RRBArrayExtensions
-open Ficus.RRBVectorNodes
+open Ficus.RRBVectorBetterNodes
 open Ficus.RRBVector
 open FsCheck
 open Expecto.Logging
@@ -180,8 +180,8 @@ module ParameterizedVecCommands =
 
     // Generators for the above
     // TODO: Generate *non-negative* ints for indices
-    let insertGen = Arb.generate<int> |> Gen.two |> Gen.map insert
-    let removeGen = Arb.generate<int> |> Gen.map remove
+    let insertGen = Arb.generate<NonNegativeInt> |> Gen.two |> Gen.map (fun (NonNegativeInt n1, NonNegativeInt n2) -> insert (n1,n2))
+    let removeGen = Arb.generate<NonNegativeInt> |> Gen.map (fun (NonNegativeInt n) -> remove n)
     let pushGen = Arb.generate<NonNegativeInt> |> Gen.map (fun (NonNegativeInt n) -> push n)
     let popGen = Arb.generate<NonNegativeInt> |> Gen.map (fun (NonNegativeInt n) -> pop n)
     let splitGen = Arb.generate<NonNegativeInt * bool> |> Gen.map split

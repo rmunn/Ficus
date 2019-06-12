@@ -103,15 +103,18 @@ type MyGenerators =
 Arb.register<MyGenerators>() |> ignore
 let testProp  name fn =  testPropertyWithConfig { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 120 ; endSize = 180 } name fn
 let ptestProp name fn = ptestPropertyWithConfig { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 120 ; endSize = 180 } name fn
-let ftestProp replay name fn = etestPropertyWithConfig replay { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 120 ; endSize = 180 } name fn
+let ftestProp name fn = ftestPropertyWithConfig { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 120 ; endSize = 180 } name fn
+let etestProp replay name fn = etestPropertyWithConfig replay { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 120 ; endSize = 180 } name fn
 
 let testPropMed  name fn =  testPropertyWithConfig { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 60 ; endSize = 120 } name fn
 let ptestPropMed name fn = ptestPropertyWithConfig { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 60 ; endSize = 120 } name fn
-let ftestPropMed replay name fn = etestPropertyWithConfig replay { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 60 ; endSize = 120 } name fn
+let ftestPropMed name fn = ftestPropertyWithConfig { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 60 ; endSize = 120 } name fn
+let etestPropMed replay name fn = etestPropertyWithConfig replay { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 60 ; endSize = 120 } name fn
 
 let testPropSm  name fn =  testPropertyWithConfig { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 30 ; endSize = 90 } name fn
 let ptestPropSm name fn = ptestPropertyWithConfig { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 30 ; endSize = 90 } name fn
-let ftestPropSm replay name fn = etestPropertyWithConfig replay { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 30 ; endSize = 90 } name fn
+let ftestPropSm name fn = ftestPropertyWithConfig { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 30 ; endSize = 90 } name fn
+let etestPropSm replay name fn = etestPropertyWithConfig replay { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 30 ; endSize = 90 } name fn
 
 // *** TEST DATA ***
 
@@ -180,19 +183,6 @@ let vectorTests =
         let v = RRBVector.empty<int>
         RRBVectorProps.checkProperties v |> ignore
         Expect.equal (RRBVector.length v) 0 "empty vector should have 0 items"
-    )
-(*
-    testCase "debug node distributor" (fun _ ->
-        let nodes = RRBVecGen.genNode 2 4 |> Gen.sample 0 1
-        for node in nodes do
-            Expect.equal (nodeSize node) 4<nodeIdx> "Node should have 4 children"
-    )
-*)
-    testProp "genVec" (fun (vec:RRBVector<int>) -> RRBVectorProps.checkPropertiesSimple vec)  // Make sure the generator works
-    testCase "treeReprToVec" (fun _ ->  // Demo of how to use treeReprToVec
-        let s = "1 2 M T1"
-        let vec = RRBVecGen.treeReprStrToVec s
-        RRBVectorProps.checkPropertiesSimple vec
     )
     testCase "splitHugeVec" <| fun _ ->
         let vec = ridiculouslyBigVectorAtBlockSize8
@@ -740,16 +730,7 @@ let splitJoinTests =
         let vec3 = vec2 |> RRBVector.push 512
         RRBVectorProps.checkProperties vec3 "Full root+tail vector after removing first item, then pushing two items"
 
-    // TODO: Delete this next test, as it's only testing the treeRepr function and thus no longer serves a purpose
-    testProp "vec->treeRepr->Vec produces valid vectors after round-trip" (fun (vec : RRBVector<int>) ->
-        RRBVectorProps.checkProperties vec "Original vector"
-        let treeRepr = RRBVecGen.vecToTreeReprStr vec
-        let vec' = RRBVecGen.treeReprStrToVec treeRepr
-        RRBVectorProps.checkProperties vec' "Round-tripped vector"
-        // We do want .equal here, not .vecEqual ... oops, the numbers will be different. Never mind, this is too complicated.
-        // Expect.equal vec' vec "Vector after round-trip should equal original vector in every detail"
-    )
-(*    testProp "multiple splits+joins recreate same vector each time" (fun (vec : RRBVector<int>) (idxs : int list) ->
+(*    testProp "multiple splits+joins recreate same vector each time" <| fun (vec : RRBVector<int>) (idxs : int list) ->
         // Might comment this one out sometimes, as it's QUITE slow. Not surprising, considering how much work you end up doing per test run.
         let vecResult =
             idxs
@@ -765,7 +746,6 @@ let splitJoinTests =
                 vec'
             ) vec
         Expect.vecEqual vecResult vec "After all split+join operations, resulting vector did not equal original vector"
-    )
 *)
     testCase "Splitting a vector will adjust it to maintain the invariant, and so will joining it together again" <| fun _ ->
         // (Shrunk: RRBVector<length=21,shift=3,tailOffset=18,root=RRBNode(sizeTable=[|5; 10; 18|],children=[|FullNode([|-16; -6; 4; -7; 14|]); FullNode([|15; -17; 14; 5; -1|]);
@@ -987,7 +967,6 @@ let insertTests =
 // sequences of operations. This will help find cases where order of operations
 // matters (i.e., a bug only happens if you do A,B,A,A in that specific order).
 
-(* Operational tests not yet ported to new API
 let fixedSpecTestFromData (spec : RRBVectorFsCheckCommands.Cmd list) (data : RRBVector<int>) () =
     // A test I wrote to focus on one specific test scenario that was causing a property failure.
     // If you want to uncomment the printfn statements here, first focus this test so it runs alone.
@@ -1079,7 +1058,7 @@ let operationTests =
         let result = vec |> RRBVector.remove (vec.Length - 2)
         RRBVectorProps.checkProperties result "Vector after removing one item from last leaf"
   ]
-*)
+
 let arrayTests =
   testList "Array extension functions" [
     testProp "copyAndAppend" (fun (ArrayAndIdx (arr,_)) ->
@@ -1463,14 +1442,16 @@ let longRunningTests =
         Expect.vecEqual joined vec' "Split + push left + joined vectors did not equal insertion into original vector"
 
   ]
-(* Operational tests not yet ported to new API
+
 open RRBVectorMoreCommands.ParameterizedVecCommands
 let isolatedTest =
   testList "Isolated test" [
+    // Passed: (1380433896, 296477427)
     testProp (*1380433896, 296477427*) (*788968584, 296477381*) "More command tests from empty" (Command.toProperty (RRBVectorMoreCommands.specFromData RRBVector.empty))
     // Failed case: [push 38; push 38; pop 58; push 66; mergeL "0 T19"; push 47; pop 54; pop 66; mergeL "0 T24"; push 8; pop 61]
     // Sizes: [38; 76; 18; 84; 103 (left node 19); 150 (left node still 19?); 96 (left node still 19?); 30 (left node still 19?); 54 (is it 24-19-11? or less?); 62; 1]
     // Also: ftestPropertyWithConfig (788968584, 296477381) "More command tests from empty"
+    // Passed: (498335399, 296478517)
     testProp (*498335399, 296478517*) (*2044959467, 296477380*) "Try command tests from data" <| fun (vec : RRBVector<int>) -> logger.info (eventX "Starting test with {vec}" >> setField "vec" (RRBVecGen.vecToTreeReprStr vec)); (Command.toProperty (RRBVectorMoreCommands.specFromData vec))
     // Failed case: Initial: "M T9", Actions: [pop 37; push 47; mergeR "0 T15"; mergeR "0 T11"; mergeL "0 T9"; mergeL "0 T10"; pop 48; pop 47]
     // Also: ftestPropertyWithConfig (2044959467, 296477380) "Try command tests from data"
@@ -1610,7 +1591,7 @@ T26
             RRBVectorProps.checkProperties current <| sprintf "Vector after %s" (action.ToString())
 
   ]
-*)
+
 
 let mkTestSuite name startingVec =
   let runTest testName f =
@@ -1726,7 +1707,7 @@ let tests =
 // ignore
 //   [
 
-    // isolatedTest
+    isolatedTest
     emptyTests
     singletonTests
     dualTests
@@ -1743,7 +1724,7 @@ let tests =
     constructedVectorSplitTests
     splitJoinTests
     insertTests
-    // operationTests // Operational tests not yet ported to new API
+    operationTests // Operational tests not yet ported to new API
     vectorTests
     nodeVecGenerationTests
     regressionTests
