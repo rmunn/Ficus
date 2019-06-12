@@ -8,7 +8,6 @@ open Ficus.RRBVector
 open FsCheck
 open Expecto.Logging
 open Expecto.Logging.Message
-open TreeParser
 
 module Literals = Ficus.Literals
 let logger = Log.create "Expecto"
@@ -100,7 +99,6 @@ type MyGenerators =
         { new Arbitrary<RRBVector<'a>>() with
             override x.Generator = RRBVecGen.sizedGenVec<'a>
             override x.Shrinker _ = Seq.empty }
-    static member arbTreeRepr() = RRBVecGen.arbTreeRepr
 
 Arb.register<MyGenerators>() |> ignore
 let testProp  name fn =  testPropertyWithConfig { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 120 ; endSize = 180 } name fn
@@ -190,12 +188,7 @@ let vectorTests =
             Expect.equal (nodeSize node) 4<nodeIdx> "Node should have 4 children"
     )
 *)
-    ftestProp "genVecRepr" (fun (repr:TreeRepresentation) ->
-        // logger.warn (eventX "Testing repr {repr}" >> setField "repr" (sprintf "%A" repr))
-        let vec = repr |> RRBVecGen.mkSpecificTree
-        // logger.warn (eventX "Resulting in vec {vec}" >> setField "vec" (sprintf "%A" vec))
-        vec |> RRBVectorProps.checkPropertiesSimple)  // Make sure the generator works
-    // ftestProp "genVec" (fun (vec:RRBVector<int>) -> vec |> RRBVectorProps.checkPropertiesSimple)  // Make sure the generator works
+    testProp "genVec" (fun (vec:RRBVector<int>) -> RRBVectorProps.checkPropertiesSimple vec)  // Make sure the generator works
     testCase "treeReprToVec" (fun _ ->  // Demo of how to use treeReprToVec
         let s = "1 2 M T1"
         let vec = RRBVecGen.treeReprStrToVec s
