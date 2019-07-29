@@ -1395,14 +1395,26 @@ module RRBVector =
             transient <- transient.Push value :?> RRBTransientVector<'T>
         transient.Persistent() :> RRBVector<'T>
 
-// NOTE: Converted code up to this point to be transient-aware. TODO: Convert code below to be more efficient with transients, and preserve owner tokens when possible.
     let rev (vec : RRBVector<'T>) =
-        if isEmpty vec then empty<'T> else
-        let mutable transient = RRBTransientVector<'T>.MkEmpty()
-        for item in vec.RevIterItems() do
-            transient <- transient.Push item :?> RRBTransientVector<'T>
-        transient.Persistent() :> RRBVector<'T>
+        if isEmpty vec then vec else
+        if vec |> isTransient then
+            // Reverse by swapping in-place. TODO: Benchmark and see if this is faster than creating a new copy
+            let lastIdx = vec.Length - 1
+            let mid = vec.Length >>> 1
+            for i = 0 to mid - 1 do
+                let j = lastIdx - i
+                let oldL = vec.[i]
+                let oldR = vec.[j]
+                vec.Update i oldR |> ignore
+                vec.Update j oldL |> ignore
+            vec
+        else
+            let mutable transient = RRBTransientVector<'T>.MkEmpty()
+            for item in vec.RevIterItems() do
+                transient <- transient.Push item :?> RRBTransientVector<'T>
+            transient.Persistent() :> RRBVector<'T>
 
+    // TODO: Make a variant for when f is of type 'a -> 'a, which does a scan in-place for transients
     let inline scan f initState (vec : RRBVector<'T>) = vec |> Seq.scan f initState |> ofSeq
     let scanBack initState f (vec : RRBVector<'T>) =
         let f' = flip f
@@ -1417,6 +1429,7 @@ module RRBVector =
             elif pred vec.[n] then loop pred (n+1)
             else vec.Skip n
         loop pred 0
+
     // TODO: Implement a sort-in-place algorithm (perhaps TimSort from Python?) on transients, then benchmark against this simple version of sorting
     let sort (vec : RRBVector<'T>) =
         let arr = toArray vec
@@ -1440,13 +1453,16 @@ module RRBVector =
         Array.sortInPlaceBy f arr
         System.Array.Reverse arr  // Reverse in-place, more efficient than Array.rev since it doesn't create an intermediate array
         arr |> ofArray
+
     let inline splitAt idx (vec : RRBVector<'T>) = vec.Split idx
     let inline splitInto splitCount (vec : RRBVector<'T>) = chunkBySize (vec.Length / splitCount) vec  // TODO: Test that splits have the expected size
+
     let inline sum (vec : RRBVector<'T>) = vec |> Seq.sum
     let inline sumBy f (vec : RRBVector<'T>) = vec |> Seq.sumBy f
     let inline tail (vec : RRBVector<'T>) = vec.Remove 0
     let inline take n (vec : RRBVector<'T>) =
-        if n > vec.Length then invalidArg "n" <| sprintf "Cannot take more items than a vector's length. Tried to take %d items from a vector of length %d" n vec.Length
+        // TODO: Document that RRBVector.take never throws, it just returns the whole vector if you take too much
+        // if n > vec.Length then invalidArg "n" <| sprintf "Cannot take more items than a vector's length. Tried to take %d items from a vector of length %d" n vec.Length
         vec.Take n
     let inline takeWhile pred (vec : RRBVector<'T>) =  // TODO: Try a version with vec.IterItems() and a counter, and see if that runs faster. Also update skipWhile if it does.
         let rec loop pred n =
@@ -1467,22 +1483,48 @@ module RRBVector =
         if vec.Length = 0 then None else Some (last vec)
     let inline tryPick f (vec : RRBVector<'T>) = vec |> Seq.tryPick f
     let inline unfold f initState = Seq.unfold f initState |> ofSeq
+
     let unzip (vec : RRBVector<'T1 * 'T2>) =
-        let mutable vec1 = RRBTransientVector<'T1>.MkEmpty()
-        let mutable vec2 = RRBTransientVector<'T2>.MkEmpty()
+        let resultShouldBeTransient = vec |> isTransient
+        let mutable vec1 =
+            if resultShouldBeTransient
+            then RRBTransientVector<'T1>.MkEmptyWithToken((vec :?> RRBTransientVector<_>).Owner)
+            else RRBTransientVector<'T1>.MkEmpty()
+        let mutable vec2 =
+            if resultShouldBeTransient
+            then RRBTransientVector<'T2>.MkEmptyWithToken((vec :?> RRBTransientVector<_>).Owner)
+            else RRBTransientVector<'T2>.MkEmpty()
         for a, b in vec do
             vec1 <- vec1.Push a :?> RRBTransientVector<_>
             vec2 <- vec2.Push b :?> RRBTransientVector<_>
-        vec1.Persistent(), vec2.Persistent()
+        if resultShouldBeTransient then
+            vec1 :> RRBVector<_>, vec2 :> RRBVector<_>
+        else
+            vec1.Persistent() :> RRBVector<_>, vec2.Persistent() :> RRBVector<_>
+
     let unzip3 (vec : RRBVector<'T1 * 'T2 * 'T3>) =
-        let mutable vec1 = RRBTransientVector<'T1>.MkEmpty()
-        let mutable vec2 = RRBTransientVector<'T2>.MkEmpty()
-        let mutable vec3 = RRBTransientVector<'T3>.MkEmpty()
+        let resultShouldBeTransient = vec |> isTransient
+        let mutable vec1 =
+            if resultShouldBeTransient
+            then RRBTransientVector<'T1>.MkEmptyWithToken((vec :?> RRBTransientVector<_>).Owner)
+            else RRBTransientVector<'T1>.MkEmpty()
+        let mutable vec2 =
+            if resultShouldBeTransient
+            then RRBTransientVector<'T2>.MkEmptyWithToken((vec :?> RRBTransientVector<_>).Owner)
+            else RRBTransientVector<'T2>.MkEmpty()
+        let mutable vec3 =
+            if resultShouldBeTransient
+            then RRBTransientVector<'T3>.MkEmptyWithToken((vec :?> RRBTransientVector<_>).Owner)
+            else RRBTransientVector<'T3>.MkEmpty()
         for a, b, c in vec do
             vec1 <- vec1.Push a :?> RRBTransientVector<_>
             vec2 <- vec2.Push b :?> RRBTransientVector<_>
             vec3 <- vec3.Push c :?> RRBTransientVector<_>
-        vec1.Persistent(), vec2.Persistent(), vec3.Persistent()
+        if resultShouldBeTransient then
+            vec1 :> RRBVector<_>, vec2 :> RRBVector<_>, vec3 :> RRBVector<_>
+        else
+            vec1.Persistent() :> RRBVector<_>, vec2.Persistent() :> RRBVector<_>, vec3.Persistent() :> RRBVector<_>
+
     let inline where pred (vec : RRBVector<'T>) = filter pred vec
 
     let windowedSeq windowSize (vec : RRBVector<'T>) =
@@ -1519,7 +1561,31 @@ module RRBVector =
         then RRBPersistentVector<RRBVector<'T>>.MkEmpty() :> RRBVector<RRBVector<'T>>
         else windowedSeq windowSize vec |> ofSeq
 
-    let inline zip (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) =
-        (vec1, vec2) ||> Seq.zip |> ofSeq
-    let inline zip3 (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) (vec3 : RRBVector<'T3>) =
-        (vec1, vec2, vec3) |||> Seq.zip3 |> ofSeq
+    let zip (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) =
+        let resultShouldBeTransient = vec1 |> isTransient && vec2 |> isTransient && isSameObj (vec1 :?> RRBTransientVector<'T1>).Owner (vec2 :?> RRBTransientVector<'T2>).Owner
+        if resultShouldBeTransient then
+            let result = RRBTransientVector<_>.MkEmptyWithToken((vec1 :?> RRBTransientVector<'T1>).Owner)
+            use iter1 = vec1.IterItems().GetEnumerator()
+            use iter2 = vec2.IterItems().GetEnumerator()
+            while iter1.MoveNext() && iter2.MoveNext() do
+                result.Push (iter1.Current, iter2.Current) |> ignore
+            result :> RRBVector<_>
+        else
+            Seq.zip vec1 vec2 |> ofSeq
+            // TODO: Benchmark just like with Seq.map
+
+    let zip3 (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) (vec3 : RRBVector<'T3>) =
+        let resultShouldBeTransient = vec1 |> isTransient && vec2 |> isTransient && vec3 |> isTransient
+                                      && isSameObj (vec1 :?> RRBTransientVector<'T1>).Owner (vec2 :?> RRBTransientVector<'T2>).Owner
+                                      && isSameObj (vec2 :?> RRBTransientVector<'T2>).Owner (vec3 :?> RRBTransientVector<'T3>).Owner
+        if resultShouldBeTransient then
+            let result = RRBTransientVector<_>.MkEmptyWithToken((vec1 :?> RRBTransientVector<'T1>).Owner)
+            use iter1 = vec1.IterItems().GetEnumerator()
+            use iter2 = vec2.IterItems().GetEnumerator()
+            use iter3 = vec3.IterItems().GetEnumerator()
+            while iter1.MoveNext() && iter2.MoveNext() && iter3.MoveNext() do
+                result.Push (iter1.Current, iter2.Current, iter3.Current) |> ignore
+            result :> RRBVector<_>
+        else
+            Seq.zip3 vec1 vec2 vec3 |> ofSeq
+            // TODO: Benchmark just like with Seq.map
