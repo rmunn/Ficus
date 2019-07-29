@@ -6,6 +6,31 @@ open Ficus.RRBVectorBetterNodes
 open Ficus.RRBVector
 open FsCheck
 
+(*
+TODO: Write a test with the following structure:
+
+- Start with a persistent
+- Save an array copy of it to refer back to
+- Turn it into a transient
+- Split the transient up into many pieces
+- Do a bunch of these commands to the various pieces
+- After each one, make sure the original persistent is still intact and hasn't been edited
+- Join the pieces together
+- Do a bunch more commands to the rejoined vector
+- After each one, make sure the original persistent is still intact and hasn't been edited
+
+
+Another test would be:
+
+- Make a persistent, save it and an array copy
+- Turn it transient
+- Feed the transient to a MailboxProcessor
+- Send it a bunch of commands (insert, remove, update, push, pop)
+- Each time the MailboxProcessor runs, store current ThreadId in a set
+- After the test, print out (at logging level debug) the set of ThreadIds
+- Check whether the set is ever greater than 1 in size, and if so, log that fact at info level (then comment out later)
+*)
+
 type Cmd = Command<RRBTransientVector<int>, RRBPersistentVector<int>>
 // TODO: Model should become RRBPersistentVector<int> * RRBPersistentVector<int> * int[], where the second one is the original vector (which should never change) and the third is the array of the original vector (which we constantly compare the original vector to to ensure it hasn't changed)
 
