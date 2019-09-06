@@ -48,7 +48,7 @@ module ParameterizedVecCommands =
                 |> wrapCmd
 
     let insert (idx,item) = { new Cmd()
-                            with override __.RunActual vec = vec |> RRBVector.insert idx item
+                            with override __.RunActual vec = let idx' = if idx < 0 then idx + vec.Length else idx in vec |> RRBVector.insert idx' item
                                  override __.RunModel arr = let idx' = if idx < 0 then idx + arr.Length else idx in arr |> Array.copyAndInsertAt idx' item
                                  override __.Pre(arr) = (abs idx) <= arr.Length
                                  override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After inserting %d at index %d, vec != arr" item idx
@@ -56,7 +56,7 @@ module ParameterizedVecCommands =
                             |> wrapCmd
 
     let remove idx = { new Cmd()
-                       with override __.RunActual vec = vec |> RRBVector.remove idx
+                       with override __.RunActual vec = let idx' = if idx < 0 then idx + vec.Length else idx in vec |> RRBVector.remove idx'
                             override __.RunModel arr = let idx' = if idx < 0 then idx + arr.Length else idx in arr |> Array.copyAndRemoveAt idx'
                             override __.Pre(arr) = (abs idx) <= arr.Length && idx <> arr.Length
                             override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After removing item at index %d, vec != arr" idx
@@ -64,7 +64,7 @@ module ParameterizedVecCommands =
                      |> wrapCmd
 
     let take idx = { new Cmd()
-                     with override __.RunActual vec = vec |> RRBVector.take idx
+                     with override __.RunActual vec = let idx' = if idx < 0 then idx + vec.Length else idx in vec |> RRBVector.take idx'
                           override __.RunModel arr = let idx' = if idx < 0 then idx + arr.Length else idx in arr |> Array.truncate idx'
                           override __.Pre(arr) = (abs idx) <= arr.Length
                           override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After keeping only first %d items, vec != arr" idx

@@ -99,6 +99,10 @@ type MyGenerators =
         { new Arbitrary<RRBVector<'a>>() with
             override x.Generator = RRBVecGen.sizedGenVec<'a>
             override x.Shrinker _ = Seq.empty }
+    static member arbSplitTest() =
+        { new Arbitrary<RRBVectorTransientCommands.SplitTestInput>() with
+            override x.Generator = RRBVectorTransientCommands.genInput RRBVectorTransientCommands.cmdsMedium
+            override x.Shrinker _ = Seq.empty }
 
 Arb.register<MyGenerators>() |> ignore
 let testProp  name fn =  testPropertyWithConfig { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] ; startSize = 120 ; endSize = 180 } name fn
@@ -289,6 +293,18 @@ let vectorTests =
     testProp "splitVec" (fun (vec:RRBVector<int>,i:int) ->
         let i = (abs i) % (RRBVector.length vec + 1)
         splitTest vec i
+    )
+    testCase "splitInto with not enough input leaves empty trailing vectors" (fun _ ->
+        let vec = [1;2;3] |> RRBVector.ofList
+        let split = vec |> RRBVector.splitInto 4
+        let result = split |> RRBVector.map RRBVector.toList |> RRBVector.toList
+        Expect.equal result [[1];[2];[3];[]] "splitInto should leave empty vectors at the end"
+    )
+    ftestCase "splitInto with not uneven input leaves smaller last vector" (fun _ ->
+        let vec = [1..7] |> RRBVector.ofList
+        let split = vec |> RRBVector.splitInto 4
+        let result = split |> RRBVector.map RRBVector.toList |> RRBVector.toList
+        Expect.equal result [[1;2];[3;4];[5;6];[7]] "splitInto should leave smaller vectors at the end"
     )
     testProp "splitVecWithPushes" (fun (vec:RRBVector<int>,i:int) (PositiveInt pushCnt) ->
         let i = (abs i) % (RRBVector.length vec + 1) // Make sure it's a valid split point, between 0 and vecLen
@@ -626,6 +642,23 @@ let mergeTests =
         let joined = RRBVector.append vL vR :?> RRBPersistentVector<int>
         RRBVectorProps.checkProperties joined <| sprintf "Joined vector\nvL was %s and vR was %s" (RRBVecGen.vecToTreeReprStr vL) (RRBVecGen.vecToTreeReprStr vR)
         Expect.equal joined.Root.NodeSize vR.Root.NodeSize "Rebalance should have left the joined vector's root the same size as the original right vector's root"
+  ]
+
+let splitTransientTests =
+  testList "split transient tests" [
+    testPropSm "how long does this take?" <| fun (RRBVectorTransientCommands.SplitTestInput (vec, cmds)) ->
+        let vec = if vec |> isTransient then (vec :?> RRBTransientVector<_>).Persistent() else vec :?> RRBPersistentVector<_>
+        logger.info (
+            eventX "Starting a split transient test with {vec}"
+            >> setField "vec" (RRBVecGen.vecToTreeReprStr vec)
+        )
+        let mailbox = RRBVectorTransientCommands.startSplitTesting vec cmds
+        mailbox.Error.Add (fun e -> raise e)  // HOPEFULLY this should be enough to fail the test...?
+        mailbox.PostAndReply RRBVectorTransientCommands.AllThreadsResult.Go
+        logger.info (
+            eventX "Ending(?) a split transient test with {vec}"
+            >> setField "vec" (RRBVecGen.vecToTreeReprStr vec)
+        )
   ]
 
 let simpleVectorTests =
@@ -1474,7 +1507,7 @@ let isolatedTest =
             logVec action current
             RRBVectorProps.checkProperties current <| sprintf "Vector after %s" (action.ToString())
 
-    testCase "Manual test of (1380433896, 296477427)" <| fun _ ->
+    testCase "Manual test of a NullReference bug during remove operation" <| fun _ ->
         let scanf (x : int) a = a + 1  // So that scans will produce increasing sequences
         // let mergeR = mergeR << RRBVecGen.treeReprStrToVec
         // let actions = [mergeR "M T13"; push 166; scan scanf 8; pop 157; remove 51]
@@ -1519,7 +1552,7 @@ let isolatedTest =
 
     testCase "Manual test" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "M T9"
-        logger.info (eventX "Starting with {vec}" >> setField "vec" (RRBVecGen.vecToTreeReprStr vec))
+        // logger.info (eventX "Starting with {vec}" >> setField "vec" (RRBVecGen.vecToTreeReprStr vec))
         let mutable current = vec
         let actions = [pop 37; push 47; mergeR <| RRBVecGen.treeReprStrToVec "0 T15"; mergeR <| RRBVecGen.treeReprStrToVec "0 T11"; mergeL <| RRBVecGen.treeReprStrToVec "0 T9"; mergeL <| RRBVecGen.treeReprStrToVec "0 T10"; pop 48; pop 47]
         let logVec action = ignore
@@ -1564,13 +1597,13 @@ let isolatedTest =
 T26
 """
         let vec = bigReprStr.TrimStart('\n').Replace("\n", " ") |> RRBVecGen.treeReprStrToVec
-        logger.info (eventX "Starting with {vec}" >> setField "vec" (RRBVecGen.vecToTreeReprStr vec))
+        // logger.info (eventX "Starting with {vec}" >> setField "vec" (RRBVecGen.vecToTreeReprStr vec))
         let mutable current = vec
         let mergeL = RRBVecGen.treeReprStrToVec >> RRBVectorMoreCommands.ParameterizedVecCommands.mergeL
         let mergeR = RRBVecGen.treeReprStrToVec >> RRBVectorMoreCommands.ParameterizedVecCommands.mergeR
-        let actions = [mergeL "M T19"; push 99; mergeL "0 T28"; push 80; push 127; push 17; push 30;
-                       push 138; remove -109; mergeR "M T9"; push 91; push 72; insert (-90,126); push 64;
-                       push 52; insert (-138,1); push 130]
+        let actions = [ mergeL "M T19"; push 99; mergeL "0 T28"; push 80; push 127; push 17; push 30;
+                        push 138; remove -109; mergeR "M T9"; push 91; push 72; insert (-90,126); push 64;
+                        push 52; insert (-138,1); push 130 ]
         // let logVec action vec = logger.info (eventX "After {action}, vec was {vec}" >> setField "action" (action.ToString()) >> setField "vec" (RRBVecGen.vecToTreeReprStr vec))
         let logVec action = ignore
         for action in actions do
@@ -1658,6 +1691,7 @@ let fullSaplingTests = mkTestSuite "Tests on full saplings" ({ 1 .. Literals.blo
 let fullSaplingPlusOneTests = mkTestSuite "Tests on full saplings plus one" ({ 0 .. Literals.blockSize * 2} |> RRBVector.ofSeq)
 let threeLevelVectorTests = mkTestSuite "Tests on three-level vector" (RRBVecGen.treeReprStrToVec "[[M*M]*M]*3 TM/2")
 
+(* Disable for now while I test the split vector tests
 [<Tests>]
 let tests =
   testList "All tests" [
@@ -1733,7 +1767,8 @@ let tests =
 
     // perfTests
   ]
+*)
 
-// [<Tests>]
-// let tests =
-//   testList "Just a few" [longRunningTests]
+[<Tests>]
+let tests =
+  testList "Just transient splitting" [splitTransientTests]

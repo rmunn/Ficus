@@ -5,6 +5,13 @@ module ExpectoTemplate.RRBVectorTransientCommands
 open Ficus.RRBVectorBetterNodes
 open Ficus.RRBVector
 open FsCheck
+open Ficus.RRBArrayExtensions
+open System
+open System.Threading
+open Expecto.Logging
+open Expecto.Logging.Message
+
+let logger = Log.create "Transient split test"
 
 (*
 TODO: Write a test with the following structure:
@@ -31,218 +38,293 @@ Another test would be:
 - Check whether the set is ever greater than 1 in size, and if so, log that fact at info level (then comment out later)
 *)
 
-type Cmd = Command<RRBTransientVector<int>, RRBPersistentVector<int>>
+[<AbstractClass>]
+type Op<'Actual,'Model>() =
+    // Just like an FsCheck Command, but Post just returns a boolean
+    ///Executes the operation on the actual object under test.
+    abstract RunActual : 'Actual -> 'Actual
+    ///Executes the operation on the model of the object.
+    abstract RunModel : 'Model -> 'Model
+    ///Precondition for execution of the operation. When this does not hold, the test continues
+    ///but the operation will not be executed.
+    abstract Pre : 'Model -> bool
+    ///Postcondition that must hold after execution of the operation. Compares state of model and actual
+    ///object and fails the property if they do not match.
+    abstract Post : 'Actual * 'Model -> bool * string
+    ///The default precondition is true.
+    default __.Pre _ = true
+    ///The default postcondition is true.
+    default __.Post (_,_) = true, ""
+
+type Cmd = Op<RRBTransientVector<int>, int[]>
 // TODO: Model should become RRBPersistentVector<int> * RRBPersistentVector<int> * int[], where the second one is the original vector (which should never change) and the third is the array of the original vector (which we constantly compare the original vector to to ensure it hasn't changed)
 
 // TODO: Rename "vec" and "arr" to "tvec" and "pvec" respectively, and do so all down the line
-let vecEqual vec arr msg =
+let vecEqual (vec : RRBTransientVector<'a>) arr msg =
     RRBVectorProps.checkPropertiesSimple vec
-    vec = arr |@ msg
+    (RRBVector.toArray vec) = arr, msg
+
+let checkOrigVec (vec : RRBPersistentVector<'a>) (arr : 'a[]) =
+    if vec.Length <> arr.Length then
+        Expecto.Tests.failtestf "Original vector and its original array should be same length, but vector length was %d and array length was %d. Vec: %A and array: %A" vec.Length arr.Length vec arr
+    let e = (vec |> RRBVector.toSeq).GetEnumerator()
+    let maxIdx = arr.Length - 1
+    for i = 0 to maxIdx do
+        if not (e.MoveNext()) then
+            Expecto.Tests.failtestf "Unexpected end of original vector at index %d. arr.[%d] = %A" i i arr.[i]
+        if e.Current <> arr.[i] then
+            Expecto.Tests.failtestf "Original vector was modified at index %d! This was probably caused by a thread. vec.[%d] = %A and arr.[%d] = %A" i i e.Current i arr.[i]
+
+type SingleThreadResult =
+    | Completed of int * RRBTransientVector<int>
+    | Failed of int * int * RRBTransientVector<int> * int[] * Cmd * string
+
+type AllThreadsResult =
+    | Go of AsyncReplyChannel<unit>
+    | AllCompleted of RRBTransientVector<int>[]
+    | OneFailed of int * int * RRBTransientVector<int> * int[] * Cmd * string
+
+type AgentCmd =
+    | Cmd of Cmd
+    | Finished
+
+let completionAgent size (cts : CancellationTokenSource) (parent : MailboxProcessor<AllThreadsResult>) =
+    let results = Array.zeroCreate size
+    let mutable completedCount = 0
+    let run (mailbox : MailboxProcessor<SingleThreadResult>) =
+        let rec loop() =
+            async {
+                let! msg = mailbox.Receive()
+                match msg with
+                | Completed (position, vec) ->
+                    results.[position] <- vec
+                    completedCount <- completedCount + 1
+                    if completedCount < size then
+                        logger.info (eventX "Still {remaining} to do, looping in completion agent" >> setField "remaining" (size - completedCount))
+                        return! loop()
+                    else
+                        logger.info (eventX "All completed, notifying parent")
+                        AllCompleted results |> parent.Post
+                        return ()
+                | Failed (position, cmdsDone, vec, arr, cmd, msg) ->
+                    cts.Cancel()
+                    OneFailed (position, cmdsDone, vec, arr, cmd, msg) |> parent.Post
+                    logger.info (
+                        eventX "Failed thread at position {pos} after {cmdsDone} commands done. Vec = {vec}, arr = {arr}, cmd = {cmd}, msg = {msg}"
+                        >> setField "pos" position
+                        >> setField "cmdsDone" cmdsDone
+                        >> setField "vec" (sprintf "%A" vec)
+                        >> setField "arr" (sprintf "%A" arr)
+                        >> setField "cmd" (sprintf "%A" cmd)
+                        >> setField "msg" msg
+                    )
+                    return ()
+            }
+        loop()
+    MailboxProcessor.Start run
+
+let transientAgent token (completionAgent : MailboxProcessor<SingleThreadResult>) (position : int) (tvec : RRBTransientVector<int>) =
+    let mutable arr = RRBVector.toArray tvec
+    let mutable vec = tvec
+    let mutable cmdsDone = 0
+    let run (mailbox : MailboxProcessor<AgentCmd>) =
+        let rec loop() =
+            async {
+                let! msg = mailbox.Receive()
+                match msg with
+                | Finished ->
+                    logger.info (
+                        eventX "Completed a single split thread at position {pos} after {cmdsDone} commands"
+                        >> setField "pos" position
+                        >> setField "cmdsDone" cmdsDone
+                    )
+                    Completed (position, vec) |> completionAgent.Post
+                    return ()
+                | Cmd cmd ->
+                    logger.info (
+                        eventX "Thread at position {pos} about to run command {cmd}"
+                        >> setField "pos" position
+                        >> setField "cmd" cmd
+                    )
+                    let shouldRun = cmd.Pre arr
+                    if shouldRun then
+                        arr <- cmd.RunModel arr
+                        vec <- cmd.RunActual vec
+                        let success, msg = cmd.Post (vec, arr)
+                        if not success then
+                            logger.info (
+                                eventX "Failing a single split thread at position {pos}"
+                                >> setField "pos" position
+                            )
+                            Failed (position, cmdsDone, vec, arr, cmd, msg) |> completionAgent.Post
+                            // MailboxProcessors don't need to throw exceptions
+                            // Expecto.Tests.failtestf "Split vector number %d failed on %A with message %A; vector was %A and corresponding array was %A" position cmd msg vec arr
+                            return ()
+                    cmdsDone <- cmdsDone + 1
+                    return! loop()
+            }
+        loop()
+    logger.info (
+        eventX "Kicking off a single split thread at position {pos}"
+        >> setField "pos" position
+    )
+    MailboxProcessor.Start(run,token)
+
+let splitVec (tvec : RRBTransientVector<'a>) =
+    logger.info(
+        eventX "Starting splitVec function"
+    )
+    let parts =
+        if tvec.Length > 200 then
+            logger.info(
+                eventX "About to chunk by size"
+            )
+            tvec |> RRBVector.chunkBySize 100
+        else
+            logger.info(
+                eventX "About to split into exactly 4 parts"
+            )
+            tvec |> RRBVector.splitInto 4
+    logger.info(eventX "Back from splitting, about to cast to seq")
+    let s = parts |> RRBVector.toSeq
+    logger.info(eventX "About to cast to transient vector")
+    let transients = s |> Seq.cast<RRBTransientVector<'a>>
+    logger.info(eventX "About to cast to array")
+    transients |> Seq.toArray
+
+let expectedSize (vec : RRBVector<'a>) =
+    if vec.Length > 200 then
+        vec.Length / 100 + (if vec.Length % 100 = 0 then 0 else 1)
+    else
+        4
+
+let startSplitTesting (vec : RRBPersistentVector<int>) (cmds : (Cmd list)[]) =
+    logger.info(
+        eventX "Inside startSplitTesting function with vec {vec} and cmds {cmds}"
+        >> setField "vec" (RRBVecGen.vecToTreeReprStr vec)
+        >> setField "cmds" (sprintf "%A" cmds)
+    )
+    let origVec = vec
+    let origArr = vec |> RRBVector.toArray
+    let mutable arr = origArr |> Array.copy
+    let mutable tvec = vec.Transient()
+    let eq, msg = (origArr = (tvec |> RRBVector.toArray)), "Initial transient didn't equal initial persistent"
+    if not eq then failwith msg
+    let parts = splitVec tvec
+    logger.info(
+        eventX "Parts [{parts}]"
+        >> setField "parts" (parts |> Array.map RRBVecGen.vecToTreeReprStr |> String.concat "; ")
+    )
+    if parts.Length <> cmds.Length then failwith "Pass as many cmds as expected splits"  // TODO: Populate error msg with some data here
+    let cts = new CancellationTokenSource()
+    let token = cts.Token
+    let mutable replyChannel = None
+    let run (mailbox : MailboxProcessor<AllThreadsResult>) =
+        async {
+            let! msg =
+                try
+                    mailbox.Receive(15000)
+                with :? TimeoutException ->
+                    Expecto.Tests.failtest "Split test timed out waiting for initial Go command"
+            match msg with
+            | Go channel ->
+                logger.info (eventX "Parent kicking off sub threads")
+                replyChannel <- Some channel
+                let completion = mailbox |> completionAgent parts.Length cts
+                let threads = parts |> Array.mapi (transientAgent cts.Token completion)
+                // Send all commands to their respective threads as quickly as possible
+                (cmds, threads) ||> Array.iter2 (fun cmdList thread ->
+                    cmdList |> List.iter (Cmd >> thread.Post)
+                    thread.Post Finished
+                )
+            | _ -> Expecto.Tests.failtest "Send Go command first before anything else"
+            while mailbox.CurrentQueueLength = 0 && not (cts.IsCancellationRequested) do
+                // Keep busy checking the original vector against its original array while we wait for test completion
+                checkOrigVec origVec origArr
+            let! msg =
+                try
+                    mailbox.Receive(15000)
+                with :? TimeoutException ->
+                    Expecto.Tests.failtest "Split test timed out waiting for results from subthreads!"
+            match msg with
+            | Go _ ->
+                Expecto.Tests.failtest "Shouldn't receive the Go message twice!"
+            | AllCompleted newParts ->
+                logger.info (eventX "Parent got notified that all threads completed")
+                let joinedT = RRBVector.concat (newParts |> Seq.cast<RRBVector<_>>)
+                let joined =
+                    if joinedT |> isTransient then
+                        RRBVectorProps.checkProperties joinedT "Combined transient result of split test"
+                        (joinedT :?> RRBTransientVector<_>).Persistent()
+                    else joinedT :?> RRBPersistentVector<_>
+                RRBVectorProps.checkProperties joined "Combined persistent result of split test"
+                match replyChannel with
+                | None -> Expecto.Tests.failtestf "Split test had no reply channel to report results!"
+                | Some channel -> return channel.Reply()
+            | OneFailed (position, cmdsDone, vec, arr, cmd, msg) ->
+                logger.info (
+                    eventX "Parent got notified that one thread failed, at position {pos} after {cmdsDone} commands done. Vec = {vec}, arr = {arr}, cmd = {cmd}, msg = {msg}"
+                    >> setField "pos" position
+                    >> setField "cmdsDone" cmdsDone
+                    >> setField "vec" (sprintf "%A" vec)
+                    >> setField "arr" (sprintf "%A" arr)
+                    >> setField "cmd" (sprintf "%A" cmd)
+                    >> setField "msg" msg
+                )
+                Expecto.Tests.failtestf "Split vector number %d failed on %A with message %A; vector was %A and corresponding array was %A" position cmd msg vec arr
+        }
+    MailboxProcessor.Start run
 
 module VecCommands =
-    let push1 = { new Cmd()
-                  with override __.RunActual vec = vec.Push 42 :?> RRBTransientVector<_>
-                       override __.RunModel vec = vec.Push 42 :?> RRBPersistentVector<_>
-                       override __.Post(vec, arr) = vecEqual (vec :> RRBVector<_>) (arr :> RRBVector<_>) "After pushing 42 once, vec != arr"
-                       override __.ToString() = "push 42 once" }
+    let push n = { new Cmd()
+                   with override __.RunActual vec = { 1 .. n } |> Seq.fold (fun vec x -> vec.Push x :?> RRBTransientVector<_>) vec
+                        override __.RunModel arr = Array.append arr [| 1 .. n |]
+                        override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After pushing %d items, vec != arr" n
+                        override __.ToString() = sprintf "push %d" n }
 
-    let push4 = { new Cmd()
-                  with override __.RunActual vec = (((vec.Push 1).Push 2).Push 3).Push 4 :?> RRBTransientVector<_>
-                       override __.RunModel vec =  vec |> RRBVector.push 1 |> RRBVector.push 2 |> RRBVector.push 3 |> RRBVector.push 4 :?> RRBPersistentVector<_>
-                       override __.Post(vec, arr) = vecEqual (vec :> RRBVector<_>) (arr :> RRBVector<_>) "After pushing four items, vec != arr"
-                       override __.ToString() = "push four items" }
+    let pop n = { new Cmd()
+                  with override __.RunActual vec = { 1 .. n } |> Seq.fold (fun vec _ -> vec.Pop() :?> RRBTransientVector<_>) vec
+                       override __.RunModel arr = arr |> Array.truncate (arr.Length - n |> max 0)
+                       override __.Pre(arr) = arr.Length >= n
+                       override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After popping %d items, vec != arr" n
+                       override __.ToString() = sprintf "pop %d" n }
 
-    let push9 = { new Cmd()
-                  with override __.RunActual vec =
-                                                   vec.Push 11 |> ignore
-                                                   vec.Push 12 |> ignore
-                                                   vec.Push 13 |> ignore
-                                                   vec.Push 14 |> ignore
-                                                   vec.Push 15 |> ignore
-                                                   vec.Push 16 |> ignore
-                                                   vec.Push 17 |> ignore
-                                                   vec.Push 18 |> ignore
-                                                   vec.Push 19 :?> RRBTransientVector<_>
-                       override __.RunModel vec = vec |> RRBVector.push 11 |> RRBVector.push 12 |> RRBVector.push 13 |> RRBVector.push 14 |> RRBVector.push 15 |> RRBVector.push 16 |> RRBVector.push 17 |> RRBVector.push 18 |> RRBVector.push 19 :?> RRBPersistentVector<_>
-                       override __.Post(vec, arr) = vecEqual (vec :> RRBVector<_>) (arr :> RRBVector<_>) "After pushing nine items, vec != arr"
-                       override __.ToString() = "push nine items" }
+    let insert (idx,item) = { new Cmd()
+                            with override __.RunActual vec = let idx' = if idx < 0 then idx + vec.Length else idx in vec |> RRBVector.insert idx' item :?> RRBTransientVector<_>
+                                 override __.RunModel arr = let idx' = if idx < 0 then idx + arr.Length else idx in arr |> Array.copyAndInsertAt idx' item
+                                 override __.Pre(arr) = (abs idx) <= arr.Length
+                                 override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After inserting %d at index %d, vec != arr" item idx
+                                 override __.ToString() = sprintf "insert (%d,%d)" idx item }
 
-    let push33 = { new Cmd()
-                   with override __.RunActual vec = seq { 101..133 } |> Seq.fold (fun (vec : RRBTransientVector<_>) n -> vec.Push n :?> RRBTransientVector<_>) vec
-                        override __.RunModel vec = seq { 101..133 } |> Seq.fold (fun (vec : RRBPersistentVector<_>) n -> vec.Push n :?> RRBPersistentVector<_>) vec
-                        override __.Post(vec, arr) = vecEqual (vec :> RRBVector<_>) (arr :> RRBVector<_>) "After pushing 33 items, vec != arr"
-                        override __.ToString() = "push 33 items" }
+    let insert5AtHead = insert (0, 5)
+    let insert7InFirstLeaf = insert (3, 7)
+    let insert9InTail = insert (-2, 9)
 
-    let pop = { new Cmd()
-                with override __.RunActual vec = vec |> RRBVector.pop :?> RRBTransientVector<_>
-                     override __.RunModel vec = vec |> RRBVector.pop :?> RRBPersistentVector<_>
-                     override __.Pre(arr) = arr.Length > 0
-                     override __.Post(vec, arr) = vecEqual (vec :> RRBVector<_>) (arr :> RRBVector<_>) "After popping, vec != arr"
-                     override __.ToString() = "pop" }
-    let insert5AtHead = { new Cmd()
-                          with override __.RunActual vec = vec |> RRBVector.insert 0 5 :?> RRBTransientVector<_>
-                               override __.RunModel vec = vec |> RRBVector.insert 0 5 :?> RRBPersistentVector<_>
-                               override __.Post(vec, arr) = vecEqual (vec :> RRBVector<_>) (arr :> RRBVector<_>) "After inserting 5, vec != arr"
-                               override __.ToString() = "insert 5 at head" }
-    let insert7InFirstLeaf = { new Cmd()
-                               with override __.RunActual vec = vec |> RRBVector.insert 3 7 :?> RRBTransientVector<_>
-                                    override __.RunModel vec = vec |> RRBVector.insert 3 7 :?> RRBPersistentVector<_>
-                                    override __.Pre(arr) = arr.Length >= 3
-                                    override __.Post(vec, arr) = vecEqual (vec :> RRBVector<_>) (arr :> RRBVector<_>) "After inserting 7, vec != arr"
-                                    override __.ToString() = "insert 7 in first leaf" }
-    let insert9InTail = { new Cmd()
-                          with override __.RunActual vec = vec |> RRBVector.insert (vec.Length - 2) 9 :?> RRBTransientVector<_>
-                               override __.RunModel vec = vec |> RRBVector.insert (vec.Length - 2) 9 :?> RRBPersistentVector<_>
-                               override __.Pre(arr) = arr.Length >= 2
-                               override __.Post(vec, arr) = vecEqual (vec :> RRBVector<_>) (arr :> RRBVector<_>) "After inserting 9, vec != arr"
-                               override __.ToString() = "insert 9 in tail" }
-    let removeFromHead = { new Cmd()
-                           with override __.RunActual vec = vec |> RRBVector.remove 0 :?> RRBTransientVector<_>
-                                override __.RunModel vec = vec |> RRBVector.remove 0 :?> RRBPersistentVector<_>
-                                override __.Pre(arr) = arr.Length > 0
-                                override __.Post(vec, arr) = vecEqual (vec :> RRBVector<_>) (arr :> RRBVector<_>) "After removing from head, vec != arr"
-                                override __.ToString() = "remove from head" }
-    let removeFromFirstLeaf = { new Cmd()
-                                with override __.RunActual vec = vec |> RRBVector.remove 3 :?> RRBTransientVector<_>
-                                     override __.RunModel vec = vec |> RRBVector.remove 3 :?> RRBPersistentVector<_>
-                                     override __.Pre(arr) = arr.Length > 3
-                                     override __.Post(vec, arr) = vecEqual (vec :> RRBVector<_>) (arr :> RRBVector<_>) "After removing at idx 3, vec != arr"
-                                     override __.ToString() = "remove from first leaf" }
-    let removeFromTail = { new Cmd()
-                           with override __.RunActual vec = vec |> RRBVector.remove (vec.Length - 2) :?> RRBTransientVector<_>
-                                override __.RunModel vec = vec |> RRBVector.remove (vec.Length - 2) :?> RRBPersistentVector<_>
-                                override __.Pre(arr) = arr.Length >= 2
-                                override __.Post(vec, arr) = vecEqual (vec :> RRBVector<_>) (arr :> RRBVector<_>) "After removing from tail, vec != arr"
-                                override __.ToString() = "remove from tail" }
+    let remove idx = { new Cmd()
+                       with override __.RunActual vec = let idx' = if idx < 0 then idx + vec.Length else idx in vec |> RRBVector.remove idx' :?> RRBTransientVector<_>
+                            override __.RunModel arr = let idx' = if idx < 0 then idx + arr.Length else idx in arr |> Array.copyAndRemoveAt idx'
+                            override __.Pre(arr) = (abs idx) <= arr.Length && idx <> arr.Length
+                            override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After removing item at index %d, vec != arr" idx
+                            override __.ToString() = sprintf "remove %d" idx }
+
+    let removeFromHead = remove 0
+    let removeFromFirstLeaf = remove 3
+    let removeFromTail = remove -2
 
 open VecCommands
 
-let cmdsExtraSmall = [push1; pop; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
-let cmdsSmall = [push1; push4; pop; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
-let cmdsMedium = [push1; push4; push9; pop; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
-let cmdsLarge = [push1; push4; push9; pop; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
-let cmdsExtraLarge = [push4; push9; push33; pop; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
+let cmdsExtraSmall = [push 1; pop 1; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
+let cmdsSmall = [push 1; push 4; pop 1; pop 4; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
+let cmdsMedium = [push 1; push 4; push 9; pop 1; pop 4; pop 9; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
+let cmdsLarge = [push 1; push 4; push 9; pop 1; pop 4; pop 9; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
+let cmdsExtraLarge = [push 4; push 9; push 33; pop 4; pop 9; pop 33; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
 
-let specExtraSmallFromData (data : RRBPersistentVector<int>) =
-    { new ICommandGenerator<RRBTransientVector<int>, RRBPersistentVector<int>> with
-        member __.InitialActual = data.Transient()
-        member __.InitialModel = data
-        member __.Next model = Gen.elements cmdsExtraSmall }
+type SplitTestInput = SplitTestInput of RRBVector<int> * (Cmd list)[]
 
-let specSmallFromData (data : RRBPersistentVector<int>) =
-    { new ICommandGenerator<RRBTransientVector<int>, RRBPersistentVector<int>> with
-        member __.InitialActual = data.Transient()
-        member __.InitialModel = data
-        member __.Next model = Gen.elements cmdsSmall }
-
-let specMediumFromData (data : RRBPersistentVector<int>) =
-    { new ICommandGenerator<RRBTransientVector<int>, RRBPersistentVector<int>> with
-        member __.InitialActual = data.Transient()
-        member __.InitialModel = data
-        member __.Next model = Gen.elements cmdsMedium }
-
-let specLargeFromData (data : RRBPersistentVector<int>) =
-    { new ICommandGenerator<RRBTransientVector<int>, RRBPersistentVector<int>> with
-        member __.InitialActual = data.Transient()
-        member __.InitialModel = data
-        member __.Next model = Gen.elements cmdsLarge }
-
-let specExtraLargeFromData (data : RRBPersistentVector<int>) =
-    { new ICommandGenerator<RRBTransientVector<int>, RRBPersistentVector<int>> with
-        member __.InitialActual = data.Transient()
-        member __.InitialModel = data
-        member __.Next model = Gen.elements cmdsExtraLarge }
-
-let specExtraSmallFromEmpty = specExtraSmallFromData (RRBVector.empty<int> :?> RRBPersistentVector<int>)
-let specSmallFromEmpty = specSmallFromData (RRBVector.empty<int> :?> RRBPersistentVector<int>)
-let specMediumFromEmpty = specMediumFromData (RRBVector.empty<int> :?> RRBPersistentVector<int>)
-let specLargeFromEmpty = specLargeFromData (RRBVector.empty<int> :?> RRBPersistentVector<int>)
-let specExtraLargeFromEmpty = specExtraLargeFromData (RRBVector.empty<int> :?> RRBPersistentVector<int>)
-
-let almostFullSapling = RRBVector.ofArray [|1..63|] :?> RRBPersistentVector<int>
-
-let specExtraSmallFromAlmostFullSapling = specExtraSmallFromData almostFullSapling
-let specSmallFromAlmostFullSapling = specSmallFromData almostFullSapling
-let specMediumFromAlmostFullSapling = specMediumFromData almostFullSapling
-let specLargeFromAlmostFullSapling = specLargeFromData almostFullSapling
-let specExtraLargeFromAlmostFullSapling = specExtraLargeFromData almostFullSapling
-
-(*
-let fixedSpec =
-  [ push1; insert5AtHead; insert9InTail; insert7InFirstLeaf;
-    push1; insert5AtHead; push1; push1; insert5AtHead; push1;
-    push1; insert9InTail; insert7InFirstLeaf; pop; insert5AtHead;
-    insert7InFirstLeaf; removeFromHead; removeFromFirstLeaf; pop; pop;
-    removeFromFirstLeaf; removeFromTail ]
-
-let xsSpec =
-  [ insert5AtHead; push1; push1; push1;
-    insert7InFirstLeaf; insert9InTail; insert5AtHead; insert9InTail;
-    insert7InFirstLeaf; removeFromHead; removeFromHead;
-    removeFromFirstLeaf; removeFromFirstLeaf; removeFromHead;
-    insert7InFirstLeaf; push1; insert7InFirstLeaf; insert9InTail;
-    insert7InFirstLeaf; push1; push1; insert9InTail;
-    removeFromHead; insert7InFirstLeaf ]
-
-let medSpec =
-  [ push4; push1; push4; push4;
-    removeFromHead; insert9InTail; removeFromTail; push4;
-    removeFromFirstLeaf; insert9InTail ]
-
-let med2Spec =
-  [ push4; insert5AtHead; insert7InFirstLeaf; removeFromTail;
-    insert7InFirstLeaf; push4; insert5AtHead;
-    removeFromFirstLeaf; push1; push1; push4;
-    removeFromHead; push1; removeFromTail; insert9InTail ]
-
-let shortenSpec1 =
-  [ push4; push1; pop; pop; insert5AtHead;
-    insert7InFirstLeaf; removeFromFirstLeaf; removeFromTail;
-    push4; removeFromHead; removeFromFirstLeaf; pop;
-    removeFromFirstLeaf; insert7InFirstLeaf; push1; insert9InTail;
-    insert7InFirstLeaf; removeFromTail; push9; insert5AtHead;
-    removeFromHead; push9; pop; insert5AtHead; removeFromTail;
-    insert5AtHead; removeFromHead; insert7InFirstLeaf; removeFromHead;
-    insert9InTail; insert9InTail; push1; insert9InTail;
-    insert9InTail; insert5AtHead; push1; removeFromTail;
-    insert7InFirstLeaf; removeFromHead; pop; push9; push9;
-    push9; insert5AtHead; push1; removeFromHead;
-    push9; removeFromFirstLeaf; removeFromHead; insert9InTail ]
-
-let shortenSpec2 =
-  [ push9; insert9InTail; insert5AtHead; push4; pop;
-    removeFromFirstLeaf; push4; removeFromFirstLeaf;
-    insert5AtHead; removeFromTail; pop; removeFromTail;
-    insert7InFirstLeaf; push4; insert7InFirstLeaf;
-    insert5AtHead; push33; removeFromHead; insert5AtHead;
-    insert5AtHead; removeFromFirstLeaf; pop; removeFromTail;
-    insert9InTail; insert5AtHead; insert9InTail; pop; insert9InTail;
-    push9; insert5AtHead; removeFromFirstLeaf;
-    removeFromFirstLeaf; insert9InTail ]
-
-let shortenSpec3 =
-  [ insert5AtHead; push9; pop; removeFromFirstLeaf;
-    removeFromTail; insert7InFirstLeaf; insert9InTail; insert9InTail;
-    removeFromTail; push4; push4; pop; removeFromTail;
-    removeFromHead; push9; removeFromHead; removeFromFirstLeaf;
-    push1; insert9InTail; pop; push4; removeFromHead;
-    removeFromHead; removeFromTail; push4; insert5AtHead;
-    removeFromFirstLeaf; insert5AtHead; pop; insert9InTail; pop;
-    removeFromTail; push4; removeFromTail; removeFromHead; pop;
-    insert7InFirstLeaf; insert7InFirstLeaf; removeFromTail;
-    insert9InTail; pop; insert5AtHead; push4; insert5AtHead;
-    push1; removeFromHead; removeFromTail; removeFromFirstLeaf;
-    insert5AtHead; insert5AtHead; pop; insert7InFirstLeaf;
-    insert9InTail; push1; removeFromFirstLeaf; insert9InTail;
-    insert7InFirstLeaf; push4; removeFromFirstLeaf;
-    removeFromTail; insert9InTail; pop; push1; insert9InTail;
-    push9; insert9InTail; push1; push4;
-    push9; insert9InTail; removeFromTail; removeFromFirstLeaf;
-    removeFromFirstLeaf; insert9InTail ]
-
-let shortenSpec4 =
-  [ push33; push9; removeFromHead; push9;
-    removeFromHead; insert7InFirstLeaf; push9; insert9InTail;
-    pop; push4; insert9InTail
-  ]
-*)
+let genInput (lst : Cmd list) = gen {
+    let! vec = Arb.generate<RRBVector<int>>  // TODO: Ensure only persistent vectors generated here
+    // let vec = RRBVector.singleton 3
+    let size = expectedSize vec
+    let! cmds = Gen.arrayOfLength size (Gen.listOf (Gen.elements lst))
+    return SplitTestInput (vec, cmds)
+}

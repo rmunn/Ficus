@@ -524,7 +524,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
         this.ThrowIfNotValid()
         seq {
             yield! (this.Root :?> RRBFullNode<'T>).LeavesSeq this.Shift |> Seq.map (fun leaf -> leaf.Items)
-            yield this.Tail
+            yield this.Tail |> Array.truncate (this.Count - this.TailOffset)
         }
 
     member this.IterEditableLeavesWithoutTail() =
@@ -536,7 +536,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
     override this.RevIterLeaves() =
         this.ThrowIfNotValid()
         seq {
-            yield this.Tail
+            yield this.Tail |> Array.truncate (this.Count - this.TailOffset)
             yield! (this.Root :?> RRBFullNode<'T>).RevLeavesSeq this.Shift |> Seq.map (fun leaf -> leaf.Items)
         }
 
@@ -720,7 +720,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             Array.blit this.Tail tailIdx right.Tail 0 (tailLen - tailIdx)
             Array.fill this.Tail tailIdx (tailLen - tailIdx) Unchecked.defaultof<'T>
             this.Count <- idx
-            right.Count <- tailLen
+            right.Count <- tailLen - tailIdx
             this :> RRBVector<'T>, right :> RRBVector<'T>
         else
             let rootL, rootR = this.Root.SplitTree this.Owner this.Shift idx
@@ -1046,11 +1046,12 @@ module RRBVector =
         vec |> Seq.choose chooser |> ofSeq
 
     let chunkBySize chunkSize (vec : RRBVector<'T>) =
+        if chunkSize <= 0 then failwith "Chunk size must be greater than zero"
         if vec |> isTransient then
             let mutable result = RRBTransientVector<_>.MkEmptyWithToken((vec :?> RRBTransientVector<'T>).Owner)
             let mutable remaining = vec
             while remaining.Length > 0 do
-                let chunk, rest = remaining.Split chunkSize
+                let chunk, rest = remaining.Split (min chunkSize remaining.Length)
                 result <- result.Push chunk :?> RRBTransientVector<_>
                 remaining <- rest
             result :> RRBVector<_>
@@ -1058,7 +1059,7 @@ module RRBVector =
             let mutable transient = RRBTransientVector<_>.MkEmpty()
             let mutable remaining = vec
             while remaining.Length > 0 do
-                let chunk, rest = remaining.Split chunkSize
+                let chunk, rest = remaining.Split (min chunkSize remaining.Length)
                 transient <- transient.Push chunk :?> RRBTransientVector<_>
                 remaining <- rest
             transient.Persistent() :> RRBVector<_>
@@ -1455,7 +1456,20 @@ module RRBVector =
         arr |> ofArray
 
     let inline splitAt idx (vec : RRBVector<'T>) = vec.Split idx
-    let inline splitInto splitCount (vec : RRBVector<'T>) = chunkBySize (vec.Length / splitCount) vec  // TODO: Test that splits have the expected size
+    let splitInto splitCount (vec : RRBVector<'T>) =
+        let extra = if vec.Length % splitCount = 0 then 0 else 1
+        let mutable result = chunkBySize (vec.Length / splitCount + extra) vec  // TODO: Test that splits have the expected size
+        if result.Length < splitCount then
+            if result |> isTransient then
+                let token = (result :?> RRBTransientVector<_>).Owner
+                for i = 1 to splitCount - result.Length do
+                    result <- result.Push(RRBTransientVector<'T>.MkEmptyWithToken(token))
+            else
+                for i = 1 to splitCount - result.Length do
+                    result <- result.Push(RRBPersistentVector<'T>.MkEmpty())
+            result
+        else
+            result
 
     let inline sum (vec : RRBVector<'T>) = vec |> Seq.sum
     let inline sumBy f (vec : RRBVector<'T>) = vec |> Seq.sumBy f
