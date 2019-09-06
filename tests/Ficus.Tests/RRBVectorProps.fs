@@ -6,6 +6,10 @@ open Ficus.RRBVectorBetterNodes
 open Ficus.RRBVector
 open Ficus.RRBVectorBetterNodes.RRBMath
 open FsCheck
+open Expecto.Logging
+open Expecto.Logging.Message
+
+let logger = Log.create "Property checks"
 
 module Literals = Ficus.Literals
 
@@ -360,18 +364,22 @@ let checkNodeProperties shift root label =
 
 let checkNodePropertiesSimple shift root = checkNodeProperties shift root "Node"
 
-let getVecPropertyResults props vec =
-    props |> List.map (fun (name,pred) -> checkVectorProperty name pred vec) |> List.fold combine []
+let getVecPropertyResults props vec doLog =
+    props |> List.map (fun (name,pred) -> if doLog then logger.infoWithBP (eventX "About to check property {prop} for vec {vec}" >> setField "prop" name >> setField "vec" (sprintf "%A" vec)) |> Async.RunSynchronously
+                                          checkVectorProperty name pred vec) |> List.fold combine []
 
-let getVecAndNodePropertyResults props shift (root : RRBNode<'T>) vec =
-    let vecProps = getVecPropertyResults props vec
+let getVecAndNodePropertyResults props shift (root : RRBNode<'T>) vec doLog =
+    let vecProps = getVecPropertyResults props vec doLog
+    if doLog then logger.infoWithBP (eventX "Got property results {results} for vec {vec}" >> setField "results" (sprintf "%A" vecProps) >> setField "vec" (sprintf "%A" vec)) |> Async.RunSynchronously
     let nodeProps = if root.NodeSize > 0 then getNodePropertyResults shift root else []
+    if doLog then logger.infoWithBP (eventX "Got node results {results} for vec {vec}" >> setField "results" (sprintf "%A" nodeProps) >> setField "vec" (sprintf "%A" vec)) |> Async.RunSynchronously
     vecProps @ nodeProps
 
 let getAllPropertyResults (vec : RRBVector<'T>) =
+    let doLog = vec.Length <= 0
     match vec with
-    | :? RRBPersistentVector<'T> as v -> getVecAndNodePropertyResults vectorPropertiesPersistent v.Shift v.Root v
-    | :? RRBTransientVector<'T>  as v -> getVecAndNodePropertyResults vectorPropertiesTransient v.Shift v.Root v
+    | :? RRBPersistentVector<'T> as v -> getVecAndNodePropertyResults vectorPropertiesPersistent v.Shift v.Root v doLog
+    | :? RRBTransientVector<'T>  as v -> getVecAndNodePropertyResults vectorPropertiesTransient v.Shift v.Root v doLog
     | _ -> failwith "Unknown vector type"
 
 let checkAllProperties (vec : RRBVector<'T>) label =

@@ -1046,7 +1046,7 @@ module RRBVector =
         vec |> Seq.choose chooser |> ofSeq
 
     let chunkBySize chunkSize (vec : RRBVector<'T>) =
-        if chunkSize <= 0 then failwith "Chunk size must be greater than zero"
+        if chunkSize <= 0 && vec.Length > 0 then failwith "Chunk size must be greater than zero"
         if vec |> isTransient then
             let mutable result = RRBTransientVector<_>.MkEmptyWithToken((vec :?> RRBTransientVector<'T>).Owner)
             let mutable remaining = vec

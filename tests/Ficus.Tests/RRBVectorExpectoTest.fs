@@ -648,17 +648,23 @@ let splitTransientTests =
   testList "split transient tests" [
     testPropSm "how long does this take?" <| fun (RRBVectorTransientCommands.SplitTestInput (vec, cmds)) ->
         let vec = if vec |> isTransient then (vec :?> RRBTransientVector<_>).Persistent() else vec :?> RRBPersistentVector<_>
-        logger.info (
+        logger.infoWithBP (
             eventX "Starting a split transient test with {vec}"
             >> setField "vec" (RRBVecGen.vecToTreeReprStr vec)
-        )
+        ) |> Async.RunSynchronously
         let mailbox = RRBVectorTransientCommands.startSplitTesting vec cmds
-        mailbox.Error.Add (fun e -> raise e)  // HOPEFULLY this should be enough to fail the test...?
-        mailbox.PostAndReply RRBVectorTransientCommands.AllThreadsResult.Go
-        logger.info (
+        let mutable error = None
+        mailbox.Error.Add (fun e -> error <- Some e)  // HOPEFULLY this should be enough to fail the test...?
+        let result = mailbox.PostAndReply RRBVectorTransientCommands.AllThreadsResult.Go
+        logger.infoWithBP (
             eventX "Ending(?) a split transient test with {vec}"
             >> setField "vec" (RRBVecGen.vecToTreeReprStr vec)
-        )
+        ) |> Async.RunSynchronously
+        match result with
+        | RRBVectorTransientCommands.AllThreadsResult.Go _ -> Expecto.Tests.failtest "Oops"
+        | RRBVectorTransientCommands.AllThreadsResult.OneFailed (position, cmdsDone, vec, arr, cmd, errorMsg) ->
+            Expecto.Tests.failtestf "Split vector number %d failed on %A with message %A; vector was %A and corresponding array was %A" position cmd errorMsg vec arr
+        | RRBVectorTransientCommands.AllThreadsResult.AllCompleted _ -> ()
   ]
 
 let simpleVectorTests =
