@@ -31,13 +31,13 @@ module Array =
     let copyAndInsertIntoFullArray idx newItem oldArr =
         let oldLen = Array.length oldArr
         if idx = oldLen then
-            oldArr, [| newItem |]
+            oldArr, newItem
         else
             let newArrL = Array.zeroCreate oldLen
             Array.blit oldArr 0 newArrL 0 idx
             newArrL.[idx] <- newItem
             Array.blit oldArr idx newArrL (idx + 1) (oldLen - idx - 1)
-            newArrL, [| oldArr.[oldLen - 1] |]
+            newArrL, oldArr.[oldLen - 1]
 
     // NOTE: No bounds-checking on idx. It's caller's responsibility to set it properly.
     let inline copyAndSet idx newItem oldArr =

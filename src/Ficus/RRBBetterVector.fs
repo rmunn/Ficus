@@ -81,7 +81,8 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
         let newToken = mkOwnerToken()
         let newRoot = (this.Root :?> RRBFullNode<'T>).ExpandRightSpine newToken this.Shift
         let tailLen = this.Count - this.TailOffset
-        let newTail = Array.sub this.Tail 0 tailLen
+        let newTail = Array.zeroCreate Literals.blockSize
+        this.Tail.CopyTo(newTail, 0)
         RRBTransientVector<'T>(this.Count, this.Shift, newRoot, newTail, this.TailOffset)
 
     member internal this.AdjustTree() =
@@ -340,7 +341,8 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                 let newTail = this.Tail |> Array.copyAndInsertAt (idx - this.TailOffset) newItem
                 RRBPersistentVector<'T>(this.Count + 1, this.Shift, this.Root, newTail, this.TailOffset) :> RRBVector<'T>
             else
-                let newLeafItems, newTail = this.Tail |> Array.copyAndInsertIntoFullArray (idx - this.TailOffset) newItem
+                let newLeafItems, newTailItem = this.Tail |> Array.copyAndInsertIntoFullArray (idx - this.TailOffset) newItem
+                let newTail = Array.singleton newTailItem
                 let newLeafNode = RRBNode<'T>.MkLeaf nullOwner newLeafItems :?> RRBLeafNode<'T>
                 let newRoot, newShift = (this.Root :?> RRBFullNode<'T>).AppendLeaf nullOwner this.Shift newLeafNode
                 // Pushing a full tail down into a leaf can't break the invariant, so no need to adjust the tree here
@@ -477,18 +479,20 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                 elif shiftCount >= tailLen then
                     // Would shift everything out of the tail, so instead we'll promote a new tail
                     let removedLeaf, newRoot = (this.Root :?> RRBFullNode<'T>).RemoveLastLeaf this.Owner this.Shift
-                    // let newTail = this.Tail |> Array.append removedLeaf.Items
-                    removedLeaf.Items.CopyTo(this.Tail, tailLen)
-                    this.TailOffset <- this.TailOffset - removedLeaf.NodeSize
+                    let removedSize = removedLeaf.NodeSize
+                    for i = tailLen - 1 downto 0 do
+                        this.Tail.[i + removedSize] <- this.Tail.[i]
+                    removedLeaf.Items.CopyTo(this.Tail, 0)
+                    this.TailOffset <- this.TailOffset - removedSize
                     if not <| isSameObj newRoot this.Root then
                         this.Root <- newRoot
                     // In certain rare cases, we might need to recurse. For example, the vector [M 5] [5] T1 will become [M 5] T6, which then needs to become M T11.
                     this.ShiftNodesFromTailIfNeeded()
                 else
                     let itemsToShift = Array.sub this.Tail 0 shiftCount
-                    for i = 0 to shiftCount - 1 do
+                    for i = 0 to tailLen - shiftCount - 1 do
                         this.Tail.[i] <- this.Tail.[i + shiftCount]
-                    Array.fill this.Tail shiftCount (tailLen - shiftCount) Unchecked.defaultof<'T>
+                    Array.fill this.Tail (tailLen - shiftCount) shiftCount Unchecked.defaultof<'T>
                     let newLeaf = RRBLeafNode<'T>(this.Owner, Array.append lastLeaf.Items itemsToShift)
                     let newRoot = (this.Root :?> RRBFullNode<'T>).ReplaceLastLeaf this.Owner this.Shift newLeaf shiftCount
                     if not <| isSameObj newRoot this.Root then
@@ -871,13 +875,15 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             let tailLen = this.Count - this.TailOffset
             if tailLen < Literals.blockSize then
                 let tailIdx = idx - this.TailOffset
-                for i = tailLen downto tailIdx do
+                for i = tailLen - 1 downto tailIdx do
                     this.Tail.[i+1] <- this.Tail.[i]
                 this.Tail.[tailIdx] <- newItem
                 this.Count <- this.Count + 1
                 this :> RRBVector<'T>
             else
-                let newLeafItems, newTail = this.Tail |> Array.copyAndInsertIntoFullArray (idx - this.TailOffset) newItem
+                let newLeafItems, newTailItem = this.Tail |> Array.copyAndInsertIntoFullArray (idx - this.TailOffset) newItem
+                let newTail = Array.zeroCreate Literals.blockSize
+                newTail.[0] <- newTailItem
                 let newLeafNode = RRBNode<'T>.MkLeaf this.Owner newLeafItems :?> RRBLeafNode<'T>
                 let newRoot, newShift = (this.Root :?> RRBFullNode<'T>).AppendLeaf this.Owner this.Shift newLeafNode
                 if not <| isSameObj newRoot this.Root then

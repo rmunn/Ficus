@@ -658,6 +658,64 @@ let splitTransientTests =
         | RRBVectorTransientCommands.AllThreadsResult.OneFailed (position, cmdsDone, vec, arr, cmd, errorMsg) ->
             failtestf "Split vector number %d failed on %A after %d commands, with message %A; vector was %A and corresponding array was %A" position cmd cmdsDone errorMsg vec arr
         | RRBVectorTransientCommands.AllThreadsResult.AllCompleted _ -> ()
+    testCase "Removing one item from full-sized root of transient preserves tail" <| fun _ ->
+        let arr = [| 1 .. Literals.blockSize + 6 |]
+        let vec = RRBVector.ofArray arr
+        let tvec = (vec :?> RRBPersistentVector<_>).Transient()
+        let newVec = tvec.Remove 3
+        let newArr = arr |> Array.copyAndRemoveAt 3
+        RRBVectorProps.checkProperties newVec "New vector"
+        Expect.equal (newVec |> RRBVector.toArray) newArr "New vector did not match array"
+    testCase "Removing one item from root of transient of length M+1 moves entire new M-sized root into tail" <| fun _ ->
+        let arr = [| 1 .. Literals.blockSize + 1 |]
+        let vec = RRBVector.ofArray arr
+        let tvec = (vec :?> RRBPersistentVector<_>).Transient()
+        let newVec = tvec.Remove 3
+        let newArr = arr |> Array.copyAndRemoveAt 3
+        RRBVectorProps.checkProperties newVec "New vector"
+        Expect.equal (newVec |> RRBVector.toArray) newArr "New vector did not match array"
+    testCase "Inserting one item at start of full-sized tail of transient with empty root preserves tail size" <| fun _ ->
+        let arr = [| 1 .. Literals.blockSize |]
+        let vec = RRBVector.ofArray arr
+        let tvec = (vec :?> RRBPersistentVector<_>).Transient()
+        let newVec = tvec.Insert 0 3
+        let newArr = arr |> Array.copyAndInsertAt 0 3
+        RRBVectorProps.checkProperties newVec "New vector"
+        Expect.equal (newVec |> RRBVector.toArray) newArr "New vector did not match array"
+    testCase "Inserting one item at start of not-quite-full-size tail of transient with empty root leaves full tail and empty root" <| fun _ ->
+        let arr = [| 1 .. Literals.blockSize - 1 |]
+        let vec = RRBVector.ofArray arr
+        let tvec = (vec :?> RRBPersistentVector<_>).Transient()
+        Expect.equal (tvec :?> RRBTransientVector<_>).Tail.[Literals.blockSize - 1] 0 "Transient vector's tail should initially end in 0"
+        let newVec = tvec.Insert 0 3
+        let newArr = arr |> Array.copyAndInsertAt 0 3
+        RRBVectorProps.checkProperties newVec "New vector"
+        Expect.equal (newVec |> RRBVector.toArray) newArr "New vector did not match array"
+        Expect.equal (newVec :?> RRBTransientVector<_>).Root.NodeSize 0 "New vector's root should still be empty"
+        Expect.equal (newVec :?> RRBTransientVector<_>).Tail.Length Literals.blockSize "New vector's tail should still be full"
+        Expect.notEqual (newVec :?> RRBTransientVector<_>).Tail.[Literals.blockSize - 1] 0 "New vector's tail should not end in 0"
+    testCase "Shifting nodes into tail twice, leaving empty root, preserves tail correctly" <| fun _ ->
+        let vec = RRBVecGen.treeReprStrToVec "M/2-3 M/2-1 T1"
+        let arr = vec |> RRBVector.toArray
+        RRBVectorProps.checkProperties vec "Original vector"
+        let v = vec :?> RRBPersistentVector<_>
+        Expect.equal v.Root.NodeSize 2 "Root should have 2 nodes"
+        let root = v.Root :?> RRBFullNode<_>
+        Expect.equal root.FirstChild.NodeSize (Literals.blockSize / 2 - 3) "First child should have M/2-3 items"
+        Expect.equal root.LastChild.NodeSize (Literals.blockSize / 2 - 1) "Last child should have M/2-1 items"
+        let tvec = (vec :?> RRBPersistentVector<_>).Transient()
+        let v = tvec :?> RRBTransientVector<_>
+        Expect.equal v.Root.NodeSize 2 "Root of transient should have 2 nodes"
+        let root = v.Root :?> RRBFullNode<_>
+        Expect.equal root.FirstChild.NodeSize (Literals.blockSize / 2 - 3) "First child of transient should have M/2-3 items"
+        Expect.equal root.LastChild.NodeSize (Literals.blockSize / 2 - 1) "Last child of transient should have M/2-1 items"
+        let newVec = tvec.Pop()
+        let newArr = arr |> Array.copyAndPop
+        RRBVectorProps.checkProperties newVec "New vector"
+        Expect.equal (newVec :?> RRBTransientVector<_>).Root.NodeSize 0 "New vector's root should be empty now"
+        Expect.equal (newVec :?> RRBTransientVector<_>).Tail.Length Literals.blockSize "New vector's tail should still be full"
+        Expect.equal (newVec :?> RRBTransientVector<_>).Tail.[Literals.blockSize - 1] 0 "New vector's tail should end in 0"
+        Expect.equal (newVec |> RRBVector.toArray) newArr "New vector did not match array"
   ]
 
 let simpleVectorTests =
@@ -1478,13 +1536,13 @@ let longRunningTests =
 open RRBVectorMoreCommands.ParameterizedVecCommands
 let isolatedTest =
   testList "Isolated test" [
-    // Passed: (1380433896, 296477427)
-    testProp (*1380433896, 296477427*) (*788968584, 296477381*) "More command tests from empty" (Command.toProperty (RRBVectorMoreCommands.specFromData RRBVector.empty))
+    // Passed: (1380433896, 296477427), (788968584, 296477381)
+    // testProp "More command tests from empty" (Command.toProperty (RRBVectorMoreCommands.specFromData RRBVector.empty))
     // Failed case: [push 38; push 38; pop 58; push 66; mergeL "0 T19"; push 47; pop 54; pop 66; mergeL "0 T24"; push 8; pop 61]
     // Sizes: [38; 76; 18; 84; 103 (left node 19); 150 (left node still 19?); 96 (left node still 19?); 30 (left node still 19?); 54 (is it 24-19-11? or less?); 62; 1]
     // Also: ftestPropertyWithConfig (788968584, 296477381) "More command tests from empty"
-    // Passed: (498335399, 296478517)
-    testProp (*498335399, 296478517*) (*2044959467, 296477380*) "Try command tests from data" <| fun (vec : RRBVector<int>) -> logger.info (eventX "Starting test with {vec}" >> setField "vec" (RRBVecGen.vecToTreeReprStr vec)); (Command.toProperty (RRBVectorMoreCommands.specFromData vec))
+    // Passed: (498335399, 296478517), (2044959467, 296477380)
+    // testProp "Try command tests from data" <| fun (vec : RRBVector<int>) -> logger.info (eventX "Starting test with {vec}" >> setField "vec" (RRBVecGen.vecToTreeReprStr vec)); (Command.toProperty (RRBVectorMoreCommands.specFromData vec))
     // Failed case: Initial: "M T9", Actions: [pop 37; push 47; mergeR "0 T15"; mergeR "0 T11"; mergeL "0 T9"; mergeL "0 T10"; pop 48; pop 47]
     // Also: ftestPropertyWithConfig (2044959467, 296477380) "Try command tests from data"
     // Also  (498335399, 296478517) which is "[M*M]*M TM-3" with commands [push 38; rev]

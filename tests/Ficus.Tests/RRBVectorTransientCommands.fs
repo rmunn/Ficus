@@ -11,6 +11,7 @@ open System.Threading
 open Expecto.Logging
 open Expecto.Logging.Message
 
+let logger = Log.create "In-test"
 (*
 TODO: Write a test with the following structure:
 
@@ -154,7 +155,21 @@ let transientAgent token (completionAgent : MailboxProcessor<SingleThreadResult>
                     let shouldRun = cmd.Pre arr
                     if shouldRun then
                         arr <- cmd.RunModel arr
-                        vec <- cmd.RunActual vec
+                        // if cmdsDone = 65 && position = 2 then
+                        //     do! logger.infoWithBP (eventX "Before {cmd}, vec was {vec}" >> setField "cmd" (sprintf "%A" cmd) >> setField "vec" (sprintf "%A" vec))
+                        try
+                            vec <- cmd.RunActual vec
+                        with
+                        | e ->
+                            do! logger.infoWithBP (
+                                    eventX "During {cmd} execution (vec was {vec}), error after {cmdsDone} commands in thread {pos} with message {msg}"
+                                    >> setField "cmd" (sprintf "%A" cmd)
+                                    >> setField "vec" (sprintf "%A" vec)
+                                    >> setField "cmdsDone" cmdsDone
+                                    >> setField "pos" position
+                                    >> setField "msg" e
+                                )
+                            Failed (position, cmdsDone, vec, arr, Some cmd, e.Message) |> completionAgent.Post
                         try
                             let success, msg = cmd.Post (vec, arr)
                             if not success then
@@ -162,9 +177,20 @@ let transientAgent token (completionAgent : MailboxProcessor<SingleThreadResult>
                                 // MailboxProcessors don't need to throw exceptions
                                 // failwithf "Split vector number %d failed on %A with message %A; vector was %A and corresponding array was %A" position cmd msg vec arr
                                 return ()
-                        with :? Expecto.AssertException as e ->
+                        with
+                        | :? Expecto.AssertException as e ->
                             Failed (position, cmdsDone, vec, arr, Some cmd, e.Message) |> completionAgent.Post
                             return ()
+                        | e ->
+                            do! logger.infoWithBP (
+                                    eventX "During {cmd} post checking (vec was {vec}), error after {cmdsDone} commands in thread {pos} with message {msg}"
+                                    >> setField "cmd" (sprintf "%A" cmd)
+                                    >> setField "vec" (sprintf "%A" vec)
+                                    >> setField "cmdsDone" cmdsDone
+                                    >> setField "pos" position
+                                    >> setField "msg" e.Message
+                                )
+                            Failed (position, cmdsDone, vec, arr, Some cmd, e.Message) |> completionAgent.Post
                     else
                         ()
                     cmdsDone <- cmdsDone + 1

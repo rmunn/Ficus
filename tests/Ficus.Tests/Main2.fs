@@ -215,5 +215,5 @@ let main argv =
         let config = { defaultConfig with filter = filter }
         runTestsWithArgs config (argv |> Array.filter ((<>) "--fscheck-only")) RRBVectorBetterNodesExpectoTest.tests
     else
-        runTestsWithArgs defaultConfig argv <| testList "Nodes and vectors" [ RRBVectorBetterNodesExpectoTest.tests; RRBVectorExpectoTest.tests ]
+        runTestsWithArgs defaultConfig (argv |> Array.copyAndAppend "--debug") <| testList "Nodes and vectors" [ RRBVectorBetterNodesExpectoTest.tests; RRBVectorExpectoTest.tests ]
         // runTestsWithArgs defaultConfig argv experimentalTests
