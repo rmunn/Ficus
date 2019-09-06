@@ -644,56 +644,75 @@ let mergeTests =
         Expect.equal joined.Root.NodeSize vR.Root.NodeSize "Rebalance should have left the joined vector's root the same size as the original right vector's root"
   ]
 
+let doSplitTransientTest (RRBVectorTransientCommands.SplitTestInput (vec, cmds)) =
+    let vec = if vec |> isTransient then (vec :?> RRBTransientVector<_>).Persistent() else vec :?> RRBPersistentVector<_>
+    let mailbox = RRBVectorTransientCommands.startSplitTesting vec cmds
+    let mutable error = None
+    mailbox.Error.Add (fun e -> error <- Some e)
+    let result = mailbox.PostAndReply RRBVectorTransientCommands.AllThreadsResult.Go
+    match result with
+    | RRBVectorTransientCommands.AllThreadsResult.Go _ -> failtest "Oops"
+    | RRBVectorTransientCommands.AllThreadsResult.OneFailed (position, cmdsDone, vec, arr, cmd, errorMsg) ->
+        failtestf "Split vector number %d failed on %A after %d commands, with message %A; vector was %A and corresponding array was %A" position cmd cmdsDone errorMsg vec arr
+    | RRBVectorTransientCommands.AllThreadsResult.AllCompleted _ -> ()
+
 let splitTransientTests =
   testList "split transient tests" [
-    etestPropSm (1636012108, 296642056) "how long does this take?" <| fun (RRBVectorTransientCommands.SplitTestInput (vec, cmds)) ->
-    // Failures: (1636012108, 296642056); (1745505811, 296642056); (238202286, 296642062); (262408519, 296642062)
-        let vec = if vec |> isTransient then (vec :?> RRBTransientVector<_>).Persistent() else vec :?> RRBPersistentVector<_>
-        let mailbox = RRBVectorTransientCommands.startSplitTesting vec cmds
-        let mutable error = None
-        mailbox.Error.Add (fun e -> error <- Some e)  // HOPEFULLY this should be enough to fail the test...?
-        let result = mailbox.PostAndReply RRBVectorTransientCommands.AllThreadsResult.Go
-        match result with
-        | RRBVectorTransientCommands.AllThreadsResult.Go _ -> failtest "Oops"
-        | RRBVectorTransientCommands.AllThreadsResult.OneFailed (position, cmdsDone, vec, arr, cmd, errorMsg) ->
-            failtestf "Split vector number %d failed on %A after %d commands, with message %A; vector was %A and corresponding array was %A" position cmd cmdsDone errorMsg vec arr
-        | RRBVectorTransientCommands.AllThreadsResult.AllCompleted _ -> ()
+    etestPropSm (2073922533, 296642100) "small test (get better name)" doSplitTransientTest
+    etestPropMed (2073922533, 296642100) "medium test (get better name)" doSplitTransientTest
+    testProp "large test (get better name)" doSplitTransientTest
     testCase "Removing one item from full-sized root of transient preserves tail" <| fun _ ->
         let arr = [| 1 .. Literals.blockSize + 6 |]
         let vec = RRBVector.ofArray arr
-        let tvec = (vec :?> RRBPersistentVector<_>).Transient()
-        let newVec = tvec.Remove 3
+        let newVec = vec.Remove 3
         let newArr = arr |> Array.copyAndRemoveAt 3
         RRBVectorProps.checkProperties newVec "New vector"
         Expect.equal (newVec |> RRBVector.toArray) newArr "New vector did not match array"
+        let tvec = (vec :?> RRBPersistentVector<_>).Transient()
+        let newTVec = tvec.Remove 3
+        RRBVectorProps.checkProperties newTVec "New transient vector"
+        Expect.equal (newTVec |> RRBVector.toArray) newArr "New transient vector did not match array"
     testCase "Removing one item from root of transient of length M+1 moves entire new M-sized root into tail" <| fun _ ->
         let arr = [| 1 .. Literals.blockSize + 1 |]
         let vec = RRBVector.ofArray arr
-        let tvec = (vec :?> RRBPersistentVector<_>).Transient()
-        let newVec = tvec.Remove 3
+        let newVec = vec.Remove 3
         let newArr = arr |> Array.copyAndRemoveAt 3
         RRBVectorProps.checkProperties newVec "New vector"
         Expect.equal (newVec |> RRBVector.toArray) newArr "New vector did not match array"
+        let tvec = (vec :?> RRBPersistentVector<_>).Transient()
+        let newTVec = tvec.Remove 3
+        RRBVectorProps.checkProperties newTVec "New transient vector"
+        Expect.equal (newTVec |> RRBVector.toArray) newArr "New transient vector did not match array"
     testCase "Inserting one item at start of full-sized tail of transient with empty root preserves tail size" <| fun _ ->
         let arr = [| 1 .. Literals.blockSize |]
         let vec = RRBVector.ofArray arr
-        let tvec = (vec :?> RRBPersistentVector<_>).Transient()
-        let newVec = tvec.Insert 0 3
+        let newVec = vec.Insert 0 3
         let newArr = arr |> Array.copyAndInsertAt 0 3
         RRBVectorProps.checkProperties newVec "New vector"
         Expect.equal (newVec |> RRBVector.toArray) newArr "New vector did not match array"
+        let tvec = (vec :?> RRBPersistentVector<_>).Transient()
+        let newTVec = tvec.Insert 0 3
+        RRBVectorProps.checkProperties newTVec "New transient vector"
+        Expect.equal (newTVec |> RRBVector.toArray) newArr "New transient vector did not match array"
     testCase "Inserting one item at start of not-quite-full-size tail of transient with empty root leaves full tail and empty root" <| fun _ ->
         let arr = [| 1 .. Literals.blockSize - 1 |]
         let vec = RRBVector.ofArray arr
-        let tvec = (vec :?> RRBPersistentVector<_>).Transient()
-        Expect.equal (tvec :?> RRBTransientVector<_>).Tail.[Literals.blockSize - 1] 0 "Transient vector's tail should initially end in 0"
-        let newVec = tvec.Insert 0 3
+        Expect.equal (vec :?> RRBPersistentVector<_>).Tail.[vec.Length - 1] (Literals.blockSize - 1) <| sprintf "Persistent vector's tail should initially end in %d" (Literals.blockSize - 1)
+        let newVec = vec.Insert 0 3
         let newArr = arr |> Array.copyAndInsertAt 0 3
         RRBVectorProps.checkProperties newVec "New vector"
         Expect.equal (newVec |> RRBVector.toArray) newArr "New vector did not match array"
-        Expect.equal (newVec :?> RRBTransientVector<_>).Root.NodeSize 0 "New vector's root should still be empty"
-        Expect.equal (newVec :?> RRBTransientVector<_>).Tail.Length Literals.blockSize "New vector's tail should still be full"
-        Expect.notEqual (newVec :?> RRBTransientVector<_>).Tail.[Literals.blockSize - 1] 0 "New vector's tail should not end in 0"
+        Expect.equal (newVec :?> RRBPersistentVector<_>).Root.NodeSize 0 "New vector's root should still be empty"
+        Expect.equal (newVec :?> RRBPersistentVector<_>).Tail.Length Literals.blockSize "New vector's tail should still be full"
+        Expect.notEqual (newVec :?> RRBPersistentVector<_>).Tail.[Literals.blockSize - 1] 0 "New vector's tail should not end in 0"
+        let tvec = (vec :?> RRBPersistentVector<_>).Transient()
+        Expect.equal (tvec :?> RRBTransientVector<_>).Tail.[Literals.blockSize - 1] 0 "Transient vector's tail should initially end in 0"
+        let newTVec = tvec.Insert 0 3
+        RRBVectorProps.checkProperties newTVec "New transient vector"
+        Expect.equal (newTVec |> RRBVector.toArray) newArr "New transient vector did not match array"
+        Expect.equal (newTVec :?> RRBTransientVector<_>).Root.NodeSize 0 "New transient vector's root should still be empty"
+        Expect.equal (newTVec :?> RRBTransientVector<_>).Tail.Length Literals.blockSize "New transient vector's tail should still be full"
+        Expect.notEqual (newTVec :?> RRBTransientVector<_>).Tail.[Literals.blockSize - 1] 0 "New transient vector's tail should not end in 0"
     testCase "Shifting nodes into tail twice, leaving empty root, preserves tail correctly" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "M/2-3 M/2-1 T1"
         let arr = vec |> RRBVector.toArray
@@ -709,13 +728,31 @@ let splitTransientTests =
         let root = v.Root :?> RRBFullNode<_>
         Expect.equal root.FirstChild.NodeSize (Literals.blockSize / 2 - 3) "First child of transient should have M/2-3 items"
         Expect.equal root.LastChild.NodeSize (Literals.blockSize / 2 - 1) "Last child of transient should have M/2-1 items"
-        let newVec = tvec.Pop()
+        let newVec = vec.Pop()
         let newArr = arr |> Array.copyAndPop
         RRBVectorProps.checkProperties newVec "New vector"
-        Expect.equal (newVec :?> RRBTransientVector<_>).Root.NodeSize 0 "New vector's root should be empty now"
-        Expect.equal (newVec :?> RRBTransientVector<_>).Tail.Length Literals.blockSize "New vector's tail should still be full"
-        Expect.equal (newVec :?> RRBTransientVector<_>).Tail.[Literals.blockSize - 1] 0 "New vector's tail should end in 0"
+        Expect.equal (newVec :?> RRBPersistentVector<_>).Root.NodeSize 0 "New vector's root should be empty now"
+        Expect.equal (newVec :?> RRBPersistentVector<_>).Tail.Length (Literals.blockSize - 4) "New vector's tail should contain whole remaining tree"
+        Expect.notEqual (newVec :?> RRBPersistentVector<_>).Tail.[Literals.blockSize - 5] 0 "New vector's tail should NOT end in 0"
         Expect.equal (newVec |> RRBVector.toArray) newArr "New vector did not match array"
+        let newTVec = tvec.Pop()
+        RRBVectorProps.checkProperties newTVec "New transient vector"
+        Expect.equal (newTVec :?> RRBTransientVector<_>).Root.NodeSize 0 "New transient vector's root should be empty now"
+        Expect.equal (newTVec :?> RRBTransientVector<_>).Tail.Length Literals.blockSize "New transient vector's tail should still be full"
+        Expect.equal (newTVec :?> RRBTransientVector<_>).Tail.[Literals.blockSize - 1] 0 "New transient vector's tail should end in 0"
+        Expect.equal (newTVec |> RRBVector.toArray) newArr "New transient vector did not match array"
+    ftestCase "Removing one item from root of transient of length M*2+4 turns full root into relaxed root" <| fun _ ->
+        let arr = [| 1 .. Literals.blockSize * 2 + 4 |]
+        let vec = RRBVector.ofArray arr
+        let newVec = vec.Remove 0
+        let newArr = arr |> Array.copyAndRemoveAt 0
+        RRBVectorProps.checkProperties newVec "New vector"
+        Expect.equal (newVec |> RRBVector.toArray) newArr "New vector did not match array"
+        let tvec = (vec :?> RRBPersistentVector<_>).Transient()
+        Expect.equal (tvec |> RRBVector.toArray) arr "Orig transient vector did not match orig array"
+        let newTVec = tvec.Remove 0
+        RRBVectorProps.checkProperties newTVec "New transient vector"
+        Expect.equal (newTVec |> RRBVector.toArray) newArr "New transient vector did not match array"
   ]
 
 let simpleVectorTests =

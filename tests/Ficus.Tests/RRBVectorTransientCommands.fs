@@ -155,7 +155,7 @@ let transientAgent token (completionAgent : MailboxProcessor<SingleThreadResult>
                     let shouldRun = cmd.Pre arr
                     if shouldRun then
                         arr <- cmd.RunModel arr
-                        // if cmdsDone = 65 && position = 2 then
+                        // if cmdsDone = 74 && position = 2 || cmdsDone = 44 && position = 0 then
                         //     do! logger.infoWithBP (eventX "Before {cmd}, vec was {vec}" >> setField "cmd" (sprintf "%A" cmd) >> setField "vec" (sprintf "%A" vec))
                         try
                             vec <- cmd.RunActual vec
@@ -264,7 +264,7 @@ let startSplitTesting (vec : RRBPersistentVector<int>) (cmds : (Cmd list)[]) =
             while mailbox.CurrentQueueLength = 0 && not (cts.IsCancellationRequested) do
                 // Keep busy checking the original vector against its original array while we wait for test completion
                 checkOrigVec origVec origArr
-                do! Async.Sleep 500  // Attempt to yield
+                // do! Async.Sleep 500  // Attempt to yield
             let! msg =
                 try
                     mailbox.Receive(15000)

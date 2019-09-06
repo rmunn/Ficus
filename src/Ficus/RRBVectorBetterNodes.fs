@@ -1864,7 +1864,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
     override this.SetNodeSize newSize = this.CurrentLength <- newSize
 
     override this.ToFullNodeIfNeeded shift =
-        if RRBMath.isSizeTableFullAtShift shift sizeTable this.NodeSize
+        if RRBMath.isSizeTableFullAtShift shift this.SizeTable this.NodeSize
         then RRBExpandedFullNode<'T>(this.Owner, this.Children, this.NodeSize) :> RRBNode<'T>
         else this :> RRBNode<'T>
 
