@@ -11,8 +11,6 @@ open System.Threading
 open Expecto.Logging
 open Expecto.Logging.Message
 
-let logger = Log.create "Transient split test"
-
 (*
 TODO: Write a test with the following structure:
 
@@ -120,24 +118,13 @@ let completionAgent size (cts : CancellationTokenSource) (parent : MailboxProces
                     results.[position] <- vec
                     completedCount <- completedCount + 1
                     if completedCount < size then
-                        do! logger.infoWithBP (eventX "Still {remaining} to do, looping in completion agent" >> setField "remaining" (size - completedCount))
                         return! loop()
                     else
-                        do! logger.infoWithBP (eventX "All completed, notifying parent")
                         AllCompleted results |> parent.Post
                         return ()
                 | Failed (position, cmdsDone, vec, arr, cmd, msg) ->
                     cts.Cancel()
                     OneFailed (position, cmdsDone, vec, arr, cmd, msg) |> parent.Post
-                    do! logger.infoWithBP (
-                            eventX "Failed thread at position {pos} after {cmdsDone} commands done. Vec = {vec}, arr = {arr}, cmd = {cmd}, msg = {msg}"
-                            >> setField "pos" position
-                            >> setField "cmdsDone" cmdsDone
-                            >> setField "vec" (sprintf "%A" vec)
-                            >> setField "arr" (sprintf "%A" arr)
-                            >> setField "cmd" (sprintf "%A" cmd)
-                            >> setField "msg" msg
-                        )
                     return ()
             }
         loop()
@@ -150,96 +137,37 @@ let transientAgent token (completionAgent : MailboxProcessor<SingleThreadResult>
     let run (mailbox : MailboxProcessor<AgentCmd>) =
         let rec loop() =
             async {
-                // do! logger.infoWithBP (
-                //         eventX "Split thread at position {pos} about to wait for message ({cmdsDone} commands done so far)"
-                //         >> setField "pos" position
-                //         >> setField "cmdsDone" cmdsDone
-                //     )
                 let! msg =
                     try
                         mailbox.Receive(5000)
                     with :? System.TimeoutException ->
                         let queueCount = mailbox.CurrentQueueLength
                         async {
-                            // do! logger.infoWithBP (
-                            //         eventX "Timing out in split thread at position {pos} after {cmdsDone} commands; {count} msgs remaining in queue when timing out"
-                            //         >> setField "pos" position
-                            //         >> setField "cmdsDone" cmdsDone
-                            //         >> setField "count" queueCount
-                            //     )
                             return Finished }  // If we're waiting five seconds without getting anything, give up and call this thread finished
                 match msg with
                 | Finished ->
                     let queueCount = mailbox.CurrentQueueLength
-                    // do! logger.infoWithBP (
-                    //         eventX "Completed a single split thread at position {pos} after {cmdsDone} commands; {count} msgs remaining in queue when completed"
-                    //         >> setField "pos" position
-                    //         >> setField "cmdsDone" cmdsDone
-                    //         >> setField "count" queueCount
-                    //     )
                     Completed (position, vec) |> completionAgent.Post
                     return ()
                 | Cmd cmd ->
                     let queueCount = mailbox.CurrentQueueLength
                     let shouldRun = cmd.Pre arr
                     if shouldRun then
-                        // do! logger.infoWithBP (
-                        //         eventX "Thread at position {pos} about to run command {cmd}; {count} msgs remaining in queue after this one"
-                        //         >> setField "pos" position
-                        //         >> setField "cmd" cmd
-                        //         >> setField "count" queueCount
-                        //     )
                         arr <- cmd.RunModel arr
-                        // do! logger.infoWithBP (
-                        //         eventX "Thread at position {pos} has run command {cmd} on the model"
-                        //         >> setField "pos" position
-                        //         >> setField "cmd" cmd
-                        //     )
                         vec <- cmd.RunActual vec
-                        // do! logger.infoWithBP (
-                        //         eventX "Thread at position {pos} has run command {cmd} on the vector with result {vec}"
-                        //         >> setField "pos" position
-                        //         >> setField "cmd" cmd
-                        //         >> setField "vec" (sprintf "%A" vec)
-                        //     )
-                        let success, msg = cmd.Post (vec, arr)
-                        // do! logger.infoWithBP (
-                        //         eventX "Thread at position {pos} has checked success of {cmd} ({result})"
-                        //         >> setField "pos" position
-                        //         >> setField "cmd" cmd
-                        //         >> setField "result" (if success then "ok" else msg)
-                        //     )
-                        if not success then
-                            // do! logger.infoWithBP (
-                            //         eventX "Failing a single split thread at position {pos} with {count} msgs remaining in queue that won't be handled"
-                            //         >> setField "pos" position
-                            //         >> setField "count" queueCount
-                            //     )
-                            Failed (position, cmdsDone, vec, arr, Some cmd, msg) |> completionAgent.Post
-                            // MailboxProcessors don't need to throw exceptions
-                            // failwithf "Split vector number %d failed on %A with message %A; vector was %A and corresponding array was %A" position cmd msg vec arr
+                        try
+                            let success, msg = cmd.Post (vec, arr)
+                            if not success then
+                                Failed (position, cmdsDone, vec, arr, Some cmd, msg) |> completionAgent.Post
+                                // MailboxProcessors don't need to throw exceptions
+                                // failwithf "Split vector number %d failed on %A with message %A; vector was %A and corresponding array was %A" position cmd msg vec arr
+                                return ()
+                        with :? Expecto.AssertException as e ->
+                            Failed (position, cmdsDone, vec, arr, Some cmd, e.Message) |> completionAgent.Post
                             return ()
                     else
-                        // do! logger.infoWithBP (
-                        //         eventX "Thread at position {pos} skipping command {cmd} ({count} left in queue) because it's unsuitable for current state (vec {vec} and arr {arr})"
-                        //         >> setField "pos" position
-                        //         >> setField "cmd" cmd
-                        //         >> setField "vec" (sprintf "%A" vec)
-                        //         >> setField "arr" (sprintf "%A" arr)
-                        //         >> setField "count" queueCount
-                        //     )
                         ()
-                    // do! logger.infoWithBP (
-                    //         eventX "About to increment cmdsDone (was {cmdsDone}) in thread at position {pos}"
-                    //         >> setField "pos" position
-                    //         >> setField "cmdsDone" cmdsDone
-                    //     )
                     cmdsDone <- cmdsDone + 1
-                    // do! logger.infoWithBP (
-                    //         eventX "Just incremented cmdsDone (now {cmdsDone}) in thread at position {pos}, about to loop"
-                    //         >> setField "pos" position
-                    //         >> setField "cmdsDone" cmdsDone
-                    //     )
                     return! loop()
             }
         loop()
@@ -295,7 +223,6 @@ let startSplitTesting (vec : RRBPersistentVector<int>) (cmds : (Cmd list)[]) =
                     Expecto.Tests.failtest "Split test timed out waiting for initial Go command"
             match msg with
             | Go channel ->
-                do! logger.infoWithBP (eventX "Parent kicking off sub threads")
                 replyChannel <- Some channel
                 let completion = mailbox |> completionAgent parts.Length cts
                 let threads = parts |> Array.mapi (transientAgent cts.Token completion)
@@ -311,7 +238,6 @@ let startSplitTesting (vec : RRBPersistentVector<int>) (cmds : (Cmd list)[]) =
             while mailbox.CurrentQueueLength = 0 && not (cts.IsCancellationRequested) do
                 // Keep busy checking the original vector against its original array while we wait for test completion
                 checkOrigVec origVec origArr
-                do! logger.infoWithBP (eventX "Parent thread looping while waiting for all threads to complete")
                 do! Async.Sleep 500  // Attempt to yield
             let! msg =
                 try
@@ -322,7 +248,6 @@ let startSplitTesting (vec : RRBPersistentVector<int>) (cmds : (Cmd list)[]) =
             | Go _ ->
                 Expecto.Tests.failtest "Shouldn't receive the Go message twice!"
             | AllCompleted newParts ->
-                do! logger.infoWithBP (eventX "Parent got notified that all threads completed")
                 let joinedT = RRBVector.concat (newParts |> Seq.cast<RRBVector<int>>)
                 let joined =
                     if joinedT |> isTransient then
@@ -334,15 +259,6 @@ let startSplitTesting (vec : RRBPersistentVector<int>) (cmds : (Cmd list)[]) =
                 | None -> failwithf "Split test had no reply channel to report results!"
                 | Some channel -> return channel.Reply(msg)
             | OneFailed (position, cmdsDone, vec, arr, cmd, errorMsg) ->
-                do! logger.infoWithBP (
-                        eventX "Parent got notified that one thread failed, at position {pos} after {cmdsDone} commands done. Vec = {vec}, arr = {arr}, cmd = {cmd}, msg = {msg}"
-                        >> setField "pos" position
-                        >> setField "cmdsDone" cmdsDone
-                        >> setField "vec" (sprintf "%A" vec)
-                        >> setField "arr" (sprintf "%A" arr)
-                        >> setField "cmd" (sprintf "%A" cmd)
-                        >> setField "msg" errorMsg
-                    )
                 match replyChannel with
                 | None -> failwithf "Split test had no reply channel to report results!"
                 | Some channel -> return channel.Reply(msg)

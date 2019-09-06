@@ -501,7 +501,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
     override this.Empty() =
         this.ThrowIfNotValid()
         this.Count <- 0
-        this.Shift <- Literals.blockSize
+        this.Shift <- Literals.blockSizeShift
         let root = this.Root :?> RRBFullNode<'T>
         root.SetNodeSize 0
         Array.fill root.Children 0 Literals.blockSize null
