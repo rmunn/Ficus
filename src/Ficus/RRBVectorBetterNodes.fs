@@ -287,7 +287,7 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
         // TODO: Use this.BuildSizeTable instead???
         if shift <= 0 then this :> RRBNode<'T> else
             let sizeTable = RRBNode<'T>.CreateSizeTable shift children
-            if RRBMath.isSizeTableFullAtShift shift sizeTable sizeTable.Length
+            if isSizeTableFullAtShift shift sizeTable sizeTable.Length
             then this :> RRBNode<'T>
             else RRBRelaxedNode<'T>(ownerToken, children, sizeTable) :> RRBNode<'T>
             // TODO: Check if expanded nodes need to override this
@@ -1205,7 +1205,7 @@ and [<StructuredFormatDisplay("RelaxedNode({StringRepr})")>] RRBRelaxedNode<'T>(
 
     abstract member ToFullNodeIfNeeded : int -> RRBNode<'T>
     default this.ToFullNodeIfNeeded shift =
-        if RRBMath.isSizeTableFullAtShift shift sizeTable sizeTable.Length
+        if isSizeTableFullAtShift shift sizeTable sizeTable.Length
         then RRBFullNode<'T>(this.Owner, this.Children) :> RRBNode<'T>
         else this :> RRBNode<'T>
 
@@ -1465,7 +1465,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         if shift <= 0 then this :> RRBNode<'T> else
             let size = this.NodeSize
             let sizeTable = RRBNode<'T>.CreateSizeTableS shift this.Children size
-            if RRBMath.isSizeTableFullAtShift shift sizeTable size
+            if isSizeTableFullAtShift shift sizeTable size
             then this :> RRBNode<'T>
             else RRBExpandedRelaxedNode<'T>(ownerToken, this.Children, sizeTable, this.NodeSize) :> RRBNode<'T>
 
@@ -1864,7 +1864,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
     override this.SetNodeSize newSize = this.CurrentLength <- newSize
 
     override this.ToFullNodeIfNeeded shift =
-        if RRBMath.isSizeTableFullAtShift shift this.SizeTable this.NodeSize
+        if isSizeTableFullAtShift shift this.SizeTable this.NodeSize
         then RRBExpandedFullNode<'T>(this.Owner, this.Children, this.NodeSize) :> RRBNode<'T>
         else this :> RRBNode<'T>
 
