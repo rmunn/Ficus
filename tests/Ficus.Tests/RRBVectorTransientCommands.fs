@@ -297,6 +297,7 @@ module VecCommands =
                         override __.RunModel arr = Array.append arr [| 1 .. n |]
                         override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After pushing %d items, vec != arr" n
                         override __.ToString() = sprintf "push %d" n }
+    let genPush = Arb.generate<PositiveInt> |> Gen.map (fun (PositiveInt n) -> push n)
 
     let pop n = { new Cmd()
                   with override __.RunActual vec = { 1 .. n } |> Seq.fold (fun vec _ -> vec.Pop() :?> RRBTransientVector<_>) vec
@@ -304,6 +305,7 @@ module VecCommands =
                        override __.Pre(arr) = arr.Length >= n
                        override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After popping %d items, vec != arr" n
                        override __.ToString() = sprintf "pop %d" n }
+    let genPop = Arb.generate<PositiveInt> |> Gen.map (fun (PositiveInt n) -> pop n)
 
     let insert (idx,item) = { new Cmd()
                             with override __.RunActual vec = let idx' = if idx < 0 then idx + vec.Length else idx in vec |> RRBVector.insert idx' item :?> RRBTransientVector<_>
@@ -311,6 +313,7 @@ module VecCommands =
                                  override __.Pre(arr) = (abs idx) <= arr.Length
                                  override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After inserting %d at index %d, vec != arr" item idx
                                  override __.ToString() = sprintf "insert (%d,%d)" idx item }
+    let genInsert = Arb.generate<int * int> |> Gen.map insert
 
     let insert5AtHead = insert (0, 5)
     let insert7InFirstLeaf = insert (3, 7)
@@ -322,6 +325,7 @@ module VecCommands =
                             override __.Pre(arr) = (abs idx) <= arr.Length && idx <> arr.Length
                             override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After removing item at index %d, vec != arr" idx
                             override __.ToString() = sprintf "remove %d" idx }
+    let genRemove = Arb.generate<int> |> Gen.map remove
 
     let removeFromHead = remove 0
     let removeFromFirstLeaf = remove 3
@@ -343,9 +347,36 @@ module VecCommands =
                 let stop' = stop |> Option.map (fun stop -> if stop < 0 then stop + arr.Length else stop) |> Option.defaultValue (arr.Length - 1)
                 Array.sub arr start' (stop' - start' + 1)
              override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After slicing from %A to %A, vec != arr" start stop
-             override __.ToString() = sprintf "slice %A %A" start stop }
+             override __.ToString() = sprintf "slice (%A,%A)" start stop }
 
     let genSlice = Arb.generate<int option> |> Gen.two |> Gen.map slice
+
+    let split (idx : int, cmdsL : Cmd list, cmdsR : Cmd list) =
+        { new Cmd() with
+            override __.RunActual vec =
+                let idx' = (if idx < 0 then idx + vec.Length else idx) |> min vec.Length |> max 0
+                let vL, vR = vec.Split idx'
+                let vL' = cmdsL |> List.fold (fun vec cmd -> cmd.RunActual vec) (vL :?> RRBTransientVector<_>)
+                let vR' = cmdsR |> List.fold (fun vec cmd -> cmd.RunActual vec) (vR :?> RRBTransientVector<_>)
+                vL'.Append vR' :?> RRBTransientVector<_>
+            override __.RunModel arr =
+                let idx' = (if idx < 0 then idx + arr.Length else idx) |> min arr.Length |> max 0
+                let arrL, arrR = arr |> Array.splitAt idx'
+                let arrL' = cmdsL |> List.fold (fun arr cmd -> cmd.RunModel arr) arrL
+                let arrR' = cmdsR |> List.fold (fun arr cmd -> cmd.RunModel arr) arrR
+                Array.append arrL' arrR'
+            override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After splitting at %d and running %A on the left and %A on the right, vec != arr" idx cmdsL cmdsR
+            override __.ToString() = sprintf "split (%d,%A,%A)" idx cmdsL cmdsR }
+
+    let cmdFrequenciesForSplit = [
+        10, genInsert
+        5, genRemove
+        3, genPush
+        2, genPop
+        1, genSlice
+    ]
+    let genCmdsForSplit = Gen.listOf (Gen.frequency cmdFrequenciesForSplit)
+    let genSplit = Gen.map3 (fun idx cmdsL cmdsR -> idx,cmdsL,cmdsR) (Arb.generate<int>) genCmdsForSplit genCmdsForSplit |> Gen.map split
 
 open VecCommands
 
