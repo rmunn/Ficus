@@ -8,11 +8,10 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="Library.fs" />
-    <Compile Include="PersistentVector.fs" />
+    <Compile Include="Literals.fs" />
     <Compile Include="RRBArrayExtensions.fs" />
-    <Compile Include="RRBVectorBetterNodes.fs" />
-    <Compile Include="RRBBetterVector.fs" />
+    <Compile Include="RRBVectorNodes.fs" />
+    <Compile Include="RRBVector.fs" />
   </ItemGroup>
   <Import Project="..\..\netfx.props" />
   <Import Project="..\..\.paket\Paket.Restore.targets" />

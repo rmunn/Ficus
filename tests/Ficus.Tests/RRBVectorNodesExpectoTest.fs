@@ -1,9 +1,9 @@
-module Ficus.Tests.RRBVectorBetterNodesExpectoTest
+module Ficus.Tests.RRBVectorNodesExpectoTest
 
 open Expecto
 open Expecto.Logging
 open Expecto.Logging.Message
-open Ficus.RRBVectorBetterNodes
+open Ficus.RRBVectorNodes
 open RRBVectorProps
 open FsCheck
 open RRBMath

@@ -2,9 +2,9 @@ module Ficus.Tests.RRBVectorProps
 
 open System
 open Ficus
-open Ficus.RRBVectorBetterNodes
+open Ficus.RRBVectorNodes
 open Ficus.RRBVector
-open Ficus.RRBVectorBetterNodes.RRBMath
+open Ficus.RRBVectorNodes.RRBMath
 open FsCheck
 open Expecto.Logging
 open Expecto.Logging.Message

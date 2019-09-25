@@ -17,7 +17,7 @@
     <Compile Include="RRBVectorFsCheckCommands.fs" />
     <Compile Include="RRBVectorTransientCommands.fs" />
     <Compile Include="RRBVectorMoreCommands.fs" />
-    <Compile Include="RRBVectorBetterNodesExpectoTest.fs" />
+    <Compile Include="RRBVectorNodesExpectoTest.fs" />
     <Compile Include="RRBVectorExpectoTest.fs" />
     <Compile Include="Main.fs" />
   </ItemGroup>

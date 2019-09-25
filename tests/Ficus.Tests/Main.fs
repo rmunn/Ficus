@@ -31,7 +31,7 @@ let main argv =
         printfn "%s - %A - %s - %s" name.Name version releaseDate githash
     if argv |> Array.contains "--debug-vscode" then
         printfn "Debugging"
-        runTestsWithArgs defaultConfig (argv |> Array.except ["--debug-vscode"]) <| testList "Nodes and vectors" [ RRBVectorBetterNodesExpectoTest.tests; RRBVectorExpectoTest.tests ]
+        runTestsWithArgs defaultConfig (argv |> Array.except ["--debug-vscode"]) <| testList "Nodes and vectors" [ RRBVectorNodesExpectoTest.tests; RRBVectorExpectoTest.tests ]
     elif argv |> Array.contains "--stress" || argv |> Array.contains "--fscheck-only" then
         printfn "Running only FsCheck tests%s" (if argv |> Array.contains "--stress" then " for stress testing" else "")
         let noop = TestList([], Pending)
@@ -55,7 +55,7 @@ let main argv =
                     noop
             | Test.Sequenced(_, test) -> filter test
         let config = { defaultConfig with filter = filter }
-        runTestsWithArgs config (argv |> Array.filter ((<>) "--fscheck-only")) <| testList "Nodes and vectors" [ RRBVectorBetterNodesExpectoTest.tests; RRBVectorExpectoTest.tests ]
+        runTestsWithArgs config (argv |> Array.filter ((<>) "--fscheck-only")) <| testList "Nodes and vectors" [ RRBVectorNodesExpectoTest.tests; RRBVectorExpectoTest.tests ]
     else
-        runTestsWithArgs defaultConfig argv <| testList "Nodes and vectors" [ RRBVectorBetterNodesExpectoTest.tests; RRBVectorExpectoTest.tests ]
+        runTestsWithArgs defaultConfig argv <| testList "Nodes and vectors" [ RRBVectorNodesExpectoTest.tests; RRBVectorExpectoTest.tests ]
         // runTestsWithArgs defaultConfig argv experimentalTests

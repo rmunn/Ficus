@@ -1,7 +1,7 @@
 module Ficus.Tests.RRBVecGen
 
 open Ficus
-open Ficus.RRBVectorBetterNodes
+open Ficus.RRBVectorNodes
 open Ficus.RRBVector
 open FsCheck
 open Expecto.Logging

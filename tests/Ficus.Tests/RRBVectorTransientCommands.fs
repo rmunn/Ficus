@@ -2,7 +2,7 @@ module Ficus.Tests.RRBVectorTransientCommands
 
 // https://fscheck.github.io/FsCheck/StatefulTesting.html
 
-open Ficus.RRBVectorBetterNodes
+open Ficus.RRBVectorNodes
 open Ficus.RRBVector
 open FsCheck
 open Ficus.RRBArrayExtensions

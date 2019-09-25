@@ -3,13 +3,12 @@ module Ficus.Tests.RRBVectorExpectoTest
 open Expecto
 open Ficus
 open Ficus.RRBArrayExtensions
-open Ficus.RRBVectorBetterNodes
+open Ficus.RRBVectorNodes
 open Ficus.RRBVector
 open FsCheck
 open Expecto.Logging
 open Expecto.Logging.Message
 
-module Literals = Ficus.Literals
 let logger = Log.create "Expecto"
 
 // For various tests, we'll want to generate a list and an index of an item within that list.
@@ -1600,69 +1599,55 @@ let operationTests =
 
 let arrayTests =
   testList "Array extension functions" [
-    testProp "copyAndAppend" (fun (ArrayAndIdx (arr,_)) ->
+    testProp "copyAndAppend" <| fun (ArrayAndIdx (arr,_)) ->
         let expected = Array.init (arr.Length + 1) (fun i -> if i = Array.length arr then 512 else arr.[i])
         let actual = arr |> Array.copyAndAppend 512
         Expect.equal actual expected "copyAndAppend did not append the test value (512) at the right place"
-    )
-    testProp "copyAndSet" (fun (NonEmptyArrayAndIdx (arr,i)) ->
+
+    testProp "copyAndSet" <| fun (NonEmptyArrayAndIdx (arr,i)) ->
         let expected = Array.copy arr
         expected.[i] <- 512
         let actual = arr |> Array.copyAndSet i 512
         Expect.equal actual expected "copyAndSet did not set the test value (512) at the right place"
-    )
-    testProp "copyAndSetLast" (fun (NonEmptyArrayAndIdx (arr,_)) ->
-        let expected = Array.copy arr
-        expected.[Array.length arr - 1] <- 512
-        let actual = arr |> Array.copyAndSetLast 512
-        Expect.equal actual expected "copyAndSetLast did not set the test value (512) at the right place"
-    )
-    testProp "copyAndInsertAt" (fun (NonEmptyArrayAndIdx (arr,i)) ->
+
+    testProp "copyAndInsertAt" <| fun (NonEmptyArrayAndIdx (arr,i)) ->
         let expected = Array.append (Array.append (Array.take i arr) [|512|]) (Array.skip i arr)
         let actual = arr |> Array.copyAndInsertAt i 512
         Expect.equal actual expected "copyAndInsertAt did not set the test value (512) at the right place"
-    )
-    testProp "copyAndRemoveAt" (fun (NonEmptyArrayAndIdx (arr,i)) ->
+
+    testProp "copyAndRemoveAt" <| fun (NonEmptyArrayAndIdx (arr,i)) ->
         let expected = Array.append (Array.take i arr) (Array.skip (i+1) arr)
         let actual = arr |> Array.copyAndRemoveAt i
         Expect.equal actual expected "copyAndRemoveAt did not set the test value (512) at the right place"
-    )
-    testProp "copyAndRemoveFirst" (fun (NonEmptyArrayAndIdx (arr,_)) ->
-        let expected = Array.skip 1 arr
-        let actual = arr |> Array.copyAndRemoveFirst
-        Expect.equal actual expected "copyAndRemoveFirst did not set the test value (512) at the right place"
-    )
-    testProp "copyAndPop" (fun (NonEmptyArrayAndIdx (arr,_)) ->
+
+    testProp "copyAndPop" <| fun (NonEmptyArrayAndIdx (arr,_)) ->
         let expected = Array.take (Array.length arr - 1) arr
         let actual = arr |> Array.copyAndPop
         Expect.equal actual expected "copyAndPop did not set the test value (512) at the right place"
-    )
-    testProp "splitAt" (fun (ArrayAndIdx (arr,i)) ->
+
+    testProp "splitAt" <| fun (ArrayAndIdx (arr,i)) ->
         let expected = (Array.take i arr, Array.skip i arr)
         let actual = arr |> Array.splitAt i
         Expect.equal actual expected "splitAt did not produce the right results"
-    )
-    testProp "append3" (fun (a:int[]) (b:int[]) (c:int[]) ->
-        let expected = Array.append (Array.append a b) c
-        let actual = Array.append3 a b c
-        Expect.equal actual expected "append3 did not produce the right results"
-    )
-    testProp "append3'" (fun (a:int[]) (b:int) (c:int[]) ->
-        let expected = Array.append (Array.append a [|b|]) c
-        let actual = Array.append3' a b c
-        Expect.equal actual expected "append3' did not produce the right results"
-    )
+
+    testProp "appendAndSplitAt" <| fun (idx:int) (a:int[]) (b:int[]) ->
+        let joined = Array.append a b
+        let idx = (abs idx) % (Array.length joined + 1)
+        let expected = joined |> Array.splitAt idx
+        let actual = Array.appendAndSplitAt idx a b
+        Expect.equal actual expected <| sprintf "appendAndSplitAt did not produce the right results at idx %d and with input arrays %A and %A" idx a b
+
     testProp "appendAndInsertAndSplitEvenly" <| fun (idx:int) (a:int[]) (b:int[]) ->
         let joined = Array.append a b
         let idx = (abs idx) % (Array.length joined + 1)
         let expected = joined |> Array.copyAndInsertAt idx 512 |> Array.splitAt (((Array.length a + Array.length b) >>> 1) + 1)
         let actual = Array.appendAndInsertAndSplitEvenly idx 512 a b
         Expect.equal actual expected <| sprintf "appendAndInsertAndSplitEvenly did not produce the right results at idx %d and with input arrays %A and %A" idx a b
-    testProp "insertAndSplitEvenly" (fun (NonEmptyArrayAndIdx (arr,idx)) ->
+
+    testProp "insertAndSplitEvenly" <| fun (NonEmptyArrayAndIdx (arr,idx)) ->
         let expected = arr |> Array.copyAndInsertAt idx 512 |> Array.splitAt (((Array.length arr) >>> 1) + 1)
         let actual = arr |> Array.insertAndSplitEvenly idx 512
         Expect.equal actual expected "insertAndSplitEvenly did not produce the right results"
-    )
   ]
 
 let apiTests =
@@ -1685,98 +1670,6 @@ let apiTests =
             Expect.vecEqualArr v' a' "Sliced vector should equal equivalent slice from array"
   ]
 
-(* let perfTests =
-  testSequenced <| testList "Performance tests" [
-    testCase "appendAndInsertAndSplitEvenly performance" <| fun _ ->
-        let idx, a, b = 47, [|1..32|], [|33..60|]
-        let joined = Array.append a b
-        let idx = (abs idx) % (Array.length joined + 1)
-        let calcExpected = fun () ->
-            let mutable list = []
-            for i = 1 to 10000 do
-                list <- (joined |> Array.copyAndInsertAt idx 512 |> Array.splitAt (((Array.length a + Array.length b) >>> 1) + 1)) :: list
-            list
-        let calcActual = fun () ->
-            let mutable list = []
-            for i = 1 to 10000 do
-                list <- (Array.appendAndInsertAndSplitEvenly idx 512 a b) :: list
-            list
-        Expect.isFasterThan calcActual calcExpected "Array.appendAndInsertAndSplitEvenly should be faster than the intermediate-array version"
-
-    testCase "appendAndInsertAt performance" <| fun _ ->
-        let idx, a, b = 47, [|1..32|], [|33..60|]
-        let calcExpected = fun () ->
-            let mutable list = []
-            for i = 1 to 10000 do
-                let joined = Array.append a b
-                list <- (joined |> Array.copyAndInsertAt idx 512) :: list
-            list
-        let calcActual = fun () ->
-            let mutable list = []
-            for i = 1 to 10000 do
-                list <- (Array.appendAndInsertAt idx 512 a b) :: list
-            list
-        Expect.isFasterThan calcActual calcExpected "Array.appendAndInsertAt should be faster than the intermediate-array version"
-
-    testCase "append3 performance" <| fun _ ->
-        let a, b, c = [|1..32|], [|33..60|], [|61..92|]
-        let calcExpected = fun () ->
-            let mutable list = []
-            for i = 1 to 10000 do
-                list <- (Array.append (Array.append a b) c) :: list
-            list
-        let calcActual = fun () ->
-            let mutable list = []
-            for i = 1 to 10000 do
-                list <- (Array.append3 a b c) :: list
-            list
-        Expect.isFasterThan calcActual calcExpected "Array.append3 should be faster than the intermediate-array version"
-
-    testCase "append3' performance" <| fun _ ->
-        let a, middle, b = [|1..32|], 47, [|33..60|]
-        let calcExpected = fun () ->
-            let mutable list = []
-            for i = 1 to 10000 do
-                let a' = a |> Array.copyAndAppend middle
-                list <- (Array.append a' b) :: list
-            list
-        let calcActual = fun () ->
-            let mutable list = []
-            for i = 1 to 10000 do
-                list <- (Array.append3' a middle b) :: list
-            list
-        Expect.isFasterThan calcActual calcExpected "Array.append3' should be faster than the intermediate-array version"
-
-    testCase "appendAndSplit performance" <| fun _ ->
-        let idx, a, b = 47, [|1..32|], [|33..60|]
-        let calcExpected = fun () ->
-            let mutable list = []
-            for i = 1 to 10000 do
-                let joined = Array.append a b
-                list <- (joined |> Array.splitAt idx) :: list
-            list
-        let calcActual = fun () ->
-            let mutable list = []
-            for i = 1 to 10000 do
-                list <- ((a,b) |> Array.appendAndSplit idx) :: list
-            list
-        Expect.isFasterThan calcActual calcExpected "Array.appendAndSplit should be faster than the intermediate-array version"
-
-    testCase "insertAndSplitEvenly performance" <| fun _ ->
-        let idx, arr = 21, [|1..32|]
-        let calcExpected = fun () ->
-            let mutable list = []
-            for i = 1 to 10000 do
-                let inserted = arr |> Array.copyAndInsertAt idx 512
-                list <- (inserted |> Array.splitAt (32 / 2 + 1)) :: list
-            list
-        let calcActual = fun () ->
-            let mutable list = []
-            for i = 1 to 10000 do
-                list <- (arr |> Array.insertAndSplitEvenly idx 512) :: list
-            list
-        Expect.isFasterThan calcActual calcExpected "Array.insertAndSplitEvenly should be faster than the intermediate-array version"
-  ] *)
 let nodeVecGenerationTests =
   // Not sure these are worth keeping any more. TODO: Get rid of these if they're duplicates
   testList "Generate vectors from various sources" [
@@ -2260,7 +2153,7 @@ let tests =
     fullSaplingTests
     fullSaplingPlusOneTests
 
-    // arrayTests
+    arrayTests
     simpleVectorTests
     manualVectorTests
     constructedVectorSplitTests
@@ -2274,3 +2167,60 @@ let tests =
 
     // perfTests
   ]
+
+// TODO: Tests to write to cover code we're not yet testing:
+(*
+windowedSeq - exercise Array.popFirstAndPush
+Something to exercise the final else block in Array.appendAndSplitAt (lenL > splitIdx)
+  It gets used in our code when we append two vectors, the right one was tail-only, and tailLenL + tailLenR > blockSize
+  Since the split index is the block size, and tailLenL is never allowed to be greater than the block size,
+  this will never get exercised "normally", so I should just add something to the array extensions test suite.
+
+findMergeCandidates - write test that makes sure the one-pass version never finds *better* candidates than the two-pass version
+GetEditableNodeOfBlockSizeLength on tree nodes (currently we only ever call it on leaf nodes)
+  Actually, we should change that to be a method on the leaf node, not on an RRBNode since it doesn't actually make sense there
+ExpandRightSpine of full nodes - the "if shift <= Literals.blockSizeShift || this.NodeSize = 0 then" branch is always true so far
+  We need to write tests making persistent trees of many sizes (some manually) and making them transient, then persistent again,
+    and verifying that they kept their "shape". Also do a few operations (push, insert, remove, pop) on the transient and make sure
+    they correspond to the same thing on the persistent.
+ToRelaxedNodeIfNeeded on full nodes isn't, apparently, being called (?)
+  It's being called in InsertChildS of *expanded* nodes, but not of regular full nodes??
+  Ditto for AppendNChildren and MkNodeForRebalance of *expanded* nodes, but not of regular full nodes. Why??
+SlideChildren{Left,Right} of full nodes - aren't testing the n = 0 case (but then, we only tested each of those twice total)
+InsertAndSlideChildrenLeft of full nodes - the "Special case since the algorithm below would fail on this one scenario" block isn't being run
+  Also the final else block isn't being run
+  But then, we only ran it twice total. Need more test cases that exercise this part of the code.
+InsertAndSlideChildrenRight of full nodes - final else block isn't being run (comment says we need special test case)
+ConcatTwigsPlusLeaf - final failwith is never called (good, but we might need a rewrite to add an #if DEBUG in there so we don't have a dangling else clause)
+  Or we might want to rewrite it so that it can fail, and the code above it takes a different path. Maybe not, but we should make sure it's internal.
+MergeTree of full nodes (the only implementation, thankfully) - the childL.MergeTree call in the shift = rightShift branch only produced (child', None) once,
+  which isn't enough for full testing: the "if right.NodeSize > 1" test went down the "then" branch, and we haven't yet tested a case where right.NodeSize = 1
+  TODO: Run our tests in debug mode with some breakpoints in there, and see when those breakpoints ever get hit
+
+MaybeExpand of expanded full nodes - the "if not (isSameObj lastChild expandedLastChild) then" is never true
+  (the expanded last child is *always* the same object), so I need to find a scenario where it will be false so I have more confidence
+MkNodeForRebalance of expanded full nodes - the "if isSameObj arr this.Children && this.IsEditableBy owner" branch is never true
+  Need to write a manual test for this one since it involves merging two carefully-crafted transient trees.
+NewParent of expanded full nodes - the "if size = 1 || (this.NodeSize = Literals.blockSize && this.FullNodeIsTrulyFull shift) then" test
+  is always true. Note the TODO comment before it: maybe a static RRBExpandedRelaxedNode.Create method is a good idea here.
+
+Shrink of expanded relaxed nodes - the "if this.IsEditableBy owner && size = Literals.blockSize then" test is never true.
+  This needs a manual test, where a full tree of height 2 has several items removed from the leaves of the rightmost twig,
+  so that it becomes a relaxed node of size M... and then the tree is made transient so that it's an expanded relaxed node
+  of size M. Then make the tree persistent again, and that will exercise this code path.
+RemoveChild of expanded relaxed nodes - the final else block (where newSize <= 0) is never exercised. We need some tests
+  that remove the last item in a skinny path (size 1, size 1, size 1, leaf size 1) of a transient.
+RemoveLastChild of expanded relaxed nodes - ditto.
+KeepNLeft of expanded relaxed nodes - we never exercise this where n = 0
+
+MaybeExpand of expanded relaxed nodes is *never* exercised at all.
+MkNodeForRebalance of expanded relaxed nodes - the "if isSameObj arr this.Children && this.IsEditableBy owner then" branch is never true.
+  Need some kind of carefully-crafted test here. TODO: Think about how to write one.
+NewParent of expanded relaxed nodes - only exercised twice, always with siblings being size 1 or 0 so that the
+  "size = 1 || (this.NodeSize = Literals.blockSize && this.FullNodeIsTrulyFull shift)" test is always true
+
+AppendedItem of leaf nodes is never exercised.
+PopLastItem of leaf nodes is never exercised. Should be remove it?
+
+TODO: Also look at the coverage of RBRVector in docs/coverage-2019-09-25-run9/Ficus_RRBVector.htm - lots of red to fix in there
+*)

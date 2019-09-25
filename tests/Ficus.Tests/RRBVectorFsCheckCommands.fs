@@ -3,7 +3,7 @@ module Ficus.Tests.RRBVectorFsCheckCommands
 // https://fscheck.github.io/FsCheck/StatefulTesting.html
 
 open Ficus.RRBArrayExtensions
-open Ficus.RRBVectorBetterNodes
+open Ficus.RRBVectorNodes
 open Ficus.RRBVector
 open FsCheck
 open Expecto
@@ -64,7 +64,7 @@ module VecCommands =
                                override __.ToString() = "insert 9 in tail" }
     let removeFromHead = { new Cmd()
                            with override __.RunActual vec = vec |> RRBVector.remove 0
-                                override __.RunModel arr = arr |> Array.copyAndRemoveFirst
+                                override __.RunModel arr = arr |> Array.copyAndRemoveAt 0
                                 override __.Pre(arr) = arr.Length > 0
                                 override __.Post(vec, arr) = vecEqual vec arr "After removing from head, vec != arr"
                                 override __.ToString() = "remove from head" }

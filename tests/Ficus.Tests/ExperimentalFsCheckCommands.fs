@@ -3,7 +3,7 @@ module Ficus.Tests.ExperimentalFsCheckCommands
 // https://fscheck.github.io/FsCheck/StatefulTesting.html
 
 open Ficus.RRBArrayExtensions
-open Ficus.RRBVectorBetterNodes
+open Ficus.RRBVectorNodes
 open Ficus.RRBVector
 open FsCheck
 open FsCheck.Experimental
@@ -18,10 +18,10 @@ let vecEqual vec arr msg =
     RRBVector.toArray vec = arr |@ msg
 
 type VecState<'T>(vec : RRBVector<'T>) =
-    let mutable m_vec = vec
+    let mutable mVec = vec
     member public __.Vec
-        with get() = m_vec
-        and set vec' = m_vec <- vec'
+        with get() = mVec
+        and set vec' = mVec <- vec'
 
 type Op = Operation<VecState<int>, int []>
 type Setup = Setup<VecState<int>, int []>
