@@ -101,7 +101,7 @@ type MyGenerators =
             override x.Shrinker _ = Seq.empty }
     static member arbSplitTest() =
         { new Arbitrary<RRBVectorTransientCommands.SplitTestInput>() with
-            override x.Generator = RRBVectorTransientCommands.genInput RRBVectorTransientCommands.cmdsMedium
+            override x.Generator = RRBVectorTransientCommands.genBasicOperations RRBVectorTransientCommands.cmdsExtraLarge
             override x.Shrinker _ = Seq.empty }
 
 Arb.register<MyGenerators>() |> ignore
@@ -300,7 +300,7 @@ let vectorTests =
         let result = split |> RRBVector.map RRBVector.toList |> RRBVector.toList
         Expect.equal result [[1];[2];[3];[]] "splitInto should leave empty vectors at the end"
     )
-    ftestCase "splitInto with not uneven input leaves smaller last vector" (fun _ ->
+    testCase "splitInto with not uneven input leaves smaller last vector" (fun _ ->
         let vec = [1..7] |> RRBVector.ofList
         let split = vec |> RRBVector.splitInto 4
         let result = split |> RRBVector.map RRBVector.toList |> RRBVector.toList
@@ -336,7 +336,30 @@ let vectorTests =
   ]
 
 let regressionTests =
-  testList "foo" [
+  let doActionListTest (actions : RRBVectorMoreCommands.Cmd list) vec postPopCount postPushCount =
+    // logger.debug (eventX "Starting with {vec}" >> setField "vec" (RRBVecGen.vecToTreeReprStr vec))
+    let mutable current = vec
+    let logVec action vec =
+        // logger.debug (
+        //     eventX "After {cmd}, vec was {vec} with actual structure {structure}"
+        //     >> setField "cmd" action
+        //     >> setField "vec" (RRBVecGen.vecToTreeReprStr vec)
+        //     >> setField "structure" (sprintf "%A" vec))
+        ()
+    for action in actions do
+        current <- current |> action.RunActual
+        logVec (action.ToString()) current
+        RRBVectorProps.checkProperties current <| sprintf "Vector after %s" (action.ToString())
+    for i = 1 to postPopCount do
+        current <- current.Pop()
+        logVec (sprintf "After popping %d" i) current
+        RRBVectorProps.checkProperties current <| sprintf "Vector after popping %d" i
+    for i = 1 to postPushCount do
+        current <- current.Push i
+        logVec (sprintf "After pushing %d" i) current
+        RRBVectorProps.checkProperties current <| sprintf "Vector after pushing %d" i
+
+  testList "Regression tests" [
     testCase "Shorten trees after split" <| fun _ ->
         let v = RRBVecGen.treeReprStrToVec "M M TM/2"
         let i = 11
@@ -372,6 +395,387 @@ let regressionTests =
         for n = 1 to Literals.blockSize + 1 do
             vec' <- vec' |> RRBVector.push n
             RRBVectorProps.checkProperties vec' <| sprintf "Right half after %d pushes" n
+
+    testCase "Join regression test" <| fun _ ->
+        let reprL = "M*11 T17"
+        let reprR = "[M*M] [M*3] T3"
+        let vL = RRBVecGen.treeReprStrToVec reprL
+        let vR = RRBVecGen.treeReprStrToVec reprR
+        doJoinTest vL vR
+
+    testCase "Join regression test 2" <| fun _ ->
+        let reprL = "M 27 M 29 M 30 M 22 M 16 M 25 M 27 M 28 M M 17 M 26 M T3"
+        let reprR = "[M 16 M 20 M 19 M 28 M 22 19 M 21 M 22 M 24 M 25 M 17 M 28 M 20 M 22 M 23 M M 30] [M 31 M 16 M] T3"
+        let vL = RRBVecGen.treeReprStrToVec reprL
+        let vR = RRBVecGen.treeReprStrToVec reprR
+        doJoinTest vL vR
+
+    testCase "Join regression test 3" <| fun _ ->
+        let reprL = "28 M 29 M 31 M M M 17 M 26 30 M 17 M 16 M 20 T3"
+        let reprR = "19 M 18 M 22 17 M 18 M 20 T3"
+        let vL = RRBVecGen.treeReprStrToVec reprL
+        let vR = RRBVecGen.treeReprStrToVec reprR
+        doJoinTest vL vR
+
+    testCase "Join regression test 4" <| fun _ ->
+        let reprL = "M*M T3"
+        let reprR = "19 M 18 M 22 17 M 18 M 20 T3"
+        let vL = RRBVecGen.treeReprStrToVec reprL
+        let vR = RRBVecGen.treeReprStrToVec reprR
+        doJoinTest vL vR
+
+    testCase "Join regression test 5" <| fun _ ->
+        let reprL = """
+            [25 32 30 29 32 32 23 32 32 28 32 28 24 32 32 27 30 32 32 28 32 32 29 32 30 31 32 31]
+            [28 31 26 32 26 32 32 32 32 26 25 28 26 32 30 32 28 32 32 25 26 31]
+            [32 32 29 32 32 32 32 29 31 32 32 32 32 30 28 32 32 32 32 26 29 32 32]
+            [29 23 31 32 32 32 32 32 32 30 30 32 32 32 32 32 27 32 31 30 32 32 32 32 32]
+            [32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 27 25 30 25 32 29 31 32 23 24 32]
+            [29 32 26 32 32 32 29 32 27 29 30 32 29 31 32 29 31 25 32 32 30 30 30 29 28 32 32 27 32 32 29 30]
+            [32 30 24 26 32 30 32 32 32 32 19 25 30 32 31 32 32 32 25 19 24 29 32 32 32]
+            [32 32 29 32 32 28 32 32 31 32 32 31 32 27 32 32 32 32 32 32 32 32 32 32 31 32]
+            T24"""
+        let reprR = """
+            [31 28 32 32 32 32 30 24 30 32 32 32 32 32 32 28 29 31 32 32 31 27 32 25 27]
+            [32 32 29 29 32 26 32 32 29 29 32 32 32 30 24 32 30 30 25 31 31 32 29 28]
+            [27 29 30 26 32 32 29 32 32 28 32 32 32 32 30 32 32 31 32 32 32 32 32 32 29 28 32]
+            [32 32 32 30 32 32 32 29 32 27 28 30 27 28 32 30 31 32 32 32 32 32 31 32 32 32 32 28 27]
+            [32 32 32 32 31 32 31 32 32 32 26 32 32 32 32 32 24 32 32 30 32 32 27]
+            [32 32 32 31 32 28 32 32 32 32 31 31 32 26 32 32 32 32 32 32 32]
+            [32 32 32 32 32 32 32 32 23 32 32 28 32 32 31 32 32 29 32 32 32 31 32 32 32 32]
+            [32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 29 32 32 32 32 32 32 32 32 32 32 32]
+            [32 27 32 32 32 31 32 32 32 32 31 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 31 32]
+            [25 24 20 30 30 31 32 32 25 25 21 29 32 32 32 28 32 24 23 25 32 32 32 31 32]
+            [26 27 31 27 27 30 29 22 31 29 28 28 29 27 22 27 32 32 27 26 32 27 31 27]
+            [31 32 25 25 31 22 32 29 30 24 31 32 25 26 31 26 29 32 26 30 32 31 26 32]
+            T23"""
+        let vL = reprL |> RRBVecGen.looserTreeReprStrToVec
+        let vR = reprR |> RRBVecGen.looserTreeReprStrToVec
+        doJoinTest vL vR
+
+    testCase "Split+push+join regression test" <| fun _ ->
+        let bigVecRepr = """
+            [M M M M 30 M M M 29 M M M M M M M-1 M M 27 M M-1 M 30 M-1 29 M M M M M 30 M]
+            [M 28 M M M-1 M-1 M M 29 M M M M 29 M M 28 M M M M M M 30 M M M M]
+            [M 29 M 29 29 M-1 27 25 M M-1 M-1 26 M M M-1 M M-1 30 M M M M 30 26 25 M 30 22]
+            [28 M 29 M M M 29 M 30 28 26 30 24 M 28 M M M-1 M M M 23]
+            [M-1 M 26 25 M-1 M 29 30 M-1 M 28 M 30 M M M-1 M M-1 30 28 28 27 M M M-1 29 29]
+            [M M 27 M M M M 30 M M M M M 30 M M 30 27 M M M M M 28 26 27 28 M M M-1 M]
+            [28 29 M M-1 26 M-1 27 25 30 23 M 29 M M M M M M M M M M M M M M M]
+            [M M 28 M M M 30 M M M M M M-1 M M 30 24 M M M M 28 M-1 M M M M 29 M-1 M M]
+            [M M 30 M 30 27 29 M M-1 30 27 28 M M 29 M 29 M M-1 M M M M M]
+            [M M M M M-1 30 M M M M M M M 28 30 M-1 M M 30 28 M M]
+            [M M M M M M M M M M M M M-1 M M M M 23 30 25 M M M M M M M 30 M]
+            [M M M M M M M M M M M M 30 M M M-1 M M M M M-1 M M M M M M 30 M M]
+            [M M M M M M M M 30 28 28 M M M M M M M M M M M M M M M M M-1 M M M M]
+            T31"""
+        let i = 32
+        let vec = RRBVecGen.looserTreeReprStrToVec bigVecRepr
+        let vec' = vec |> RRBVector.insert i 512
+        RRBVectorProps.checkProperties vec' (sprintf "Vector after inserting 512 at idx %d" i)
+        let vL, vR = doSplitTest vec i
+        let vL' = vL |> RRBVector.push 512
+        let joined = RRBVector.append vL' vR
+        RRBVectorProps.checkProperties joined "Joined vector"
+        Expect.equal joined.Length vec'.Length "Joined vector length plus one should be same as equivalent vector length plus one"
+        Expect.sequenceEqual (joined |> RRBVector.toSeq) (vec' |> RRBVector.toSeq) "Split + push left + joined vectors did not equal insertion into original vector"
+
+    testCase "Split+remove+join regression test" <| fun _ ->
+        let bigVecLRepr = "[M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M]*13 T31"
+        let bigVecRRepr = "[M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M]*8 T23"
+        let vL = RRBVecGen.treeReprStrToVec bigVecLRepr
+        let vR = RRBVecGen.treeReprStrToVec bigVecRRepr
+        let vL' = RRBVector.remove 0 vL
+        let joinedOrig = RRBVector.append vL vR
+        let joined = RRBVector.append vL' vR
+        RRBVectorProps.checkProperties joinedOrig "Joined vector without removal"
+        RRBVectorProps.checkProperties joined "Joined vector after removal"
+        Expect.equal joined.Length (joinedOrig.Length - 1) "Joined vector length minus one should be same as equivalent vector length minus one"
+        Expect.sequenceEqual (joined |> RRBVector.toSeq) (RRBVector.remove 0 joinedOrig |> RRBVector.toSeq) "remove idx 0 of left + join did not equal join + remove idx 0"
+
+    testCase "Slice regression test" <| fun _ ->
+        let vec = RRBVecGen.treeReprStrToVec "M-1 M T1"
+        let vec' = vec.Take (Literals.blockSize * 2 - 1)
+        RRBVectorProps.checkProperties vec' "Sliced vector"
+        let tailOffset, tailLen =
+            if vec' |> isTransient then
+                let v = vec' :?> RRBTransientVector<_>
+                v.TailOffset, v.Length - v.TailOffset
+            else
+                let v = vec' :?> RRBPersistentVector<_>
+                v.TailOffset, v.Tail.Length
+        Expect.equal tailOffset (Literals.blockSize) "Wrong tail offset"
+        Expect.equal tailLen (Literals.blockSize - 1) "Wrong tail length"
+
+    testCase "Split regression test" <| fun _ ->
+        let vec = RRBVecGen.treeReprStrToVec "M 18 T1"
+        for i = 0 to vec.Length do
+            let vL, vR = doSplitTest vec i
+            doJoinTest vL vR
+
+    testCase "Split regression test 2" <| fun _ ->
+        let vecReprs = [
+            "[30 M M M 26 28 M 30 29 M M M M M M 25 M 27 M 30 M M-1 25 M 30 M 26 30 M 30 M 7] [M-1] T1"
+            "M-1 M-1 M M M 26 28 M 30 29 M M M M M M 25 M 27 M 30 M M-1 25 M 30 M 26 30 M 30 M T7"
+            "5 M*M-1 T7"
+        ]
+        for vecRepr in vecReprs do
+            let vec = RRBVecGen.treeReprStrToVec vecRepr
+            let vL, vR = doSplitTest vec 32
+            let vL' = RRBVector.remove 0 vL
+            doJoinTest vL' vR
+            let vec' = RRBVector.remove 0 vec
+            let joined = RRBVector.append vL' vR
+            Expect.equal vec'.Length joined.Length "Joined vector minus one should be same length as original vector minus one"
+            Expect.sequenceEqual joined vec' "Joined vector minus one should be same as original vector minus one"
+
+    testCase "Pushing into full tail regression test" <| fun _ ->
+        let mutable vec = RRBVecGen.treeReprStrToVec "17 16 M M M M M M M M M M M M M M M M M M 17 16 M 17 16 M M M M M M M TM"   // A nearly-full vector containing a few insertion splits
+        for i = 1 to Literals.blockSize + 1 do
+            vec <- vec.Push i
+        RRBVectorProps.checkProperties vec "Vector after pushing a full leaf plus one"
+
+    testCase "Command regression test on really big vector" <| fun _ ->
+        let bigReprStr = """
+            [M 27 M 29 28 M M-1 22 25 M-1 M-1 M 27 M 25 26 28 M 26 M M 28 M-1 30 M 25 M-1 M 25 M-1 M-1 24]
+            [M-1 28 29 M M-1 29 M 26 30 26 M M 27 M M 27 29 29 28 M 28 M 29 28 26 M-1 30 28 28 M-1 M-1 M-1]
+            [30 28 26 M-1 M-1 M 29 M-1 27 M M M 30 M M 26 29 26 29 M M M M 26 29 26 29 29 26 29 29 26]
+            [M 27 24 M-1 M-1 M-1 28 25 30 28 29 M 28 M M-1 M-1 25 30 M M 28 M 27 M M M M M-1 M-1 28 M M-1]
+            [26 27 29 M-1 30 26 M-1 30 M 29 25 25 27 30 28 24 M-1 26 26 30 28 M-1 30 M-1 M-1 M M M 30 28 30 M]
+            [29 M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M]
+            [30 M-1 M 29 29 29 30 M M-1 M 30 M-1 M 23 M 28 26 M-1 29 29 M-1 27 M 29 M-1 29 26 25 28 M 26 28]
+            [27 30 30 25 27 29 M-1 M M 29 29 29 M 30 29 29 27 M M 26 M 28 M 29 27 25 28 30 M 29 M-1 25]
+            [27 29 29 24 M 30 28 27 27 28 30 30 29 M-1 30 30 M-1 M-1 M 28 M M M-1 30 27 30 29 M M-1 M 29 M]
+            [28 M 28 30 M M-1 27 M 27 25 29 30 M M 28 27 26 M 28 26 M 28 M-1 30 M 28 M M M-1 27 28 M]
+            [M M M-1 M M 29 30 M-1 30 26 M M M M 28 M 27 30 M 25 M M-1 M-1 27 24 M 28 30 M 25 29 M]
+            [25 30 26 M M-1 26 M M 29 27 M M 30 28 30 M M 27 M 29 M M 29 M 27 29 29 M 30 27 M 30]
+            [M M 28 30 M M M 26 M-1 M M-1 M 28 M-1 M-1 M M 25 29 M-1 M-1 M 28 M-1 29 27 M M M 28 27 M]
+            [M 29 M 30 M-1 M 27 M 30 M 29 27 28 M M-1 29 28 M-1 M-1 M M-1 M 27 25 M M-1 M 30 30 M 27 M-1]
+            [M 29 M M M-1 M 28 M M 30 M 27 30 M M M 29 M 28 30 29 M 28 M M M M 27 27 M M M-1]
+            [27 M M-1 M M-1 M 27 M M M M 30 M M M 27 M-1 29 M 29 M M 26 27 29 M 30 M 29 M 28 M]
+            [M 29 M M M M-1 30 M M M 27 M M M 30 M M-1 M 29 M M M 30 M M M-1 26 M 27 M M-1 30]
+            [M M 28 M 22 M-1 M M M 23 M M-1 M M M 30 M M M M M-1 M 30 M 29 M 29 M M M-1 30 M]
+            [M M 30 M 29 29 M M M 30 M M 29 M M 28 M M M 30 M-1 M 30 M M M M-1 M M M M M-1]
+            [30 M 27 M 30 M M M M M M-1 M M-1 30 M M-1 M M M 29 28 M-1 M M 30 M M 30 M 29 M M]
+            [M M M M M M M-1 M 29 M M-1 M M M M M-1 M M M-1 M-1 M M M M M 28 M 30 M M M M]
+            [M 29 M-1 M-1 M M M 29 M M M M M M M M M M-1 28 M 29 M M M M M M M M 29 M M]
+            [M M M M M M M-1 M M M M M M M-1 M M M 30 M M M M M M M M M M M M M M]
+            [M M M M M M M M M M M-1 M M M-1 M M M 30 M-1 M M M M M-1 M M M 29 M M M M]
+            [M M M M M M M M-1 29 29 M 28 28 M M M 29 M M M M 28 27 28 M M 27 M-1 27 M-1 M M]
+            [M M M M 30 M 26 M M M M M M M M M 29 M M 28 30 M M M M M 29 29 M 27 M M]
+            [30 M M M 30 27 25 M M M M 28 M M-1 30 M 28 M M M M M-1 M M 30 M M-1 30 M M M M]
+            [M-1 M M 28 M M M M M M M-1 M 29 M M-1 M M M M M M M 27 M M M M M M M 29 M]
+            [M M M M-1 M M M 27 M M M M M M M M M 27 M 30 30 M 28 M M-1 M M M M M 29 M]
+            [M-1 M M M 30 M M M M M M M 30 M M M M M-1 M M 30 M M M M M M M M M M M]
+            T26"""
+        let vec = bigReprStr |> RRBVecGen.looserTreeReprStrToVec
+        let mergeL = RRBVecGen.treeReprStrToVec >> RRBVectorMoreCommands.ParameterizedVecCommands.mergeL
+        let mergeR = RRBVecGen.treeReprStrToVec >> RRBVectorMoreCommands.ParameterizedVecCommands.mergeR
+        let push = RRBVectorMoreCommands.ParameterizedVecCommands.push
+        let remove = RRBVectorMoreCommands.ParameterizedVecCommands.remove
+        let insert = RRBVectorMoreCommands.ParameterizedVecCommands.insert
+        let actions = [mergeL "M T19"; push 99; mergeL "0 T28"; push 80; push 127; push 17; push 30;
+                       push 138; remove -109; mergeR "M T9"; push 91; push 72; insert (-90,126); push 64;
+                       push 52; insert (-138,1); push 130]
+        doActionListTest actions vec 0 0
+
+    testCase "Command regression test 2 on several vectors with several action chains" <| fun _ ->
+        let scanf a _ = a + 1  // So that scans will produce increasing sequences
+        let mapf a = a  // So that map won't change the numbers
+        let mergeL = RRBVecGen.treeReprStrToVec >> RRBVectorMoreCommands.ParameterizedVecCommands.mergeL
+        let mergeR = RRBVecGen.treeReprStrToVec >> RRBVectorMoreCommands.ParameterizedVecCommands.mergeR
+        let push = RRBVectorMoreCommands.ParameterizedVecCommands.push
+        let remove = RRBVectorMoreCommands.ParameterizedVecCommands.remove
+        let insert = RRBVectorMoreCommands.ParameterizedVecCommands.insert
+        let scan = RRBVectorMoreCommands.ParameterizedVecCommands.scan
+        let map = RRBVectorMoreCommands.ParameterizedVecCommands.map
+        let actionsLong = [
+          push 124; mergeR "M T5"; push 35; push 58; push 94; push 24; push 54;
+          mergeR "0 T27"; mergeL "M T6"; push 64; push 12; mergeL "0 T22"; mergeR "M T2";
+          mergeR "0 T7"; push 34; push 85; push 73; push 32; push 126; push 125;
+          mergeR "0 T27"; insert (-127,-101); insert (-58,21); mergeR "M T11";
+          insert (-109,-118); push 116; push 16; insert (78,40); mergeR "0 T19";
+          insert (27,-59); insert (110,-80); insert (-69,95); insert (79,38);
+          scan scanf 83; insert (117,73); scan scanf -31; push 54;
+          mergeR "0 T3"; mergeR "0 T6"; push 114; insert (-42,-78); insert (60,-45); push 14;
+          scan scanf -70; insert (71,-14); push 93; insert (29,-69); push 51;
+          insert (-114,-117); insert (101,34); push 50; mergeL "0 T24"; insert (32,-67);
+          insert (-105,111); push 16; insert (115,64); insert (-109,110); mergeR "M T22";
+          push 117; insert (14,-93); insert (20,-93); insert (88,-87); insert (-85,-19);
+          map mapf; mergeR "M T3"; insert (-42,114); push 66 ]
+        let actionsShort = [ map mapf; mergeR "M T3"; insert (-42,114) ]
+        let actionsEvenShorter = [ insert (-42,114) ]
+        let fullRepr = "[26 18 25 24 17 26 24 M M M M M M M M M M M M M M M M M M M] [M M M M M M M M M M M M M M M M M M M M M M M M M 17 16 M 17 25 24 M] [M M M M 17 16 M] T24"
+        let start = RRBVector.empty
+        let startFull = fullRepr |> RRBVecGen.treeReprStrToVec
+        let startEvenShorter = { 0..1982 } |> RRBVector.ofSeq
+        for vec in [startFull; startEvenShorter] do
+            for actions in [actionsLong; actionsShort; actionsEvenShorter] do
+                doActionListTest actions vec 0 (Literals.blockSize * 2 + 2)
+
+    testCase "Command regression test 3 on empty vector with two action chains" <| fun _ ->
+        let mergeL = RRBVecGen.treeReprStrToVec >> RRBVectorMoreCommands.ParameterizedVecCommands.mergeL
+        let mergeR = RRBVecGen.treeReprStrToVec >> RRBVectorMoreCommands.ParameterizedVecCommands.mergeR
+        let push = RRBVectorMoreCommands.ParameterizedVecCommands.push
+        let pop = RRBVectorMoreCommands.ParameterizedVecCommands.pop
+        let rev = RRBVectorMoreCommands.ParameterizedVecCommands.rev
+        let actionsLong = [push 84; mergeL "M T4"; push 21; push 95; mergeL "M T13"; push 27; push 73; mergeR "M T2"; mergeR "0 T17"; push 110; push 25; push 23; push 112; push 88; push 41; push 96; push 41; push 96; rev(); pop 118]
+        let actionsMedium = [push 84; mergeL "M T4"; push 115; mergeL "M T13"; push 100; mergeR "M T2"; mergeR "0 T17"; push 632; rev(); pop 118]
+        let actionsShort = [push 1063; rev(); pop 118]
+        let vec = RRBVector.empty
+        for actions in [actionsLong; actionsMedium; actionsShort] do
+            doActionListTest actions vec 0 0
+
+    testCase "Command regression test 4 on several vectors" <| fun _ ->
+        let scanf a _ = a + 1  // So that scans will produce increasing sequences
+        let mapf a = a  // So that map won't change the numbers
+        let mergeL = RRBVecGen.treeReprStrToVec >> RRBVectorMoreCommands.ParameterizedVecCommands.mergeL
+        let mergeR = RRBVecGen.treeReprStrToVec >> RRBVectorMoreCommands.ParameterizedVecCommands.mergeR
+        let push = RRBVectorMoreCommands.ParameterizedVecCommands.push
+        let insert = RRBVectorMoreCommands.ParameterizedVecCommands.insert
+        let map = RRBVectorMoreCommands.ParameterizedVecCommands.map
+        let actionsLong = [
+                push 501;
+                mergeR "0 T14"; push 155; mergeR "26 30 M 28 28 23 29 30 30 26 M T24";
+                mergeL "M T18"; map mapf ]
+        let actionsShort = [ map mapf; mergeR "M T3"; insert (-42,114) ]
+        let actionsEvenShorter = [ insert (-42,114) ]
+        let start = RRBVector.empty
+        let startFull = RRBVecGen.treeReprStrToVec "[26 18 25 24 17 26 24 M M M M M M M M M M M M M M M M M M M] [M M M M M M M M M M M M M M M M M M M M M M M M M 17 16 M 17 25 24 M] [M M M M 17 16 M] T24"
+        let startEvenShorter = { 0..1982 } |> RRBVector.ofSeq
+        let logVec action vec = printfn "After %O, vec was %s" action (RRBVecGen.vecToTreeReprStr vec)
+        for vec in [startFull; startEvenShorter] do
+            for actions in [actionsLong; actionsShort; actionsEvenShorter] do
+                doActionListTest actions vec (Literals.blockSize * 2 + 7) 0
+
+    // TODO: Those four command regression tests have common structure and could be collapsed into one data-driven test
+
+    testCase "Pushing into tail can create new path to root even when it's more than one level high" <| fun _ ->
+        let mutable current = RRBVecGen.treeReprStrToVec "[M*M]*M TM-3"
+        for i = 1 to Literals.blockSize + 6 do
+          current <- current.Push(i)
+          RRBVectorProps.checkProperties current <| sprintf "Vector after pushing %d times" i
+        current <- current |> RRBVector.rev
+        RRBVectorProps.checkProperties current <| sprintf "Vector after rev()"
+
+    testCase "Big full vector has right properties" <| fun _ ->
+        let vec = { 1 .. 98321 } |> RRBVector.ofSeq
+        RRBVectorProps.checkProperties vec "Full three-level vector"
+
+    testCase "Smallish transient vector has right properties" <| fun _ ->
+        let mutable vec = RRBTransientVector()
+        for i = 1 to Literals.blockSize * Literals.blockSize + Literals.blockSize do
+            vec <- vec.Push i :?> RRBTransientVector<_>
+        RRBVectorProps.checkProperties vec "Transient vector"
+        let pvec = vec.Persistent()
+        RRBVectorProps.checkProperties pvec "Persistent vector"
+
+    testCase "Really big joined vector has right properties" <| fun _ ->
+        let bigNum = 1 <<< (Literals.blockSizeShift * 3)
+        let vL = seq {0..bigNum+2} |> RRBVector.ofSeq
+        let vR = RRBVecGen.treeReprStrToVec "M M-1 M*M-5 M-1*2 M T4"
+        RRBVectorProps.checkProperties vL "vL"
+        RRBVectorProps.checkProperties vR "vR"
+        doJoinTest vL vR
+
+    testCase "Split, reverse, and join" <| fun _ ->
+        let vecRepr = """
+            [M M M-1 M M 29 M M M M M M M M M M M M-1 M M M M M M M-1 M M 29]
+            [M M 28 M M M 29 M M M M M M 27 M M M-1 27 M M M 28 M M M M-1 M 28]
+            [29 29 M 28 28 26 30 30 M M M-1 30 M 27 M 27 26 26 24 26 27 27 M-1 30 M M 27 26 30]
+            [M M M M M-1 M M M M M 29 M M M M 28 29 M 29 M M M M M M M]
+            [M M M 29 M M 30 30 M M M-1 M M M-1 M M M 29 M M 29 27 M M]
+            [29 26 M M M 30 M M M 26 M M M 29 28 M M M M M M M M 27 25 M M 25 M]
+            [M 30 30 M 29 M-1 30 30 27 28 30 M M-1 M M M M 26 M 30 M M M 22 27 M-1 M M M]
+            [M M-1 30 M 26 M M-1 M M M M M-1 M 30 27 M M M M M 28 28 M-1 M M M-1 30 M M-1 M 30]
+            [27 M 27 28 29 28 M 30 30 M 27 M M 29 27 23 30 29 M M M 30 26 M M M 29 30 M 30 M]
+            [24 M 24 29 M M 30 M M 27 M M 25 30 M 24 M M 22 27 M 28 M M 24 30 M M]
+            [30 30 M-1 30 25 29 M-1 M M 29 M M-1 M 29 28 M M M M-1 29 M M M 28 28 27 28 M-1 30 M-1 29 M]
+            [M 30 30 30 29 M-1 M-1 M-1 30 26 28 M M-1 23 28 30 M-1 M 30 28 27 27 M M 27 M]
+            [M M 30 30 M M 29 25 M M-1 23 M M-1 M 30 M M 27 M M M M M M-1 29 28 M-1 M 30 M 28 M]
+            [M M 29 M M 26 29 M 30 26 M M-1 30 M 30 M-1 M 28 26 M M 26 M M 27 M M 27]
+            [29 M M-1 M 30 M-1 M M-1 M-1 29 M 28 30 M 29 M M-1 M M M 28 30 M 30 M M-1 M-1 28 M-1]
+            [M 29 M M 29 30 M 28 27 M M M M 30 M M 24 M-1 29 M-1 M M M-1 M M-1 24]
+            [M M M 29 M 28 28 M M 27 M M 30 M M 30 M M M M M 29 M M 28 M M M]
+            [M-1 M-1 M-1 M-1 M M M M 30 28 30 24 M M M M M-1 M-1 29 30 30 M M M M M M-1 M 30]
+            [M M M M 30 M M M M M 27 M M M M M M M 27 29 30 M M M M M M M]
+            [M M 27 M M M 27 M-1 M M M M M M M 28 M M M M M-1 M M M M M 28 30 M M M]
+            [M M 30 M M M M M M M M M M M M M 30 M 30 M M M M M M-1 M M M M M]
+            [M-1 M M M M M M M M 28 M-1 M M M M M M M M M-1 M M M 30 M M M 29 M]
+            [M 26 20 26 26 29 M M M M 23 17 23 M-1 M M M M 27 22 26 27 M M M]
+            [M M M M M M M M M M M M M M M M M M M M M M M M 30]
+            [M 28 27 25 27 29 M 29 M 27 26 29 28 29 27 29 30 27 M 29 27 29 29 29 M M 29]
+            [26 29 M-1 24 M 30 M-1 27 28 23 M M M-1 M 28 28 30 30 24 27 M 26 30 29 24 M M M 28]
+            [28 M 27 M M-1 28 M 28 27 27 M M-1 24 M 30 30 M 30 30 29 M 27 29 29 M 29 M 26 M 29 30 M]
+            T23"""
+        let vec = RRBVecGen.looserTreeReprStrToVec vecRepr
+        RRBVectorProps.checkProperties vec "Original vector"
+        let arr = vec |> RRBVector.toArray
+        let idx = 1
+        let vL, vR = doSplitTest vec idx
+        doJoinTest vL vR
+        let revL = RRBVector.rev vL
+        let revR = RRBVector.rev vR
+        let joined = RRBVector.append revR revL
+        RRBVectorProps.checkProperties joined "Joined vector"
+        Expect.equal joined.Length arr.Length "Vector length should be same as equivalent array length"
+        Expect.sequenceEqual (joined |> RRBVector.toSeq) (arr |> Array.rev |> Array.toSeq) "Vector differs from equivalent array"
+
+    testCase "Split just before, exactly at, and just after end of first node, full vector" <| fun _ ->
+        let vec = seq { 1..14338 } |> RRBVector.ofSeq
+        RRBVectorProps.checkProperties vec "Original vector"
+        let l, r = doSplitTest vec 31
+        doJoinTest l r
+        let l, r = doSplitTest vec 32
+        doJoinTest l r
+        let l, r = doSplitTest vec 33
+        doJoinTest l r
+
+    testCase "Split just before, exactly at, and just after end of first node, non-full vector" <| fun _ ->
+        let vecRepr = """
+            [32 32 32 32 32 32 30 32 32 32 32 32 32 32 32 32 32 32 32 27 32 32 32 32 28 32 32 32 32 32 28 32]
+            [32 32 32 28 30 32 32 32 32 30 28 32 32 32 32 30 32 27 32 32 32 32 31 32 32 32]
+            [32 30 32 31 32 31 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 31 32 32 32 32 32 32 32 32 32]
+            [32 30 32 32 32 32 32 32 32 32 32 32 32 32 32 31 32 32 29 32 32 32 32 31 29 32 32]
+            [29 28 30 28 30 32 25 30 27 32 32 31 26 32 28 30 23 26 31 30 29 27 29 28 32 31 27 29 32 28 32 29]
+            [32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32]
+            [32 32 29 30 28 32 31 29 32 29 29 26 26 24 26 23 27 31 30 26 32 32 24 29 30 32 32]
+            [29 27 32 31 25 32 30 30 32 23 28 32 31 30 27 29 29 32 30 30 32 27 30 30 30 32 24 31 32 28 30 23]
+            [31 31 31 29 29 32 31 32 32 30 31 25 22 28 32 32 32 32 31 22 27 29 32 32 32 32 24 26 28 32]
+            [32 32 32 30 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32]
+            [32 32 32 32 31 32 32 32 32 32 32 32 32 27 32 32 32 32 32 32 32 31 32 32 32 32 32 32 32 32 32 32]
+            [32 28 28 26 32 32 32 32 28 27 27 30 26 29 27 31 32 27 24 21 23 24 32 32 30 32 32]
+            [32 23 20 21 30 31 30 27 27 30 29 32 31 28 25 31 32 32 32 32 32 28 27 28 27 32 27 27 32 32 32]
+            [32 32 32 32 25 25 27 32 30 32 32 32 21 23 28 32 32 32 32 24 28 28 29 32 31 32 32 29 26 28]
+            [26 29 32 28 28 32 28 31 32 26 27 29 30 32 32 30 26 28 30 32 30 24 32 31 30 27 26 29 30 31 31 32]
+            [27 30 27 31 30 26 31 32 32 31 32 30 27 32 31 28 32 30 31 27 30 32 32 28 28 29 28 30 32 26 32 32]
+            [28 29 32 29 31 30 26 27 31 32 32 32 32 29 22 30 32 32 30 26 32 26 28 32 29 32 32 25 27]
+            [27 30 30 32 32 29 29 32 28 32 27 30 32 32 30 27 29 31 32 32 27 30 32 30 32 27 32 27 30 32 32 32]
+            [30 31 26 25 32 31 32 23 26 31 32 25 22 30 31 32 24 23 30 31 32 23 24 30]
+            [32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 31 32 32 32 32 32 32 32 32 32]
+            [32 32 19 26 32 32 32 32 32 23 28 24 32 32 32 32 32 22 27 32 30 32 32 29 27 21 26 32 32 32]
+            [32 26 28 28 32 31 29 30 31 29 32 27 27 31 29 26 28 31 31 32 32 31 30 29 27 30 26 30 30 27 27 28]
+            [28 31 32 32 28 32 27 32 32 27 26 32 29 28 32 32 24 30 29 26 32 31 32 22 28 26 32 32]
+            [32 27 25 32 32 32 31 28 28 32 32 32 32 31 24 23 26 31 32 30 30 28 31 28 32 32 24 25 29 32 32]
+            [30 30 30 32 30 26 31 32 31 32 27 31 31 30 28 29 32 28 32 32 32 32 30 26 32 32 32 26 27 30 30 29]
+            [28 32 19 32 32 28 25 32 29 32 32 32 20 27 28 28 32 32 27 26 32 32 32]
+            [31 32 27 32 29 32 32 32 32 30 30 30 27 32 29 31 32 30 32 25 32 30 26 32 28 32 32 25 32 32 32 32]
+            [29 32 32 32 32 25 31 30 31 32 26 32 31 32 27 28 32 31 32 26 28 29 31 32 31 32 32 31 32 29 25 32]
+            [30 32 31 30 31 26 32 28 32 32 30 32 26 32 31 32 30 27 32 22 32 32]
+            [32 28 26 32 32 32 32 25 32 32 32 30 31 32 28 32 30 32 32 27 32 31 32 32 25 32 28 32 32 28 32 32]
+            [32 32 32 32 32 32 32 32 32 29 26 32 32 32 32 32 31 29 32 32 31 32 30 32 32 32 32 32 21 27 32]
+            [32 32 27 32 32 22 32 29 30 32 32 31 32 32 27 32 32 30 32 32 29 32 32 28 32 32 32 30]
+            T26"""
+        // let vec = RRBVecGen.treeReprStrToVec (vecRepr.Trim().Replace("\n", " ").Replace("             ", " "))
+        let vec = RRBVecGen.looserTreeReprStrToVec vecRepr
+        RRBVectorProps.checkProperties vec "Original vector"
+        let l, r = doSplitTest vec 31
+        doJoinTest l r
+        let l, r = doSplitTest vec 32
+        doJoinTest l r
+        let l, r = doSplitTest vec 33
+        doJoinTest l r
+
 
 (* Disabling this test since we no longer apply this invariant, and instead we allow saplings to have a mix of non-full root and tail
     // Note that by allowing saplings to have a mix of non-full root and tail, it allows us to reuse the node arrays and go faster in this particular scenario
@@ -570,7 +974,7 @@ let regressionTests =
   ]
 
 let mergeTests =
-  testList "merge tests" [
+  testList "Merge tests" [
     testCase "adjustTree is needed in merge algorithm when right tree is root+tail" <| fun _ ->
         let vL = RRBVecGen.treeReprStrToVec <| sprintf "M*M T1"
         let vR = RRBVecGen.treeReprStrToVec <| sprintf "M T1"
@@ -604,10 +1008,12 @@ let mergeTests =
     testCase "Joining vectors where the left tree is taller than the right produces valid results" <| fun _ ->
         let vL = RRBVecGen.treeReprStrToVec "[M*M]*3 TM/4"
         let vR = RRBVecGen.treeReprStrToVec "M*M/2 TM"
-        RRBVectorProps.checkProperties vL "Left half of merge"
-        RRBVectorProps.checkProperties vR "Right half of merge"
-        let joined = RRBVector.append vL vR
-        RRBVectorProps.checkProperties joined <| sprintf "Joined vector"
+        doJoinTest vL vR
+
+    testCase "Joining vectors where the left tree is taller than the right produces valid results, with larger vectors" <| fun _ ->
+        let vL = RRBVecGen.treeReprStrToVec "[M*M] [M*M] [M*M] [M*20] TM"
+        let vR = RRBVecGen.treeReprStrToVec "M M M M 5 TM-3"
+        doJoinTest vL vR
 
     testCase "Joining vectors will rebalance properly at heights above leaf level" <| fun _ ->
         // There used to be a subtle bug in the rebalancing code, where rebalancing at the twig (or higher) levels would make incorrectly-sized nodes.
@@ -647,20 +1053,21 @@ let mergeTests =
 let doSplitTransientTest (RRBVectorTransientCommands.SplitTestInput (vec, cmds)) =
     let vec = if vec |> isTransient then (vec :?> RRBTransientVector<_>).Persistent() else vec :?> RRBPersistentVector<_>
     let mailbox = RRBVectorTransientCommands.startSplitTesting vec cmds
-    let mutable error = None
-    mailbox.Error.Add (fun e -> error <- Some e)
     let result = mailbox.PostAndReply RRBVectorTransientCommands.AllThreadsResult.Go
     match result with
-    | RRBVectorTransientCommands.AllThreadsResult.Go _ -> failtest "Oops"
+    | RRBVectorTransientCommands.AllThreadsResult.Go _ -> failtest "Shouldn't happen"
     | RRBVectorTransientCommands.AllThreadsResult.OneFailed (position, cmdsDone, vec, arr, cmd, errorMsg) ->
         failtestf "Split vector number %d failed on %A after %d commands, with message %A; vector was %A and corresponding array was %A" position cmd cmdsDone errorMsg vec arr
     | RRBVectorTransientCommands.AllThreadsResult.AllCompleted _ -> ()
 
 let splitTransientTests =
-  testList "split transient tests" [
-    etestPropSm (2073922533, 296642100) "small test (get better name)" doSplitTransientTest
-    etestPropMed (2073922533, 296642100) "medium test (get better name)" doSplitTransientTest
-    testProp "large test (get better name)" doSplitTransientTest
+  testList "MailboxProcessor + Transient tests" [
+    testPropSm "small vectors (up to root+tail in size)" doSplitTransientTest
+    testPropMed "medium vectors (up to about 1-2 levels high)" doSplitTransientTest
+    testProp "large vectors (up to about 3-4 levels high)" doSplitTransientTest
+
+    // Individual test cases that were once failures of the above properties
+
     testCase "Removing one item from full-sized root of transient preserves tail" <| fun _ ->
         let arr = [| 1 .. Literals.blockSize + 6 |]
         let vec = RRBVector.ofArray arr
@@ -672,6 +1079,7 @@ let splitTransientTests =
         let newTVec = tvec.Remove 3
         RRBVectorProps.checkProperties newTVec "New transient vector"
         Expect.equal (newTVec |> RRBVector.toArray) newArr "New transient vector did not match array"
+
     testCase "Removing one item from root of transient of length M+1 moves entire new M-sized root into tail" <| fun _ ->
         let arr = [| 1 .. Literals.blockSize + 1 |]
         let vec = RRBVector.ofArray arr
@@ -683,6 +1091,7 @@ let splitTransientTests =
         let newTVec = tvec.Remove 3
         RRBVectorProps.checkProperties newTVec "New transient vector"
         Expect.equal (newTVec |> RRBVector.toArray) newArr "New transient vector did not match array"
+
     testCase "Inserting one item at start of full-sized tail of transient with empty root preserves tail size" <| fun _ ->
         let arr = [| 1 .. Literals.blockSize |]
         let vec = RRBVector.ofArray arr
@@ -694,6 +1103,7 @@ let splitTransientTests =
         let newTVec = tvec.Insert 0 3
         RRBVectorProps.checkProperties newTVec "New transient vector"
         Expect.equal (newTVec |> RRBVector.toArray) newArr "New transient vector did not match array"
+
     testCase "Inserting one item at start of not-quite-full-size tail of transient with empty root leaves full tail and empty root" <| fun _ ->
         let arr = [| 1 .. Literals.blockSize - 1 |]
         let vec = RRBVector.ofArray arr
@@ -713,6 +1123,7 @@ let splitTransientTests =
         Expect.equal (newTVec :?> RRBTransientVector<_>).Root.NodeSize 0 "New transient vector's root should still be empty"
         Expect.equal (newTVec :?> RRBTransientVector<_>).Tail.Length Literals.blockSize "New transient vector's tail should still be full"
         Expect.notEqual (newTVec :?> RRBTransientVector<_>).Tail.[Literals.blockSize - 1] 0 "New transient vector's tail should not end in 0"
+
     testCase "Shifting nodes into tail twice, leaving empty root, preserves tail correctly" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "M/2-3 M/2-1 T1"
         let arr = vec |> RRBVector.toArray
@@ -741,7 +1152,8 @@ let splitTransientTests =
         Expect.equal (newTVec :?> RRBTransientVector<_>).Tail.Length Literals.blockSize "New transient vector's tail should still be full"
         Expect.equal (newTVec :?> RRBTransientVector<_>).Tail.[Literals.blockSize - 1] 0 "New transient vector's tail should end in 0"
         Expect.equal (newTVec |> RRBVector.toArray) newArr "New transient vector did not match array"
-    ftestCase "Removing one item from root of transient of length M*2+4 turns full root into relaxed root" <| fun _ ->
+
+    testCase "Removing one item from root of transient of length M*2+4 turns full root into relaxed root" <| fun _ ->
         let arr = [| 1 .. Literals.blockSize * 2 + 4 |]
         let vec = RRBVector.ofArray arr
         let newVec = vec.Remove 0
@@ -846,7 +1258,7 @@ let constructedVectorSplitTests =
       |> testList "Constructed vector tests"
 
 let splitJoinTests =
-  testList "split + join tests" [
+  testList "Split + join tests" [
     testCase "Pushing the tail down in a root+tail node should not cause it to break the invariant, whether or not the root was full" <| fun _ ->
         let vec = RRBVecGen.treeReprStrToVec "M TM"
         RRBVectorProps.checkProperties vec "Original vector, a full root+tail"
@@ -1274,7 +1686,7 @@ let apiTests =
   ]
 
 (* let perfTests =
-  testSequenced <| testList "performance tests" [
+  testSequenced <| testList "Performance tests" [
     testCase "appendAndInsertAndSplitEvenly performance" <| fun _ ->
         let idx, a, b = 47, [|1..32|], [|33..60|]
         let joined = Array.append a b
@@ -1431,7 +1843,7 @@ let longRunningTests =
     ptestProp "split+join recreates same vector" <| fun (vec : RRBVector<int>) (i : int) ->
         let i = (abs i) % (RRBVector.length vec + 1)
         let vL, vR = doSplitTest vec i
-        // logger.warn (eventX "vR = {vec}" >> setField "vec" (RRBVecGen.vecToTreeReprStr vR))
+        // logger.debug (eventX "vR = {vec}" >> setField "vec" (RRBVecGen.vecToTreeReprStr vR))
         let vec' = RRBVector.append vL vR
         RRBVectorProps.checkProperties vec' "Joined vector"
         Expect.vecEqual vec' vec "Vector halves after split, when put back together, did not equal original vector"
@@ -1601,6 +2013,7 @@ let isolatedTest =
             logVec action current
             RRBVectorProps.checkProperties current <| sprintf "Vector after %s" (action.ToString())
 
+    // TODO: I think this is equivalent to one of the tests in the regressionTests list
     testCase "Manual test of a NullReference bug during remove operation" <| fun _ ->
         let scanf (x : int) a = a + 1  // So that scans will produce increasing sequences
         // let mergeR = mergeR << RRBVecGen.treeReprStrToVec
@@ -1785,7 +2198,6 @@ let fullSaplingTests = mkTestSuite "Tests on full saplings" ({ 1 .. Literals.blo
 let fullSaplingPlusOneTests = mkTestSuite "Tests on full saplings plus one" ({ 0 .. Literals.blockSize * 2} |> RRBVector.ofSeq)
 let threeLevelVectorTests = mkTestSuite "Tests on three-level vector" (RRBVecGen.treeReprStrToVec "[[M*M]*M]*3 TM/2")
 
-(* Disable for now while I test the split vector tests
 [<Tests>]
 let tests =
   testList "All tests" [
@@ -1799,7 +2211,7 @@ let tests =
         RRBVectorProps.checkProperties vec <| sprintf "Transient vector of size %d" size
         Expect.equal vec.Length size <| sprintf "Vector should have gotten %d items pushed" size
         let v2 = vec
-        // logger.warn (
+        // logger.debug (
         //     eventX "Tree {vec} passed all the checks"
         //     >> setField "vec" (sprintf "%A" v2)
         // )
@@ -1821,13 +2233,15 @@ let tests =
         //     vec <- vec.Pop() :?> RRBPersistentVector<_>
         //     RRBVectorProps.checkProperties vec <| sprintf "Persistent vector of size %d" (size - i)
         // let v2 = vec
-        // logger.warn (
+        // logger.debug (
         //     eventX "Tree {vec} passed all the checks"
         //     >> setField "vec" (sprintf "%A" v2)
         // )
         // Expect.equal vec.Length (size - Literals.blockSize - 1) <| sprintf "Vector has wrong size after pops"
 
     longRunningTests
+    splitTransientTests
+    regressionTests
     threeLevelVectorTests
     transientResidueTests
     moreTransientResidueTests
@@ -1855,14 +2269,8 @@ let tests =
     operationTests // Operational tests not yet ported to new API
     vectorTests
     nodeVecGenerationTests
-    regressionTests
     mergeTests
     // apiTests
 
     // perfTests
   ]
-*)
-
-[<Tests>]
-let tests =
-  testList "Just transient splitting" [splitTransientTests]

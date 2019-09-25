@@ -124,6 +124,11 @@ let treeReprStrToVec s =
     let vec = mkSpecificTree treeRepr
     vec
 
+let looserTreeReprStrToVec =
+    let regex = System.Text.RegularExpressions.Regex(@"\s+")
+    fun (s : string) ->
+        regex.Replace(s.Trim().Replace("\n", " "), " ") |> treeReprStrToVec
+
 let strJoin (between:string) (parts:#seq<string>) =
     System.String.Join(between,parts)
 

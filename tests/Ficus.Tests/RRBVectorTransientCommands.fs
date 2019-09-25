@@ -337,10 +337,15 @@ let cmdsExtraLarge = [push 4; push 9; push 33; pop 4; pop 9; pop 33; insert5AtHe
 
 type SplitTestInput = SplitTestInput of RRBVector<int> * (Cmd list)[]
 
-let genInput (lst : Cmd list) = gen {
+let genBasicOperations (lst : Cmd list) = gen {
     // let! vec = Arb.generate<RRBVector<int>>  // TODO: Ensure only persistent vectors generated here
     let vec = RRBVector.empty<int>
     let size = expectedSize vec
     let! cmds = Gen.arrayOfLength size (Gen.listOf (Gen.elements lst))
     return SplitTestInput (vec, cmds)
+}
+
+// TODO: Add more complex operations like slicing, splitting (and running a *FEW* commands on each side before rejoining), mapping, filtering, and so on
+let genComplexOperations (lst : Cmd list) = gen {
+    return! genBasicOperations lst
 }
