@@ -1,4 +1,4 @@
-module ExpectoTemplate.RRBVecGen
+module Ficus.Tests.RRBVecGen
 
 open Ficus
 open Ficus.RRBVectorBetterNodes

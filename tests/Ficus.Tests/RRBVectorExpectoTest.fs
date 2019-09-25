@@ -1,4 +1,4 @@
-module ExpectoTemplate.RRBVectorExpectoTest
+module Ficus.Tests.RRBVectorExpectoTest
 
 open Expecto
 open Ficus
@@ -2034,7 +2034,7 @@ let isolatedTest =
         //   at Ficus.RRBVectorNodes+NodeCreation.createSizeTable[T] (System.Int32 shift, System.Object[] array) [0x0000f] in <5b56e30f3ec9364ca74503830fe3565b>:0
         //   at Ficus.RRBVector+RRBTree`1[T].Ficus-RRBVector-IRRBInternal`1-RemoveImpl (System.Boolean shouldCheckForRebalancing, System.Int32 idx) [0x000e0] in <5b56e30f3ec9364ca74503830fe3565b>:0
         //   at Ficus.RRBVector+RRBTree`1[T].Remove (System.Int32 idx) [0x00000] in <5b56e30f3ec9364ca74503830fe3565b>:0
-        //   at ExpectoTemplate.RRBVectorExpectoTest+isolatedTest@1537-2.Invoke (Microsoft.FSharp.Core.Unit _arg2) [0x000cc] in <5b56e315492c3c0ba745038315e3565b>:0
+        //   at Ficus.Tests.RRBVectorExpectoTest+isolatedTest@1537-2.Invoke (Microsoft.FSharp.Core.Unit _arg2) [0x000cc] in <5b56e315492c3c0ba745038315e3565b>:0
         //   at Expecto.Impl+execTestAsync@878-1.Invoke (Microsoft.FSharp.Core.Unit unitVar) [0x00027] in <5a9db3dddf69a9a4a7450383ddb39d5a>:0
         //   at Microsoft.FSharp.Control.AsyncBuilderImpl+callA@522[b,a].Invoke (Microsoft.FSharp.Control.AsyncParams`1[T] args) [0x00051] in <5a7d678a904cf4daa74503838a677d5a>:0
 

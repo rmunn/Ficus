@@ -19,7 +19,7 @@
     <Compile Include="RRBVectorMoreCommands.fs" />
     <Compile Include="RRBVectorBetterNodesExpectoTest.fs" />
     <Compile Include="RRBVectorExpectoTest.fs" />
-    <Compile Include="Main2.fs" />
+    <Compile Include="Main.fs" />
   </ItemGroup>
   <Import Project="..\..\netfx.props" />
   <Import Project="..\..\.paket\Paket.Restore.targets" />

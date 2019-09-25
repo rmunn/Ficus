@@ -1,4 +1,4 @@
-module ExpectoTemplate.ExperimentalFsCheckCommands
+module Ficus.Tests.ExperimentalFsCheckCommands
 
 // https://fscheck.github.io/FsCheck/StatefulTesting.html
 

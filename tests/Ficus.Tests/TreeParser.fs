@@ -1,4 +1,4 @@
-module ExpectoTemplate.TreeParser
+module Ficus.Tests.TreeParser
 
 open FParsec
 

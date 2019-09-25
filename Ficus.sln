@@ -9,7 +9,7 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Ficus", "src\Ficus\Ficus.fs
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{ACBEE43C-7A88-4FB1-9B06-DB064D22B29F}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Ficus.TestsNew", "tests\Ficus.Tests\Ficus.TestsNew.fsproj", "{1CA2E092-2320-451D-A4F0-9ED7C7C528CA}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Ficus.Tests", "tests\Ficus.Tests\Ficus.Tests.fsproj", "{1CA2E092-2320-451D-A4F0-9ED7C7C528CA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

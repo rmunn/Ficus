@@ -1,4 +1,4 @@
-module ExpectoTemplate.RRBVectorFsCheckCommands
+module Ficus.Tests.RRBVectorFsCheckCommands
 
 // https://fscheck.github.io/FsCheck/StatefulTesting.html
 

@@ -3,24 +3,24 @@ namespace System
 open System.Reflection
 open System.Runtime.CompilerServices
 
-[<assembly: AssemblyTitleAttribute("Ficus.TestsNew")>]
+[<assembly: AssemblyTitleAttribute("Ficus.Tests")>]
 [<assembly: AssemblyProductAttribute("Ficus")>]
 [<assembly: AssemblyVersionAttribute("0.0.1")>]
 [<assembly: AssemblyMetadataAttribute("ReleaseDate","2018-03-04T00:00:00.0000000")>]
 [<assembly: AssemblyFileVersionAttribute("0.0.1")>]
-[<assembly: InternalsVisibleToAttribute("Ficus.TestsNew")>]
+[<assembly: InternalsVisibleToAttribute("Ficus.Tests")>]
 [<assembly: AssemblyInformationalVersionAttribute("0.0.1")>]
 [<assembly: AssemblyMetadataAttribute("ReleaseChannel","release")>]
 [<assembly: AssemblyMetadataAttribute("GitHash","f035c6a511aabf5da01db3a8be6f262635fea6e8")>]
 do ()
 
 module internal AssemblyVersionInformation =
-    let [<Literal>] AssemblyTitle = "Ficus.TestsNew"
+    let [<Literal>] AssemblyTitle = "Ficus.Tests"
     let [<Literal>] AssemblyProduct = "Ficus"
     let [<Literal>] AssemblyVersion = "0.0.1"
     let [<Literal>] AssemblyMetadata_ReleaseDate = "2018-03-04T00:00:00.0000000"
     let [<Literal>] AssemblyFileVersion = "0.0.1"
-    let [<Literal>] InternalsVisibleTo = "Ficus.TestsNew"
+    let [<Literal>] InternalsVisibleTo = "Ficus.Tests"
     let [<Literal>] AssemblyInformationalVersion = "0.0.1"
     let [<Literal>] AssemblyMetadata_ReleaseChannel = "release"
     let [<Literal>] AssemblyMetadata_GitHash = "f035c6a511aabf5da01db3a8be6f262635fea6e8"

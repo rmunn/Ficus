@@ -1,4 +1,4 @@
-module ExpectoTemplate.RRBVectorBetterNodesExpectoTest
+module Ficus.Tests.RRBVectorBetterNodesExpectoTest
 
 open Expecto
 open Expecto.Logging

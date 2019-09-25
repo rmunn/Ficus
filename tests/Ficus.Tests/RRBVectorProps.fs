@@ -1,4 +1,4 @@
-module ExpectoTemplate.RRBVectorProps
+module Ficus.Tests.RRBVectorProps
 
 open System
 open Ficus
