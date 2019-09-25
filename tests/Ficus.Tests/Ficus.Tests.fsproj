@@ -11,7 +11,7 @@
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="TreeParser.fs" />
-    <Compile Include="RRBVecGen.fs" />
+    <Compile Include="RRBVectorGen.fs" />
     <Compile Include="RRBVectorProps.fs" />
     <Compile Include="ExperimentalFsCheckCommands.fs" />
     <Compile Include="RRBVectorFsCheckCommands.fs" />

@@ -1,4 +1,4 @@
-module Ficus.Tests.RRBVecGen
+module Ficus.Tests.RRBVectorGen
 
 open Ficus
 open Ficus.RRBVectorNodes
@@ -14,7 +14,7 @@ let logger = Log.create "Expecto"
 let mkLeaf items = RRBNode<'T>.MkLeaf nullOwner items
 let mkNode<'T> level items =
     if level = 0
-        then failwith "Don't call RRBVecGen.mkNode at level 0" // Leaves have 'T children, whereas nodes have RRBNode<'T> children
+        then failwith "Don't call RRBVectorGen.mkNode at level 0" // Leaves have 'T children, whereas nodes have RRBNode<'T> children
         else RRBNode<'T>.MkNode nullOwner (level * Literals.blockSizeShift) items
 
 let mkEmptyNode<'T>() =

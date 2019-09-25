@@ -23,7 +23,7 @@ module ParameterizedVecCommands =
                                                    logger.info (
                                                        Message.eventX "After {cmd}, vec was {vec}"
                                                        >> Message.setField "cmd" (cmd.ToString())
-                                                       >> Message.setField "vec" (RRBVecGen.vecToTreeReprStr result)
+                                                       >> Message.setField "vec" (RRBVectorGen.vecToTreeReprStr result)
                                                    )
                                                    result
                                                 override __.RunModel arr = cmd.RunModel arr
@@ -85,14 +85,14 @@ module ParameterizedVecCommands =
                             with override __.RunActual vec = RRBVector.append otherVec vec
                                  override __.RunModel arr = Array.append (RRBVector.toArray otherVec) arr
                                  override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After merging on the left, vec != arr"
-                                 override __.ToString() = sprintf "mergeL %A" (RRBVecGen.vecToTreeReprStr otherVec) }
+                                 override __.ToString() = sprintf "mergeL %A" (RRBVectorGen.vecToTreeReprStr otherVec) }
                           |> wrapCmd
 
     let mergeR otherVec = { new Cmd()
                             with override __.RunActual vec = RRBVector.append vec otherVec
                                  override __.RunModel arr = Array.append arr (RRBVector.toArray otherVec)
                                  override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After merging on the right, vec != arr"
-                                 override __.ToString() = sprintf "mergeR %A" (RRBVecGen.vecToTreeReprStr otherVec) }
+                                 override __.ToString() = sprintf "mergeR %A" (RRBVectorGen.vecToTreeReprStr otherVec) }
                           |> wrapCmd
 
     let merge (otherVec,leftOrRight) = if leftOrRight then mergeL otherVec else mergeR otherVec

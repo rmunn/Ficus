@@ -222,7 +222,7 @@ let expectedSize (vec : RRBVector<'a>) =
 let startSplitTesting (vec : RRBPersistentVector<int>) (cmds : (Cmd list)[]) =
     // logger.infoWithBP (
     //     eventX "Inside startSplitTesting function with vec {vec} and cmds {cmds}"
-    //     >> setField "vec" (RRBVecGen.vecToTreeReprStr vec)
+    //     >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec)
     //     >> setField "cmds" (sprintf "%A" cmds)
     // ) |> Async.RunSynchronously
     let origVec = vec
@@ -234,7 +234,7 @@ let startSplitTesting (vec : RRBPersistentVector<int>) (cmds : (Cmd list)[]) =
     let parts = splitVec tvec
     // logger.infoWithBP (
     //     eventX "Parts [{parts}]"
-    //     >> setField "parts" (parts |> Array.map RRBVecGen.vecToTreeReprStr |> String.concat "; ")
+    //     >> setField "parts" (parts |> Array.map RRBVectorGen.vecToTreeReprStr |> String.concat "; ")
     // ) |> Async.RunSynchronously
     if parts.Length <> cmds.Length then failwith "Pass as many cmds as expected splits"  // TODO: Populate error msg with some data here
     let cts = new CancellationTokenSource()

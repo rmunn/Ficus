@@ -36,8 +36,8 @@ module VecCommands =
                 vecState.Vec <- vecState.Vec |> RRBVector.push n
                 // logger.debug (
                 //     eventX "Push: old {old} -> new {new}"
-                //     >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                //     >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                //     >> setField "old" (RRBVectorGen.vecToTreeReprStr oldVec)
+                //     >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 // )
                 vecEqual vecState.Vec arr (sprintf "push %d" n)
             override __.ToString() = sprintf "push %d" n
@@ -53,8 +53,8 @@ module VecCommands =
                 vecState.Vec <- vecState.Vec |> RRBVector.pop
                 // logger.debug (
                 //     eventX "Pop: old {old} -> new {new}"
-                //     >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                //     >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                //     >> setField "old" (RRBVectorGen.vecToTreeReprStr oldVec)
+                //     >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 // )
                 vecEqual vecState.Vec arr "pop"
             override __.ToString() = "pop"
@@ -86,8 +86,8 @@ module VecCommands =
                 //     >> setField "len" len
                 //     >> setField "start" start
                 //     >> setField "stop" stop
-                //     >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                //     >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                //     >> setField "old" (RRBVectorGen.vecToTreeReprStr oldVec)
+                //     >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 // )
                 vecEqual vecState.Vec arr (sprintf "slice %d len %d (was %d..%d)" from len start stop)
             override __.ToString() = sprintf "slice %d..%d" start stop
@@ -103,12 +103,12 @@ module VecCommands =
                 vecState.Vec <- vecState.Vec.Append otherVec
                 // logger.debug (
                 //     eventX "Merged with {other}: old {old} -> new {new}"
-                //     >> setField "other" (RRBVecGen.vecToTreeReprStr otherVec)
-                //     >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                //     >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                //     >> setField "other" (RRBVectorGen.vecToTreeReprStr otherVec)
+                //     >> setField "old" (RRBVectorGen.vecToTreeReprStr oldVec)
+                //     >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 // )
-                vecEqual vecState.Vec arr (sprintf "append %A" (RRBVecGen.vecToTreeReprStr otherVec))
-            override __.ToString() = sprintf "append %A" (RRBVecGen.vecToTreeReprStr otherVec)
+                vecEqual vecState.Vec arr (sprintf "append %A" (RRBVectorGen.vecToTreeReprStr otherVec))
+            override __.ToString() = sprintf "append %A" (RRBVectorGen.vecToTreeReprStr otherVec)
         }
     let joinGen = gen { let! other = Arb.generate<RRBVector<int>> in return join other }
 
@@ -126,8 +126,8 @@ module VecCommands =
                 //     >> setField "item" n
                 //     >> setField "idx" idx'
                 //     >> setField "oldIdx" idx
-                //     >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                //     >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                //     >> setField "old" (RRBVectorGen.vecToTreeReprStr oldVec)
+                //     >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 // )
                 vecEqual vecState.Vec arr (sprintf "insert %d at %d (was %d)" n idx' idx)
             override __.ToString() = sprintf "insert %d at %d" n idx
@@ -148,8 +148,8 @@ module VecCommands =
                 //     eventX "Remove at idx {idx} (was {oldIdx}): old {old} -> new {new}"
                 //     >> setField "idx" idx'
                 //     >> setField "oldIdx" idx
-                //     >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                //     >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                //     >> setField "old" (RRBVectorGen.vecToTreeReprStr oldVec)
+                //     >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 // )
                 vecEqual vecState.Vec arr (sprintf "remove at %d (was %d)" idx' idx)
             override __.ToString() = sprintf "remove at %d" idx
@@ -169,8 +169,8 @@ module VecCommands =
                 vecState.Vec <- vecState.Vec |> RRBVector.collect f
                 logger.debug (
                     eventX "Collect f: old {old} -> new {new}"
-                    >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                    >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                    >> setField "old" (RRBVectorGen.vecToTreeReprStr oldVec)
+                    >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 )
                 vecEqual vecState.Vec arr "collect f"
             override __.ToString() = "collect f"
@@ -187,8 +187,8 @@ module VecCommands =
                 vecState.Vec <- vecState.Vec |> RRBVector.choose f
                 // logger.debug (
                 //     eventX "Choose f: old {old} -> new {new}"
-                //     >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                //     >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                //     >> setField "old" (RRBVectorGen.vecToTreeReprStr oldVec)
+                //     >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 // )
                 vecEqual vecState.Vec arr "choose f"
             override __.ToString() = "choose f"
@@ -204,8 +204,8 @@ module VecCommands =
                 vecState.Vec <- vecState.Vec |> RRBVector.distinct
                 // logger.debug (
                 //     eventX "Distinct: old {old} -> new {new}"
-                //     >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                //     >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                //     >> setField "old" (RRBVectorGen.vecToTreeReprStr oldVec)
+                //     >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 // )
                 vecEqual vecState.Vec arr "distinct"
             override __.ToString() = "distinct"
@@ -221,8 +221,8 @@ module VecCommands =
                 vecState.Vec <- vecState.Vec |> RRBVector.distinctBy f
                 // logger.debug (
                 //     eventX "DistinctBy f: old {old} -> new {new}"
-                //     >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                //     >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                //     >> setField "old" (RRBVectorGen.vecToTreeReprStr oldVec)
+                //     >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 // )
                 vecEqual vecState.Vec arr "distinctBy f"
             override __.ToString() = "distinctBy f"
@@ -238,8 +238,8 @@ module VecCommands =
                 vecState.Vec <- vecState.Vec |> RRBVector.filter f
                 // logger.debug (
                 //     eventX "Filter f: old {old} -> new {new}"
-                //     >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                //     >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                //     >> setField "old" (RRBVectorGen.vecToTreeReprStr oldVec)
+                //     >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 // )
                 vecEqual vecState.Vec arr "filter f"
             override __.ToString() = "filter f"
@@ -255,8 +255,8 @@ module VecCommands =
                 vecState.Vec <- vecState.Vec |> RRBVector.map f
                 // logger.debug (
                 //     eventX "Map f: old {old} -> new {new}"
-                //     >> setField "old" (RRBVecGen.vecToTreeReprStr oldVec)
-                //     >> setField "new" (RRBVecGen.vecToTreeReprStr vecState.Vec)
+                //     >> setField "old" (RRBVectorGen.vecToTreeReprStr oldVec)
+                //     >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 // )
                 vecEqual vecState.Vec arr "map f"
             override __.ToString() = "map f"
