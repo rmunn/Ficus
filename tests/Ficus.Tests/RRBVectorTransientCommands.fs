@@ -327,6 +327,26 @@ module VecCommands =
     let removeFromFirstLeaf = remove 3
     let removeFromTail = remove -2
 
+    let slice (start, stop) =
+        let start, stop =
+            match start, stop with
+            | Some startValue, Some stopValue ->
+                if startValue < stopValue then start, stop else stop, start
+            | _ -> start, stop
+        { new Cmd() with
+            override __.RunActual vec =
+                let start' = start |> Option.map (fun start -> if start < 0 then start + vec.Length else start)
+                let stop' = stop |> Option.map (fun stop -> if stop < 0 then stop + vec.Length else stop)
+                vec.GetSlice (start', stop') :?> RRBTransientVector<_>
+             override __.RunModel arr =
+                let start' = start |> Option.map (fun start -> if start < 0 then start + arr.Length else start) |> Option.defaultValue 0
+                let stop' = stop |> Option.map (fun stop -> if stop < 0 then stop + arr.Length else stop) |> Option.defaultValue (arr.Length - 1)
+                Array.sub arr start' (stop' - start' + 1)
+             override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After slicing from %A to %A, vec != arr" start stop
+             override __.ToString() = sprintf "slice %A %A" start stop }
+
+    let genSlice = Arb.generate<int option> |> Gen.two |> Gen.map slice
+
 open VecCommands
 
 let cmdsExtraSmall = [push 1; pop 1; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
