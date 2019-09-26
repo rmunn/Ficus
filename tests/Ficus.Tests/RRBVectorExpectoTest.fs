@@ -1191,31 +1191,7 @@ let splitTransientTests =
     //     RRBVectorTransientCommands.doComplexTest vec
 
     // Test cases to move into regressionTests once they're done
-    ftestCase "Simplify this" <| fun _ ->
-        let vec = RRBVectorGen.treeReprStrToVec "30 M 29 29 30 24 30 30 30 M 29 31 25 27 25 28 30 28 TM"
-        let push = RRBVectorTransientCommands.VecCommands.push
-        let remove = RRBVectorTransientCommands.VecCommands.remove
-        let insert = RRBVectorTransientCommands.VecCommands.insert
-        let cmds = [push 86; push 91; push 69; insert (20,84); remove -75; insert (91,31); insert (19,85); insert (-65,56); insert (51,98); insert (-90,58); insert (52,97); insert (-39,46); push 84; insert (42,83); push 22]
-        let mutable current = (vec :?> RRBPersistentVector<_>).Transient()
-        let logVec cmd vec =
-            logger.warn (
-                eventX "After {cmd}, vec was {vec} with actual structure {structure}"
-                >> setField "cmd" cmd
-                >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec)
-                >> setField "structure" (sprintf "%A" vec))
-            ()
-        for cmd in cmds do
-            current <- current |> cmd.RunActual
-            if cmd.ToString() = "push 22" then
-                () // Breakpoint
-                logVec (cmd.ToString()) current
-            RRBVectorProps.checkProperties current <| sprintf "Vector after %s" (cmd.ToString())
-        // One final push makes it fail
-        current <- current.Push 512 :?> RRBTransientVector<_>
-        RRBVectorProps.checkProperties current "Vector after final push"
-
-    ftestCase "Even simpler" <| fun _ ->
+    testCase "A push that grows the height of a transient vector will leave it with a properly relaxed and expanded root" <| fun _ ->
         let vec = RRBVectorGen.treeReprStrToVec "M 17 16 M 29 30 24 30 30 30 M 29 M-1 25 27 25 28 30 28 M M M M M 17 16 M 17 16 M M M T32"
         let vec' = vec.Push 512
         RRBVectorProps.checkProperties vec' "Persistent after push"
