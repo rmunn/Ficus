@@ -1182,15 +1182,25 @@ let splitTransientTests =
     // etestProp (116284201, 296649907) "large vectors (up to about 3-4 levels high)" doSplitTransientTest
     testPropSm "small vectors into thing" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doTestXL vec
-    ptestPropSm "small commands" <| fun (vec : RRBVector<int>) ->
+    testPropSm "small commands" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doComplexTest vec
-    etestPropMed (486436647, 296650093) "medium commands" <| fun (vec : RRBVector<int>) ->
+    testPropMed "medium commands" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doComplexTest vec
-    etestProp (375920089, 296650093) (*486436647, 296650093*) "large commands" <| fun (vec : RRBVector<int>) ->
-        logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
-        RRBVectorTransientCommands.doComplexTest vec
+    // etestProp (375920089, 296650093) (*486436647, 296650093*) "large commands" <| fun (vec : RRBVector<int>) ->
+    //     logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
+    //     RRBVectorTransientCommands.doComplexTest vec
 
     // Test cases to move into regressionTests once they're done
+    ftestCase "FIgure out the name" <| fun _ ->
+        // Note that it fails on the *original* transient vector. And indeed, there's one node in there of size 43! I suspect I copied the data wrong.
+        let vec = RRBVectorGen.looserTreeReprStrToVec TestData.ridiculouslyLargeVector
+        RRBVectorProps.checkProperties vec "Original persistent vector"
+        let mutable t = (vec :?> RRBPersistentVector<_>).Transient()
+        RRBVectorProps.checkProperties t "Original transient vector"
+        for i = 1 to 88 do
+            t <- t.Push i :?> RRBTransientVector<_>
+            RRBVectorProps.checkProperties t <| sprintf "Transient after push %d" i
+
     testCase "A push that grows the height of a transient vector will leave it with a properly relaxed and expanded root" <| fun _ ->
         let vec = RRBVectorGen.treeReprStrToVec "M 17 16 M 29 30 24 30 30 30 M 29 M-1 25 27 25 28 30 28 M M M M M 17 16 M 17 16 M M M T32"
         let vec' = vec.Push 512
