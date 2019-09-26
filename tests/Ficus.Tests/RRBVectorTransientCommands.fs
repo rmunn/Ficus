@@ -164,7 +164,7 @@ module VecCommands =
                 // ) |> Async.RunSynchronously
                 let newVec = vec.GetSlice (start', stop') :?> RRBTransientVector<_>
                 let newLen = newVec.Length
-                let newRepr = RRBVectorGen.vecToTreeReprStr vec
+                let newRepr = RRBVectorGen.vecToTreeReprStr newVec
                 // logger.warnWithBP (eventX "Slice [{start}..{stop}] in vector of length {len} with repr {repr} produced new vector len {newLen} with repr {newRepr}"
                 //     >> setField "start" (sprintf "%A" start')
                 //     >> setField "stop" (sprintf "%A" stop')

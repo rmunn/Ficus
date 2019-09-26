@@ -272,6 +272,35 @@ let vectorTests =
         Expect.equal slicedVec.Length slicedArr.Length "Vector slicing should be equivalent to array slicing in length"
         Expect.equal (slicedVec |> RRBVector.toArray) slicedArr "Vector slicing should be equivalent to array slicing"
 
+    testCase "Slicing only in tail, case 1" <| fun _ ->
+        let vec = { 1..39 } |> RRBVector.ofSeq
+        let t = (vec :?> RRBPersistentVector<_>).Transient()
+        let x = t.[32..36]
+        // logger.warn (eventX "vec is {vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr x))
+        RRBVectorProps.checkProperties x "foo"
+
+    testCase "Slicing only in tail, case 2" <| fun _ ->
+        let vec = { 1..39 } |> RRBVector.ofSeq
+        let t = (vec :?> RRBPersistentVector<_>).Transient()
+        let x = t.[34..36]
+        // logger.warn (eventX "vec is {vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr x))
+        RRBVectorProps.checkProperties x "foo"
+
+    testCase "Test appending a new child to an empty transient with relaxed root" <| fun _ ->
+        let vec = { 1..52 } |> RRBVector.ofSeq
+        let mutable t = (vec :?> RRBPersistentVector<_>).Transient()
+        // Split the node with an insert
+        t <- t.Insert 18 -512 :?> RRBTransientVector<_>
+        // Empty the tree with a slice so the root remains an ExpandedRelaxedNode
+        t <- t.[54..] :?> RRBTransientVector<_>
+        // Push a full tail
+        for i = 1 to Literals.blockSize do
+            t <- t.Push i :?> RRBTransientVector<_>
+            RRBVectorProps.checkProperties t <| sprintf "After pushing %d" i
+        // Push tail down to form new root - was "Index outside the bounds of the array" before bug in AppendChildS was fixed
+        t <- t.Push (Literals.blockSize + 1) :?> RRBTransientVector<_>
+        RRBVectorProps.checkProperties t <| sprintf "After pushing %d" (Literals.blockSize + 1)
+
     testCase "push M+1 items onto an empty vector" <| fun _ ->
         let mutable vec = RRBVector.empty<int>
         for i = 1 to Literals.blockSize + 1 do
@@ -1105,11 +1134,14 @@ let splitTransientTests =
     // etestPropMed (116284273, 296649907) "medium vectors (up to about 1-2 levels high)" doSplitTransientTest
     // etestProp (116284201, 296649907) "large vectors (up to about 3-4 levels high)" doSplitTransientTest
     testPropSm "small vectors into thing" <| fun (vec : RRBVector<int>) ->
-        // let t = if vec |> isTransient then vec :?> RRBTransientVector<_> else (vec :?> RRBPersistentVector<_>).Transient()
         RRBVectorTransientCommands.doTestXL vec
-    etestPropSm (1913561009, 296650027) "small commands" <| fun (vec : RRBVector<int>) ->
-        // let t = if vec |> isTransient then vec :?> RRBTransientVector<_> else (vec :?> RRBPersistentVector<_>).Transient()
+    ftestPropSm "small commands" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doComplexTest vec
+    etestPropMed (486436647, 296650093) "medium commands" <| fun (vec : RRBVector<int>) ->
+        RRBVectorTransientCommands.doComplexTest vec
+    etestProp (375920089, 296650093) (*486436647, 296650093*) "large commands" <| fun (vec : RRBVector<int>) ->
+        RRBVectorTransientCommands.doComplexTest vec
+
     // Individual test cases that were once failures of the above properties
 
     testCase "Removing one item from full-sized root of transient preserves tail" <| fun _ ->

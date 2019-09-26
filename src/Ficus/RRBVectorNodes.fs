@@ -1706,9 +1706,9 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
             if not (isSameObj lastChild shrunkLastChild) then
                 node'.Children.[oldSize - 1] <- shrunkLastChild
         node'.Children.[oldSize] <- newChild.Expand owner
-        node'.SizeTable.[oldSize] <- node'.SizeTable.[oldSize - 1] + newChildSize
+        node'.SizeTable.[oldSize] <- (if oldSize > 0 then node'.SizeTable.[oldSize - 1] else 0) + newChildSize
         node'.SetNodeSize (oldSize + 1)
-        node' :> RRBNode<'T>
+        node'.ToFullNodeIfNeeded shift
 
     override this.InsertChild owner shift localIdx newChild =
         this.InsertChildS owner shift localIdx newChild (newChild.TreeSize (down shift))

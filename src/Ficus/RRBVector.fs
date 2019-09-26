@@ -657,6 +657,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             this.Empty()
         elif idx = this.TailOffset then
             // Splitting exactly at the tail means we'll have an empty root
+            this.Root.SetNodeSize 0
             Array.fill (this.Root :?> RRBFullNode<'T>).Children 0 Literals.blockSize null
             this.Count <- this.Count - idx
             this.Shift <- Literals.blockSizeShift
@@ -664,6 +665,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             this :> RRBVector<'T>
         elif idx > this.TailOffset then
             // Splitting the tail in two
+            this.Root.SetNodeSize 0
             Array.fill (this.Root :?> RRBFullNode<'T>).Children 0 Literals.blockSize null
             let tailLen = this.Count - this.TailOffset
             let tailIdx = idx - this.TailOffset
