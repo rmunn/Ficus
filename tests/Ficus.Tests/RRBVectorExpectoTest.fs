@@ -1187,7 +1187,61 @@ let splitTransientTests =
     // etestPropMed (486436647, 296650093) "medium commands" <| fun (vec : RRBVector<int>) ->
     //     RRBVectorTransientCommands.doComplexTest vec
     // etestProp (375920089, 296650093) (*486436647, 296650093*) "large commands" <| fun (vec : RRBVector<int>) ->
+    //     logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
     //     RRBVectorTransientCommands.doComplexTest vec
+
+    // Test cases to move into regressionTests once they're done
+
+    ftestCase "A remove that triggers a rebalance in a transient tree will still leave it properly expanded" <| fun _ ->
+        let repr = """
+            [M M M M M M M M M M-1 M M M M M M M M M M M-1 M M M 28 M M M M M M M]
+            [30 26 M M 30 25 M 27 26 M 28 30 M-1 M M-1 28 M 24 27 M-1 27 30 M-1 M 27 29 M 28 28 M 30 25]
+            [30 27 29 M 29 27 M 29 27 30 27 M M M 27 26 M-1 28 M 29 27 28 29 27 29 27 29 29 27 30 M 30]
+            [30 26 26 26 25 M 30 M M 30 27 M-1 28 26 30 M-1 28 M 29 29 28 M-1 29 27 28 M M]
+            [28 M-1 M-1 30 29 M 28 26 27 28 M M-1 M-1 28 29 23 28 26 27 27 27 M M 28 27 M M]
+            [26 M-1 M-1 M M M M 30 M M 25 29 29 M-1 30 30 30 M 30 M 25 24 M 29 30 27 M M 29 29 30 30]
+            [M 27 28 M 30 29 29 27 24 27 M M-1 24 M M-1 29 27 M 27 M-1 M-1 M-1 M 29 29 M M 27 26 29 26 25]
+            [M M M M M M M M M M M M M 29 M M M M M M M M M M M M]
+            [M-1 M-1 19 M M 29 30 25 M M-1 M 29 28 29 26 M-1 29 24 26 M-1 M M 28 M 25 28 M-1 M-1 M 30 M 30]
+            [23 28 M-1 23 M M-1 20 M 29 29 M M 25 M-1 29 25 M-1 28 26 M 26 29 M 27 28 M]
+            [29 30 27 M M 26 29 M M-1 26 30 M 27 M-1 29 25 M M 25 30 30 M-1 29 M 29 M-1 M 25 27 M 28 M]
+            [M M-1 M M M M 30 M M M-1 M M M 28 M M M M M M M-1 M M 29 M M M-1 M M-1 M M M]
+            [M M M M M-1 24 28 M 26 M M M 30 28 M-1 28 25 M M M M 26 26 23 30]
+            [M-1 M M M M M M M M M M M M 28 M M M M M M M M M 30 M M M 30 M M 29 M]
+            [M 30 M M M M M 30 M 29 M 28 M-1 M 29 30 M M M 30 M-1 30 M-1 M 30 M-1 M M M 29 M-1 26]
+            [M M M 27 M M-1 M M M M M 29 M M M-1 28 M-1 M-1 30 27 M M M-1 29 M 24 M M 28 M]
+            [M-1 M-1 29 M M M M M M 27 M 27 M 30 M 28 29 29 27 M]
+            [M 29 M M M M 29 M M 28 M 29 M M M M 24 M-1 M 29 M 28 M M-1 28 M M-1 M 23 M-1 M 28]
+            [M M M M M M M M M 30 27 M-1 M M M M M-1 M 30 M M 30 M 28 M M M M-1 M-1 M M-1 30]
+            [28 M-1 M M 23 M 26 28 27 M M M M-1 23 M M 26 28 M-1 25 M M M 29 27 27 M 27 30 30 30 27]
+            [M M-1 M 30 M M 26 M M 26 M M-1 26 29 29 M M M M 24 26 M M 28 M M 27 M M M-1 M M]
+            [30 M M 26 29 28 23 M-1 29 28 27 M M M M 30 23 M-1 30 M M M-1 29 M 29 M-1 28 29 24 M M]
+            [M M M M M M M M M M M-1 M M M M M M M M M]
+            [M 30 M M M M M M 30 M M M M M M M M M M M M M M 30 M M M M M M M M]
+            [M M M M-1 25 M-1 24 25 M 29 M-1 30 M-1 30 27 M 28 M-1 30 M 28 26 27 27 M M-1 28 M-1 27 25 M 28]
+            [M 28 26 M-1 25 28 28 30 30 M M-1 M-1 27 23 28 30 27 27 27 M 27 28 22 26]
+            [28 M M 29 28 M 27 29 M M 29 27 24 26 M M M-1 M-1 M M 28 M-1 28 27 M-1 28 27 M 29 M 25 M]
+            [28 30 M 26 26 M 29 29 29 30 M-1 M M-1 25 27 M 29 26 M M M-1 29 M 29 28 M 28 M 28 M-1 27 27]
+            T22"""
+        let vec = RRBVectorGen.looserTreeReprStrToVec repr
+        let push = RRBVectorTransientCommands.VecCommands.push
+        let remove = RRBVectorTransientCommands.VecCommands.remove
+        let insert = RRBVectorTransientCommands.VecCommands.insert
+        let cmds = [push 45; insert (58,50); remove -23]
+        // The remove will trigger a rebalance, which will end up NOT having an expanded node at the end of the rebalance!
+        let mutable current = (vec :?> RRBPersistentVector<_>).Transient()
+        let logVec cmd vec =
+            // logger.debug (
+            //     eventX "After {cmd}, vec was {vec} with actual structure {structure}"
+            //     >> setField "cmd" cmd
+            //     >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec)
+            //     >> setField "structure" (sprintf "%A" vec))
+            ()
+        for cmd in cmds do
+            current <- current |> cmd.RunActual
+            logVec (cmd.ToString()) current
+            RRBVectorProps.checkProperties current <| sprintf "Vector after %s" (cmd.ToString())
+        ()
 
     // Individual test cases that were once failures of the above properties
 
@@ -2258,35 +2312,35 @@ let tests =
 
     // longRunningTests
     splitTransientTests
-    regressionTests
-    threeLevelVectorTests
-    transientResidueTests
-    moreTransientResidueTests
-// //   ]
-// // ignore
-// //   [
+//     regressionTests
+//     threeLevelVectorTests
+//     transientResidueTests
+//     moreTransientResidueTests
+// // //   ]
+// // // ignore
+// // //   [
 
-    isolatedTest
-    emptyTests
-    singletonTests
-    dualTests
-    halfFullTailTests
-    fullTailTests
-    fullTailPlusOneTests
-    fullSaplingMinusOneTests
-    fullSaplingTests
-    fullSaplingPlusOneTests
+//     isolatedTest
+//     emptyTests
+//     singletonTests
+//     dualTests
+//     halfFullTailTests
+//     fullTailTests
+//     fullTailPlusOneTests
+//     fullSaplingMinusOneTests
+//     fullSaplingTests
+//     fullSaplingPlusOneTests
 
-    arrayTests
-    simpleVectorTests
-    manualVectorTests
-    constructedVectorSplitTests
-    splitJoinTests
-    insertTests
-    operationTests // Operational tests not yet ported to new API
-    vectorTests
-    nodeVecGenerationTests
-    mergeTests
+//     arrayTests
+//     simpleVectorTests
+//     manualVectorTests
+//     constructedVectorSplitTests
+//     splitJoinTests
+//     insertTests
+//     operationTests // Operational tests not yet ported to new API
+//     vectorTests
+//     nodeVecGenerationTests
+//     mergeTests
     // apiTests
 
     // perfTests
