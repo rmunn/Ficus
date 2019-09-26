@@ -641,9 +641,10 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
         else
             let tmpRoot = this.Root.KeepNTreeItems this.Owner this.Shift idx
             let newTailNode, newRoot = (tmpRoot :?> RRBFullNode<'T>).PopLastLeaf this.Owner this.Shift
+            let newRoot' = (newRoot :?> RRBExpandedFullNode<'T>).MaybeExpand this.Owner
             this.Count <- idx
-            if not <| isSameObj newRoot this.Root then
-                this.Root <- newRoot
+            if not <| isSameObj newRoot' this.Root then
+                this.Root <- newRoot'
             this.TailOffset <- idx - newTailNode.NodeSize
             this.Tail <- (newTailNode.GetEditableNodeOfBlockSizeLength this.Owner :?> RRBLeafNode<'T>).Items
             this.AdjustTree()

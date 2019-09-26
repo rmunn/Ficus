@@ -845,6 +845,28 @@ let regressionTests =
         let slicedA = arr.[..15]
         Expect.equal slicedT.Length slicedA.Length "Vector slice should be equivalent to array slice for transients as well"
 
+    testCase "Splitting a transient will expand nodes appropriately" <| fun _ ->
+        let repr = """
+            [18 27 24 27 M M M M M 29 29 29 M-1 M M M M M M 28 26 28 M M M 30]
+            [M-1 M M M M M M M 30 M 30 M 29 M M M M M M-1 M M 30 M-1 M 27 28]
+            [M-1 M 30 M 27 29 26 M 27 M M-1 M M-1 30 M 30 M 26 28 28 M-1 M M M-1]
+            [M M 30 M 26 30 27 M M M 29 M M M M-1 29 28 M 27 30 26 30 M-1 M M 27 M-1 M M-1]
+            [M M M M M 23 M M 28 M M 25 M 28 M M M M 28 M-1 M 29 M M 30 M M M]
+            [M M 30 M M 25 29 M M M M-1 28 M M 29 M 29 28 30 M-1 M M 30 28 M 29]
+            [M 29 M-1 M 28 26 M M M M-1 M M M 28 M M M M M M M-1 30 30 M M M]
+            [26 M M M 28 M M M M-1 M M M-1 29 28 M M M M M M-1 M 29 M-1 27]
+            [M M M M M 26 28 M-1 M M M M M M M M M M M-1 M M 30]
+            [M M-1 M M-1 M M M 28 M-1 30 28 M M M M M M 29 M M 29 M M M M]
+            [M M M M M M M M 30 M M 30 M M M M 17 18 M]
+            T32"""
+        let vec = repr |> RRBVectorGen.looserTreeReprStrToVec
+        let slicedVec = vec.[..77]
+        RRBVectorProps.checkProperties slicedVec "Sliced persistent vector"
+        let t = (vec :?> RRBPersistentVector<_>).Transient()
+        let slicedT = t.[..77]
+        RRBVectorProps.checkProperties slicedT "Sliced transient vector"
+
+
 (* Disabling this test since we no longer apply this invariant, and instead we allow saplings to have a mix of non-full root and tail
     // Note that by allowing saplings to have a mix of non-full root and tail, it allows us to reuse the node arrays and go faster in this particular scenario
     testCase "Slicing at tail can promote new tail and adjust tree so last leaf is full" <| fun _ ->
