@@ -2346,5 +2346,51 @@ NewParent of expanded relaxed nodes - only exercised twice, always with siblings
 AppendedItem of leaf nodes is never exercised.
 PopLastItem of leaf nodes is never exercised. Should be remove it?
 
-TODO: Also look at the coverage of RBRVector in docs/coverage-2019-09-25-run9/Ficus_RRBVector.htm - lots of red to fix in there
+============
+RRBVector.fs
+============
+
+RRBPersistentVector:
+  new(ownerToken) - not exercised (manual test)
+  static MkEmptyWithToken - ditto (use this interface to exercise new(ownerToken) since that does both at once)
+  Peek() on empty vector - test verifies that it throws an exception
+    Also construct an illegal vector with empty tail, then Peek() it to exercise the other exception-throwing path
+  Pop() on empty vector - test verifies that it throws an exception
+  Skip(n) where n >= Count - not yet exercised
+  GetSlice() - not yet exercised
+  Append() - wildcard match case cannot be reached, ignore
+  Insert() - two match cases cannot be reached, ignore
+  Remove - idx >= this.TailOffset and this.Count - this.TailOffset = 1 (removing the last item from a one-item tail but not doing a Pop)
+  EnsureValidIndex - exercise by testing that exceptions are thrown correctly
+
+RRBTransientVector:
+  ToString() - convert to a useful-for-users format, then test
+  ThrowIfNotValid - set up several operations where the transient is NOT valid (many manual tests)
+  ShortenTree - we only exercise this at height 1. We need some taller transient trees to test.
+  ShiftNodesFromTailIfNeeded - the "if not <| isSameObj newRoot this.Root then" paths are never followed, but I can't come up with
+  a scenario in which they would ever be. The root is going to have the right owner already, so we can't make that happen. Ignore.
+  IsEmpty - manual tests, a couple of them
+  StringRepr - convert to a useful-for-users format, then test
+  IterEditableLeavesWithoutTail - not exercised. Need to come up with a way to do so.
+  RevIterLeaves - ditto.
+  RevIterEditableLeavesWithoutTail - ditto.
+  RevIterItems - ditto; this would exercise RevIterLeaves
+  Peek - manual test, pretty simple
+  Pop() on empty vector - manual test to verify that exception thrown
+  Take - not at all tested
+  Skip - ditto
+  Split - ditto
+  Slice, GetSlice - ditto, WIP (will exercise Take and Skip at the same time)
+  Append - not at all tested
+  Insert - "if not <| isSameObj newRoot this.Root then" path not taken. Might need to exercise "insert pushes root up" scenario (initially full tree, insert into full tail)
+           Also, SplitNode not exercised. Exercise the "insert pushes root up" with insert in the main body of a full tree. Other two match paths are impossible; ignore.
+  RemoveWithoutRebalance - not exercised. Property test for this, making sure it returns same result as Remove albeit with a possible-less-efficient tree.
+    (Note: windowedSeq cannot exercise this, as it only does RemoveWithoutRebalance on persistents)
+  RemoveImpl - haven't exercised the code path where you remove one item from a length-one tail (last item of vector)
+  Update - not exercised
+  GetItem - not exercised
+  EnsureValidIndex - exercise by testing that exceptions are thrown correctly
+
+RRBVector module:
+  TODO. Lots of functions here.
 *)

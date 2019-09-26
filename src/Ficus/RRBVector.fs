@@ -38,6 +38,7 @@ type RRBVector<'T>() =
     abstract member Remove : int -> RRBVector<'T>
     abstract member Update : int -> 'T -> RRBVector<'T>
     abstract member GetItem : int -> 'T
+    // TODO: Expose .Transient() and .Persistent() on RRBVector interface
 
     interface System.Collections.Generic.IEnumerable<'T> with
         member this.GetEnumerator () = this.IterItems().GetEnumerator()
@@ -77,6 +78,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     static member MkEmpty() = RRBPersistentVector<'T>()
     static member internal MkEmptyWithToken token = RRBPersistentVector<'T>(token)
 
+    // TODO: Expose .Transient() and .Persistent() on RRBVector interface
     member this.Transient() =
         let newToken = mkOwnerToken()
         let newRoot = (this.Root :?> RRBFullNode<'T>).ExpandRightSpine newToken this.Shift
@@ -439,6 +441,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             let msg = defaultArg msg "any operations"
             invalidOp <| sprintf "This vector is no longer valid for %s" msg
 
+    // TODO: Expose .Transient() and .Persistent() on RRBVector interface
     member this.Persistent() =
         let newRoot = (this.Root :?> RRBFullNode<'T>).ShrinkRightSpine nullOwner this.Shift
         let tailLen = this.Count - this.TailOffset
