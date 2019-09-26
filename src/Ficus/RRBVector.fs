@@ -644,7 +644,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
         else
             let tmpRoot = this.Root.KeepNTreeItems this.Owner this.Shift idx
             let newTailNode, newRoot = (tmpRoot :?> RRBFullNode<'T>).PopLastLeaf this.Owner this.Shift
-            let newRoot' = (newRoot :?> RRBFullNode<'T>).MaybeExpand this.Owner
+            let newRoot' = (newRoot :?> RRBFullNode<'T>).MaybeExpand this.Owner this.Shift
             this.Count <- idx
             if not <| isSameObj newRoot' this.Root then
                 this.Root <- newRoot'

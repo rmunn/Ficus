@@ -492,8 +492,8 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
             sizeTable'.[i] <- sizeTable'.[i] + lastSizeTableEntry
         RRBNode<'T>.MkNodeKnownSize owner shift children' sizeTable'
 
-    abstract member MaybeExpand : OwnerToken -> RRBNode<'T>
-    default this.MaybeExpand owner =
+    abstract member MaybeExpand : OwnerToken -> int -> RRBNode<'T>
+    default this.MaybeExpand owner shift =
         this :> RRBNode<'T>
 
     // ===== END of NODE MANIPULATION functions =====
@@ -520,8 +520,8 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
         // NOTE that this *does* expand nodes, but only if we are an expanded node ourselves (i.e., it calls MaybeExpand)
         let rec loop shift (node : RRBFullNode<'T>) =
             if shift >= endShift
-            then node.MaybeExpand owner
-            else let shift' = (up shift) in loop shift' (this.NewParent owner shift' [|node.MaybeExpand owner|] :?> RRBFullNode<'T>)
+            then node.MaybeExpand owner shift
+            else let shift' = (up shift) in loop shift' (this.NewParent owner shift' [|node.MaybeExpand owner shift|] :?> RRBFullNode<'T>)
         loop Literals.blockSizeShift (this.NewParent owner Literals.blockSizeShift [|leaf|] :?> RRBFullNode<'T>)
 
     member this.TryAppendLeaf owner shift (newLeaf : RRBLeafNode<'T>) leafLen =
@@ -1589,12 +1589,15 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         else
             RRBExpandedRelaxedNode<'T>(owner, node'.Children, sizeTable', newSize) :> RRBNode<'T>
 
-    override this.MaybeExpand owner =
-        // TODO: Turn this into ExpandRightSpineIfNeeded by calling recursively on the (newly?)-expanded child
+    override this.MaybeExpand owner shift =
         if this.NodeSize = 0 then this :> RRBNode<'T> else
         let node' = this.GetEditableNode owner :?> RRBExpandedFullNode<'T>
         let lastChild = this.LastChild
-        let expandedLastChild = lastChild.Expand owner
+        let expandedLastChild =
+            if shift <= Literals.blockSizeShift then
+                lastChild.Expand owner
+            else
+                (lastChild.Expand owner :?> RRBFullNode<'T>).MaybeExpand owner (down shift)
         if not (isSameObj lastChild expandedLastChild) then
             node'.Children.[node'.NodeSize - 1] <- expandedLastChild
         node' :> RRBNode<'T>
@@ -1609,9 +1612,9 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
             for i = len to this.NodeSize - 1 do
                 arr.[i] <- null
             this.SetNodeSize len
-            this.ToRelaxedNodeIfNeeded shift
+            (this.ToRelaxedNodeIfNeeded shift :?> RRBFullNode<'T>).MaybeExpand owner shift
         else
-            RRBNode<'T>.MkNode owner shift arr
+            (RRBNode<'T>.MkNode owner shift arr :?> RRBFullNode<'T>).MaybeExpand owner shift
 
     override this.MakeLeftNodeForSplit owner shift children sizes =
         (RRBNode<'T>.MkNodeKnownSize owner shift children sizes).Expand owner
@@ -1913,11 +1916,15 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         node'.SetNodeSize newSize
         node' :> RRBNode<'T>
 
-    override this.MaybeExpand owner =
+    override this.MaybeExpand owner shift =
         if this.NodeSize = 0 then this :> RRBNode<'T> else
         let node' = this.GetEditableNode owner :?> RRBExpandedRelaxedNode<'T>
         let lastChild = this.LastChild
-        let expandedLastChild = lastChild.Expand owner
+        let expandedLastChild =
+            if shift <= Literals.blockSizeShift then
+                lastChild.Expand owner
+            else
+                (lastChild.Expand owner :?> RRBFullNode<'T>).MaybeExpand owner (down shift)
         if not (isSameObj lastChild expandedLastChild) then
             node'.Children.[node'.NodeSize - 1] <- expandedLastChild
         node' :> RRBNode<'T>
@@ -1934,9 +1941,9 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
                 this.SizeTable.[i] <- 0
             this.SetNodeSize len
             RRBNode<'T>.PopulateSizeTableS shift this.Children len this.SizeTable
-            this.ToFullNodeIfNeeded shift
+            (this.ToFullNodeIfNeeded shift :?> RRBFullNode<'T>).MaybeExpand owner shift
         else
-            RRBNode<'T>.MkNode owner shift arr
+            (RRBNode<'T>.MkNode owner shift arr :?> RRBFullNode<'T>).MaybeExpand owner shift
 
     override this.MakeLeftNodeForSplit owner shift children sizes =
         (RRBNode<'T>.MkNodeKnownSize owner shift children sizes).Expand owner
