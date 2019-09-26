@@ -1634,12 +1634,12 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         for i = 0 to size - 2 do
             arr.[i] <- (siblings.[i] :?> RRBFullNode<'T>).ShrinkRightSpine owner shift
         arr.[size - 1] <- siblings.[size - 1].Expand owner
-        // TODO: Examine the logic of this "if" statement and see if we can instead write a static RRBExpandedRelaxedNode.Create method that will take care of this
-        if size = 1 || (this.NodeSize = Literals.blockSize && this.FullNodeIsTrulyFull shift) then
+        if size <= 1 then
             RRBExpandedFullNode<'T>(owner, arr, size) :> RRBNode<'T>
         else
-            let sizeTable = RRBNode<'T>.CreateSizeTableS (up shift) arr size
-            RRBExpandedRelaxedNode<'T>(owner, arr, sizeTable, size) :> RRBNode<'T>
+            let shift' = up shift
+            let sizeTable = RRBNode<'T>.CreateSizeTableS shift' arr size
+            RRBExpandedRelaxedNode<'T>(owner, arr, sizeTable, size).ToFullNodeIfNeeded shift'
 
 
 
@@ -1954,12 +1954,12 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         for i = 0 to size - 2 do
             arr.[i] <- (siblings.[i] :?> RRBFullNode<'T>).ShrinkRightSpine owner shift
         arr.[size - 1] <- siblings.[size - 1].Expand owner
-        // TODO: Examine the logic of this "if" statement and see if we can instead write a static RRBExpandedRelaxedNode.Create method that will take care of this
-        if size = 1 || (this.NodeSize = Literals.blockSize && this.FullNodeIsTrulyFull shift) then
+        if size <= 1 then
             RRBExpandedFullNode<'T>(owner, arr, size) :> RRBNode<'T>
         else
-            let sizeTable = RRBNode<'T>.CreateSizeTableS (up shift) arr size
-            RRBExpandedRelaxedNode<'T>(owner, arr, sizeTable, size) :> RRBNode<'T>
+            let shift' = up shift
+            let sizeTable = RRBNode<'T>.CreateSizeTableS shift' arr size
+            RRBExpandedRelaxedNode<'T>(owner, arr, sizeTable, size).ToFullNodeIfNeeded shift'
 
 
 
