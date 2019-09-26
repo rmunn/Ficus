@@ -16,6 +16,7 @@
     <Compile Include="ExperimentalFsCheckCommands.fs" />
     <Compile Include="RRBVectorFsCheckCommands.fs" />
     <Compile Include="RRBVectorTransientCommands.fs" />
+    <Compile Include="RRBVectorTransientMailboxTest.fs" />
     <Compile Include="RRBVectorMoreCommands.fs" />
     <Compile Include="RRBVectorNodesExpectoTest.fs" />
     <Compile Include="RRBVectorExpectoTest.fs" />

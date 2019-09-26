@@ -100,7 +100,8 @@ type MyGenerators =
             override x.Shrinker _ = Seq.empty }
     static member arbSplitTest() =
         { new Arbitrary<RRBVectorTransientCommands.SplitTestInput>() with
-            override x.Generator = RRBVectorTransientCommands.genBasicOperations RRBVectorTransientCommands.cmdsExtraLarge
+            // override x.Generator = RRBVectorTransientCommands.genBasicOperations RRBVectorTransientCommands.cmdsExtraLarge
+            override x.Generator = RRBVectorTransientCommands.genComplexOperations
             override x.Shrinker _ = Seq.empty }
 
 Arb.register<MyGenerators>() |> ignore
@@ -1051,19 +1052,22 @@ let mergeTests =
 
 let doSplitTransientTest (RRBVectorTransientCommands.SplitTestInput (vec, cmds)) =
     let vec = if vec |> isTransient then (vec :?> RRBTransientVector<_>).Persistent() else vec :?> RRBPersistentVector<_>
-    let mailbox = RRBVectorTransientCommands.startSplitTesting vec cmds
-    let result = mailbox.PostAndReply RRBVectorTransientCommands.AllThreadsResult.Go
+    let mailbox = RRBVectorTransientMailboxTest.startSplitTesting vec cmds
+    let result = mailbox.PostAndReply RRBVectorTransientMailboxTest.AllThreadsResult.Go
     match result with
-    | RRBVectorTransientCommands.AllThreadsResult.Go _ -> failtest "Shouldn't happen"
-    | RRBVectorTransientCommands.AllThreadsResult.OneFailed (position, cmdsDone, vec, arr, cmd, errorMsg) ->
+    | RRBVectorTransientMailboxTest.AllThreadsResult.Go _ -> failtest "Shouldn't happen"
+    | RRBVectorTransientMailboxTest.AllThreadsResult.OneFailed (position, cmdsDone, vec, arr, cmd, errorMsg) ->
         failtestf "Split vector number %d failed on %A after %d commands, with message %A; vector was %A and corresponding array was %A" position cmd cmdsDone errorMsg vec arr
-    | RRBVectorTransientCommands.AllThreadsResult.AllCompleted _ -> ()
+    | RRBVectorTransientMailboxTest.AllThreadsResult.AllCompleted _ -> ()
 
 let splitTransientTests =
   testList "MailboxProcessor + Transient tests" [
-    testPropSm "small vectors (up to root+tail in size)" doSplitTransientTest
-    testPropMed "medium vectors (up to about 1-2 levels high)" doSplitTransientTest
-    testProp "large vectors (up to about 3-4 levels high)" doSplitTransientTest
+    // etestPropSm (116283732, 296649907) "small vectors (up to root+tail in size)" doSplitTransientTest
+    // etestPropMed (116284273, 296649907) "medium vectors (up to about 1-2 levels high)" doSplitTransientTest
+    // etestProp (116284201, 296649907) "large vectors (up to about 3-4 levels high)" doSplitTransientTest
+    ftestPropSm "small vectors into thing" <| fun (vec : RRBVector<int>) ->
+        let t = if vec |> isTransient then vec :?> RRBTransientVector<_> else (vec :?> RRBPersistentVector<_>).Transient()
+        RRBVectorTransientCommands.doTestXL t
 
     // Individual test cases that were once failures of the above properties
 
@@ -2132,37 +2136,37 @@ let tests =
         // )
         // Expect.equal vec.Length (size - Literals.blockSize - 1) <| sprintf "Vector has wrong size after pops"
 
-    longRunningTests
+    // longRunningTests
     splitTransientTests
-    regressionTests
-    threeLevelVectorTests
-    transientResidueTests
-    moreTransientResidueTests
-//   ]
-// ignore
-//   [
+//     regressionTests
+//     threeLevelVectorTests
+//     transientResidueTests
+//     moreTransientResidueTests
+// //   ]
+// // ignore
+// //   [
 
-    isolatedTest
-    emptyTests
-    singletonTests
-    dualTests
-    halfFullTailTests
-    fullTailTests
-    fullTailPlusOneTests
-    fullSaplingMinusOneTests
-    fullSaplingTests
-    fullSaplingPlusOneTests
+//     isolatedTest
+//     emptyTests
+//     singletonTests
+//     dualTests
+//     halfFullTailTests
+//     fullTailTests
+//     fullTailPlusOneTests
+//     fullSaplingMinusOneTests
+//     fullSaplingTests
+//     fullSaplingPlusOneTests
 
-    arrayTests
-    simpleVectorTests
-    manualVectorTests
-    constructedVectorSplitTests
-    splitJoinTests
-    insertTests
-    operationTests // Operational tests not yet ported to new API
-    vectorTests
-    nodeVecGenerationTests
-    mergeTests
+//     arrayTests
+//     simpleVectorTests
+//     manualVectorTests
+//     constructedVectorSplitTests
+//     splitJoinTests
+//     insertTests
+//     operationTests // Operational tests not yet ported to new API
+//     vectorTests
+//     nodeVecGenerationTests
+//     mergeTests
     // apiTests
 
     // perfTests
