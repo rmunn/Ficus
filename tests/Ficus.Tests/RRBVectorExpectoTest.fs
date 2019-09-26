@@ -1184,11 +1184,11 @@ let splitTransientTests =
         RRBVectorTransientCommands.doTestXL vec
     ptestPropSm "small commands" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doComplexTest vec
-    // etestPropMed (486436647, 296650093) "medium commands" <| fun (vec : RRBVector<int>) ->
-    //     RRBVectorTransientCommands.doComplexTest vec
-    // etestProp (375920089, 296650093) (*486436647, 296650093*) "large commands" <| fun (vec : RRBVector<int>) ->
-    //     logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
-    //     RRBVectorTransientCommands.doComplexTest vec
+    etestPropMed (486436647, 296650093) "medium commands" <| fun (vec : RRBVector<int>) ->
+        RRBVectorTransientCommands.doComplexTest vec
+    etestProp (375920089, 296650093) (*486436647, 296650093*) "large commands" <| fun (vec : RRBVector<int>) ->
+        logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
+        RRBVectorTransientCommands.doComplexTest vec
 
     // Test cases to move into regressionTests once they're done
     testCase "A push that grows the height of a transient vector will leave it with a properly relaxed and expanded root" <| fun _ ->
