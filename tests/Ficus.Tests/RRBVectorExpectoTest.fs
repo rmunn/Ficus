@@ -845,6 +845,31 @@ let regressionTests =
         let slicedA = arr.[..15]
         Expect.equal slicedT.Length slicedA.Length "Vector slice should be equivalent to array slice for transients as well"
 
+    ftestCase "Splitting (via an insert) the root of a transient will cause an expanded node to be the new root" <| fun _ ->
+        let repr = "30 32 29 29 30 24 30 30 30 32 29 31 25 27 25 28 30 28 T32"
+        let vec = RRBVectorGen.treeReprStrToVec repr
+        let push = RRBVectorTransientCommands.VecCommands.push
+        let insert = RRBVectorTransientCommands.VecCommands.insert
+        let cmds = [push 215; insert (-39,46); push 113; insert (24,49); insert (30,5); insert (-28,81); insert (27,73); insert (-76,34)]
+        // let doActionListTest (actions : RRBVectorMoreCommands.Cmd list) vec postPopCount postPushCount =
+        // logger.debug (eventX "Starting with {vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
+        let mutable current = (vec :?> RRBPersistentVector<_>).Transient()
+        let logVec action vec =
+            logger.warn (
+                eventX "After {cmd}, vec was {vec} with actual structure {structure}"
+                >> setField "cmd" action
+                >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec)
+                >> setField "structure" (sprintf "%A" vec))
+            ()
+        for action in cmds do
+            if action.ToString() = "insert (-76,34)" then
+                () // Breakpoint
+            current <- current |> action.RunActual
+            logVec (action.ToString()) current
+            RRBVectorProps.checkProperties current <| sprintf "Vector after %s" (action.ToString())
+
+        ()
+
     testCase "Splitting a transient will expand nodes appropriately" <| fun _ ->
         let repr = """
             [18 27 24 27 M M M M M 29 29 29 M-1 M M M M M M 28 26 28 M M M 30]

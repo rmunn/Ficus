@@ -853,6 +853,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                         newRoot, (max this.Shift right.Shift)
                     | newLeft, Some newRight ->
                         let oldShift = max this.Shift right.Shift
+                        // NOTE: Here we really do want newLeft, not newRight, to be the instance on which we call NewParent
                         let newRoot = (newLeft :?> RRBFullNode<'T>).NewParent this.Owner oldShift [|newLeft; newRight|]
                         newRoot, (RRBMath.up oldShift)
                 this.TailOffset <- this.Count + right.TailOffset
@@ -901,7 +902,9 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             let newRoot, newShift =
                 match this.Root.InsertedTree this.Owner this.Shift idx newItem None 0 with
                 | SimpleInsertion(newCurrent) -> newCurrent, this.Shift
-                | SplitNode(newCurrent, newRight) -> (newCurrent :?> RRBFullNode<'T>).NewParent this.Owner this.Shift [|newCurrent; newRight|], (RRBMath.up this.Shift)
+                | SplitNode(newCurrent, newRight) -> (newRight :?> RRBFullNode<'T>).NewParent this.Owner this.Shift [|newCurrent; newRight|], (RRBMath.up this.Shift)
+                // Was: | SplitNode(newCurrent, newRight) -> (newCurrent :?> RRBFullNode<'T>).NewParent this.Owner this.Shift [|newCurrent; newRight|], (RRBMath.up this.Shift)
+                // (Note "newCurrent", not newRight, as instance on which NewParent is called)
                 | SlidItemsLeft(newLeft, newCurrent) -> failwith "Impossible" // TODO: Write full error message in case this ever manages to happen
                 | SlidItemsRight(newCurrent, newRight) -> failwith "Impossible" // TODO: Write full error message in case this ever manages to happen
             if not <| isSameObj newRoot this.Root then
