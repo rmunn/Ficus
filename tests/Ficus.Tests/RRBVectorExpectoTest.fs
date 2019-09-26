@@ -244,6 +244,34 @@ let vectorTests =
             let a' = a.[idx..endIdx]
             Expect.vecEqualArr v' a' "Sliced vector should equal equivalent slice from array"
     )
+
+    testProp "vecSlice with vec.[a..b] notation" <| fun (vec : RRBVector<int>) (startIdx : NonNegativeInt option) (endIdx : NonNegativeInt option) ->
+        let endIdx = endIdx |> Option.map (fun (NonNegativeInt endIdx) -> if vec.Length = 0 then 0 else endIdx % vec.Length)
+        let startIdx = startIdx |> Option.map (fun (NonNegativeInt startIdx) -> if vec.Length = 0 then 0 else startIdx % vec.Length)
+        // Ensure start <= end, but not necessary if either is None
+        let startIdx, endIdx =
+            match startIdx, endIdx with
+            | _,      Some _ when vec.Length = 0 -> startIdx, None  // If vector is empty, only a "slice to end" is valid, and index 0 is off the end
+            | Some s, Some e when s > e -> endIdx, startIdx
+            | _ -> startIdx, endIdx
+        let arr = vec |> RRBVector.toArray
+        let slicedArr =
+            match startIdx, endIdx with
+            | Some s, Some e -> arr.[s..e]
+            | Some s, None -> arr.[s..]
+            | None, Some e -> arr.[..e]
+            | None, None -> arr
+        RRBVectorProps.checkProperties vec "Original vector"
+        let slicedVec =
+            match startIdx, endIdx with
+            | Some s, Some e -> vec.[s..e]
+            | Some s, None -> vec.[s..]
+            | None, Some e -> vec.[..e]
+            | None, None -> vec
+        RRBVectorProps.checkProperties slicedVec <| sprintf "Vector after slicing from %A to %A" startIdx endIdx
+        Expect.equal slicedVec.Length slicedArr.Length "Vector slicing should be equivalent to array slicing in length"
+        Expect.equal (slicedVec |> RRBVector.toArray) slicedArr "Vector slicing should be equivalent to array slicing"
+
     testCase "push M+1 items onto an empty vector" <| fun _ ->
         let mutable vec = RRBVector.empty<int>
         for i = 1 to Literals.blockSize + 1 do
@@ -776,6 +804,17 @@ let regressionTests =
         let l, r = doSplitTest vec 33
         doJoinTest l r
 
+    ftestCase "Slicing with vec.[a..b] syntax" <| fun _ ->
+        // TODO: Move to slicing tests?
+        let vec = RRBVectorGen.treeReprStrToVec "T18"
+        let arr = vec |> RRBVector.toArray
+        let slicedV = vec.[..15]
+        let slicedA = arr.[..15]
+        Expect.equal slicedV.Length slicedA.Length "Vector slice should be equivalent to array slice for transients as well"
+        let t = (vec :?> RRBPersistentVector<_>).Transient()
+        let slicedT = t.[..15]
+        let slicedA = arr.[..15]
+        Expect.equal slicedT.Length slicedA.Length "Vector slice should be equivalent to array slice for transients as well"
 
 (* Disabling this test since we no longer apply this invariant, and instead we allow saplings to have a mix of non-full root and tail
     // Note that by allowing saplings to have a mix of non-full root and tail, it allows us to reuse the node arrays and go faster in this particular scenario
@@ -1065,10 +1104,12 @@ let splitTransientTests =
     // etestPropSm (116283732, 296649907) "small vectors (up to root+tail in size)" doSplitTransientTest
     // etestPropMed (116284273, 296649907) "medium vectors (up to about 1-2 levels high)" doSplitTransientTest
     // etestProp (116284201, 296649907) "large vectors (up to about 3-4 levels high)" doSplitTransientTest
-    ftestPropSm "small vectors into thing" <| fun (vec : RRBVector<int>) ->
-        let t = if vec |> isTransient then vec :?> RRBTransientVector<_> else (vec :?> RRBPersistentVector<_>).Transient()
-        RRBVectorTransientCommands.doTestXL t
-
+    testPropSm "small vectors into thing" <| fun (vec : RRBVector<int>) ->
+        // let t = if vec |> isTransient then vec :?> RRBTransientVector<_> else (vec :?> RRBPersistentVector<_>).Transient()
+        RRBVectorTransientCommands.doTestXL vec
+    etestPropSm (1913561009, 296650027) "small commands" <| fun (vec : RRBVector<int>) ->
+        // let t = if vec |> isTransient then vec :?> RRBTransientVector<_> else (vec :?> RRBPersistentVector<_>).Transient()
+        RRBVectorTransientCommands.doComplexTest vec
     // Individual test cases that were once failures of the above properties
 
     testCase "Removing one item from full-sized root of transient preserves tail" <| fun _ ->
@@ -2138,7 +2179,7 @@ let tests =
 
     // longRunningTests
     splitTransientTests
-//     regressionTests
+    regressionTests
 //     threeLevelVectorTests
 //     transientResidueTests
 //     moreTransientResidueTests
@@ -2164,7 +2205,7 @@ let tests =
 //     splitJoinTests
 //     insertTests
 //     operationTests // Operational tests not yet ported to new API
-//     vectorTests
+    vectorTests
 //     nodeVecGenerationTests
 //     mergeTests
     // apiTests

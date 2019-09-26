@@ -100,8 +100,21 @@ module VecCommands =
     let genPush = Gen.choose(1, 100) |> Gen.map push
 
     let pop n = { new Cmd()
-                  with override __.RunActual vec = { 1 .. n } |> Seq.fold (fun vec _ -> vec.Pop() :?> RRBTransientVector<_>) vec
-                       override __.RunModel  arr = arr |> Array.truncate (arr.Length - n |> max 0)
+                  with override __.RunActual vec =
+                            // if n = 61 then
+                            //     logger.warnWithBP (eventX "About to pop {n} times in vec {vec} with repr {repr}"
+                            //         >> setField "n" (n)
+                            //         >> setField "vec" (sprintf "%A" vec)
+                            //         >> setField "repr" (sprintf "%A" (RRBVectorGen.vecToTreeReprStr vec))
+                            //     ) |> Async.RunSynchronously
+                            { 1 .. n } |> Seq.fold (fun vec _ -> vec.Pop() :?> RRBTransientVector<_>) vec
+                       override __.RunModel  arr =
+                            // if n = 61 then
+                            //     logger.warnWithBP (eventX "About to pop {n} times in array of length {vec}"
+                            //         >> setField "n" (n)
+                            //         >> setField "vec" (sprintf "%A" arr.Length)
+                            //     ) |> Async.RunSynchronously
+                            arr |> Array.truncate (arr.Length - n |> max 0)
                        override __.Pre(arr) = arr.Length >= n
                        override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After popping %d items, vec != arr" n
                        override __.ToString() = sprintf "pop %d" n }
@@ -122,7 +135,7 @@ module VecCommands =
     let remove idx = { new Cmd()
                        with override __.RunActual vec = let idx' = (if idx < 0 then idx + vec.Length else idx) |> min (vec.Length - 1) |> max 0 in vec |> RRBVector.remove idx' :?> RRBTransientVector<_>
                             override __.RunModel  arr = let idx' = (if idx < 0 then idx + arr.Length else idx) |> min (arr.Length - 1) |> max 0 in arr |> Array.copyAndRemoveAt idx'
-                            override __.Pre(arr) = let idx' = (if idx < 0 then idx + arr.Length else idx) |> min (arr.Length - 1) |> max 0 in idx' < arr.Length
+                            override __.Pre(arr) = let idx' = (if idx < 0 then idx + arr.Length else idx) |> min (arr.Length - 1) |> max 0 in arr.Length > 0 && idx' < arr.Length
                             override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After removing item at index %d, vec != arr" idx
                             override __.ToString() = sprintf "remove %d" idx }
     let genRemove = Gen.choose(-100, 100) |> Gen.map remove
@@ -132,49 +145,88 @@ module VecCommands =
     let removeFromTail = remove -2
 
     let slice (start, stop) =
-        let start, stop =
-            match start, stop with
-            | Some startValue, Some stopValue ->
-                if startValue < stopValue then start, stop else stop, start
-            | _ -> start, stop
         { new Cmd() with
             override __.RunActual vec =
                 let start' = start |> Option.map (fun start -> (if start < 0 then start + vec.Length else start) |> min (vec.Length - 1) |> max 0)
                 let stop' = stop |> Option.map (fun stop -> (if stop < 0 then stop + vec.Length else stop) |> min (vec.Length - 1) |> max 0)
-                vec.GetSlice (start', stop') :?> RRBTransientVector<_>
+                let start', stop' =
+                    match start', stop' with
+                    | Some startValue, Some stopValue ->
+                        if startValue < stopValue then start', stop' else stop', start'
+                    | _ -> start', stop'
+                let oldLen = vec.Length
+                let oldRepr = RRBVectorGen.vecToTreeReprStr vec
+                // logger.warnWithBP (eventX "About to slice [{start}..{stop}] in vector of length {len} with repr {repr}"
+                //     >> setField "start" (sprintf "%A" start')
+                //     >> setField "stop" (sprintf "%A" stop')
+                //     >> setField "len" (sprintf "%A" vec.Length)
+                //     >> setField "repr" (sprintf "%A" (RRBVectorGen.vecToTreeReprStr vec))
+                // ) |> Async.RunSynchronously
+                let newVec = vec.GetSlice (start', stop') :?> RRBTransientVector<_>
+                let newLen = newVec.Length
+                let newRepr = RRBVectorGen.vecToTreeReprStr vec
+                // logger.warnWithBP (eventX "Slice [{start}..{stop}] in vector of length {len} with repr {repr} produced new vector len {newLen} with repr {newRepr}"
+                //     >> setField "start" (sprintf "%A" start')
+                //     >> setField "stop" (sprintf "%A" stop')
+                //     >> setField "len" (oldLen)
+                //     >> setField "repr" (oldRepr)
+                //     >> setField "newLen" (newLen)
+                //     >> setField "newRepr" (newRepr)
+                // ) |> Async.RunSynchronously
+                newVec
              override __.RunModel arr =
                 let start' = start |> Option.map (fun start -> (if start < 0 then start + arr.Length else start) |> min (arr.Length - 1) |> max 0)
                 let stop' = stop |> Option.map (fun stop -> (if stop < 0 then stop + arr.Length else stop) |> min (arr.Length - 1) |> max 0)
+                let start', stop' =
+                    match start', stop' with
+                    | Some startValue, Some stopValue ->
+                        if startValue < stopValue then start', stop' else stop', start'
+                    | _ -> start', stop'
                 if arr |> Array.isEmpty then arr else
                 // Array.sub arr start' (stop' - start' + 1)
-                logger.warnWithBP (eventX "About to slice [{start}..{stop}] in array of length {len}"
-                    >> setField "start" (sprintf "%A" start)
-                    >> setField "stop" (sprintf "%A" stop)
-                    >> setField "len" (sprintf "%A" arr.Length)
-                ) |> Async.RunSynchronously
-                match start', stop' with
-                | None, None -> arr
-                | Some a, None -> arr.[a..]
-                | None, Some b -> arr.[..b]
-                | Some a, Some b -> arr.[a..b]
+                // logger.warnWithBP (eventX "About to slice [{start}..{stop}] in array of length {len}"
+                //     >> setField "start" (sprintf "%A" start')
+                //     >> setField "stop" (sprintf "%A" stop')
+                //     >> setField "len" (sprintf "%A" arr.Length)
+                // ) |> Async.RunSynchronously
+                let newArr =
+                    match start', stop' with
+                    | None, None -> arr
+                    | Some a, None -> arr.[a..]
+                    | None, Some b -> arr.[..b]
+                    | Some a, Some b -> arr.[a..b]
+                // logger.warnWithBP (eventX "Slice [{start}..{stop}] in array of length {len} produced length {newLen}"
+                //     >> setField "start" (sprintf "%A" start')
+                //     >> setField "stop" (sprintf "%A" stop')
+                //     >> setField "len" (sprintf "%A" arr.Length)
+                //     >> setField "newLen" (sprintf "%A" newArr.Length)
+                // ) |> Async.RunSynchronously
+                newArr
              override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After slicing from %A to %A, vec != arr" start stop
              override __.ToString() = sprintf "slice (%A,%A)" start stop }
 
     let genSlice = Gen.frequency [ 1, Gen.constant None; 7, Gen.choose (-100,100) |> Gen.map Some] |> Gen.two |> Gen.map slice
+
+    let logAndRun (cmd : Cmd) vec =
+        logger.warn (eventX "About to run {cmd} on {repr} = {vec}"
+            >> setField "cmd" (cmd.ToString())
+            >> setField "repr" (sprintf "%A" <| RRBVectorGen.vecToTreeReprStr vec)
+            >> setField "vec" (sprintf "%A" vec)
+            )
 
     let split (idx : int, cmdsL : Cmd list, cmdsR : Cmd list) =
         { new Cmd() with
             override __.RunActual vec =
                 let idx' = (if idx < 0 then idx + vec.Length else idx) |> min vec.Length |> max 0
                 let vL, vR = vec.Split idx'
-                let vL' = cmdsL |> List.fold (fun vec cmd -> cmd.RunActual vec) (vL :?> RRBTransientVector<_>)
-                let vR' = cmdsR |> List.fold (fun vec cmd -> cmd.RunActual vec) (vR :?> RRBTransientVector<_>)
+                let vL' = cmdsL |> List.fold (fun vec cmd -> if cmd.Pre (RRBVector.toArray vec) then cmd.RunActual vec else vec) (vL :?> RRBTransientVector<_>)
+                let vR' = cmdsR |> List.fold (fun vec cmd -> if cmd.Pre (RRBVector.toArray vec) then cmd.RunActual vec else vec) (vR :?> RRBTransientVector<_>)
                 vL'.Append vR' :?> RRBTransientVector<_>
             override __.RunModel arr =
                 let idx' = (if idx < 0 then idx + arr.Length else idx) |> min arr.Length |> max 0
                 let arrL, arrR = arr |> Array.splitAt idx'
-                let arrL' = cmdsL |> List.fold (fun arr cmd -> cmd.RunModel arr) arrL
-                let arrR' = cmdsR |> List.fold (fun arr cmd -> cmd.RunModel arr) arrR
+                let arrL' = cmdsL |> List.fold (fun arr cmd -> if cmd.Pre arr then cmd.RunModel arr else arr) arrL
+                let arrR' = cmdsR |> List.fold (fun arr cmd -> if cmd.Pre arr then cmd.RunModel arr else arr) arrR
                 Array.append arrL' arrR'
             override __.Post(vec, arr) = vecEqual vec arr <| sprintf "After splitting at %d and running %A on the left and %A on the right, vec != arr" idx cmdsL cmdsR
             override __.ToString() = sprintf "split (%d,%A,%A)" idx cmdsL cmdsR }
@@ -197,7 +249,7 @@ let cmdsMedium = [push 1; push 4; push 9; pop 1; pop 4; pop 9; insert5AtHead; in
 let cmdsLarge = [push 1; push 4; push 9; pop 1; pop 4; pop 9; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
 let cmdsExtraLarge = [push 4; push 9; push 33; pop 4; pop 9; pop 33; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
 
-let cmdFrequenciesForComplexOperations = (1, genSplit) :: cmdFrequenciesForSplit
+let cmdFrequenciesForComplexOperations = cmdFrequenciesForSplit
 
 type SplitTestInput = SplitTestInput of RRBVector<int> * (Cmd list)[]
 
@@ -225,12 +277,12 @@ let genComplexOperations = gen {
     return SplitTestInput (vec, cmds)
 }
 
-let propFromCmds vec (lst : Cmd list) =
+let propFromCmds (vec : RRBPersistentVector<int>) (lst : Cmd list) =
     let cmds = lst |> List.map fsCheckCmdFromOp
     // let len = vec |> RRBVector.length
     let arr = vec |> RRBVector.toArray
     { new ICommandGenerator<RRBTransientVector<int>, int[]> with
-        member __.InitialActual = vec
+        member __.InitialActual = vec.Transient()
         member __.InitialModel = arr
         member __.Next arr =
             // let len = arr.Length
@@ -238,5 +290,26 @@ let propFromCmds vec (lst : Cmd list) =
             Gen.elements cmds
         }
 
-let doTestL vec = propFromCmds vec cmdsLarge |> Command.toProperty
-let doTestXL vec = propFromCmds vec cmdsExtraLarge |> Command.toProperty
+let propFromCmdFrequencies (vec : RRBPersistentVector<int>) (lst : (int * Gen<Cmd>) list) =
+    let cmds = lst
+    // let len = vec |> RRBVector.length
+    let arr = vec |> RRBVector.toArray
+    { new ICommandGenerator<RRBTransientVector<int>, int[]> with
+        member __.InitialActual = vec.Transient()
+        member __.InitialModel = arr
+        member __.Next arr =
+            // let len = arr.Length
+            // TODO: Use len to determine what to run or not to run, e.g. don't run slices too often on tiny vectors
+            Gen.frequency cmds |> Gen.map fsCheckCmdFromOp
+        }
+
+let doTestL (vec : RRBVector<int>) =
+    let vec = if vec |> isTransient then (vec :?> RRBTransientVector<_>).Persistent() else vec :?> RRBPersistentVector<_>
+    propFromCmds vec cmdsLarge |> Command.toProperty
+let doTestXL (vec : RRBVector<int>) =
+    let vec = if vec |> isTransient then (vec :?> RRBTransientVector<_>).Persistent() else vec :?> RRBPersistentVector<_>
+    propFromCmds vec cmdsExtraLarge |> Command.toProperty
+
+let doComplexTest (vec : RRBVector<int>) =
+    let vec = if vec |> isTransient then (vec :?> RRBTransientVector<_>).Persistent() else vec :?> RRBPersistentVector<_>
+    propFromCmdFrequencies vec cmdFrequenciesForComplexOperations |> Command.toProperty

@@ -273,7 +273,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     override this.GetSlice (start, stop) =
         match start, stop with
         | None, None -> this :> RRBVector<'T>
-        | None, Some stop -> this.Take stop
+        | None, Some stop -> this.Take (stop + 1)  // vec.[..5] should return all indices from 0 to 5, i.e. 6 in total
         | Some start, None -> this.Skip start
         | Some start, Some stop -> this.Slice (start, stop)
 
@@ -748,7 +748,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
         this.ThrowIfNotValid()
         match start, stop with
         | None, None -> this :> RRBVector<'T>
-        | None, Some stop -> this.Take stop
+        | None, Some stop -> this.Take (stop + 1)  // vec.[..5] should return all indices from 0 to 5, i.e. 6 in total
         | Some start, None -> this.Skip start
         | Some start, Some stop -> this.Slice (start, stop)
 
