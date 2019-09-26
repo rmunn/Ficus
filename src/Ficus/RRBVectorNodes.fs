@@ -542,13 +542,10 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
         | Some node' -> node', shift
         | None ->
             let newRight = this.NewPathR owner shift newLeaf :?> RRBFullNode<'T>
-            let newParent = this.NewParent owner shift [|this.ShrinkRightSpine owner shift; newRight.MaybeExpand owner|]
-            let newParent' = (newParent :?> RRBFullNode<'T>).MaybeExpand owner
-            // TODO: Expand newRight iff we're an expanded node ourselves. Perhaps we need a MaybeExpand function in our API?
-            // Because this is the root (heh) of the problem: the second node we create is a FullNode even if we were an ExpandedNode,
-            // at which point we've violated the promise that an expanded node will always have an expanded right spine. And so our
-            // tree starts being inefficient, and also the full node ends up with expanded twig children, and so on.
-            newParent', up shift
+            // Remember that NewPathR calls MaybeExpand, so we don't have to call it here
+            let newParent = this.NewParent owner shift [|this.ShrinkRightSpine owner shift; newRight|]
+            // And if we're an expanded node, then this.NewParent will create a new expanded node
+            newParent, up shift
 
     member this.TryPrependLeaf owner shift (newLeaf : RRBLeafNode<'T>) leafLen =
         if shift <= Literals.blockSizeShift then

@@ -833,7 +833,7 @@ let regressionTests =
         let l, r = doSplitTest vec 33
         doJoinTest l r
 
-    ftestCase "Slicing with vec.[a..b] syntax" <| fun _ ->
+    testCase "Slicing with vec.[a..b] syntax" <| fun _ ->
         // TODO: Move to slicing tests?
         let vec = RRBVectorGen.treeReprStrToVec "T18"
         let arr = vec |> RRBVector.toArray
@@ -845,7 +845,7 @@ let regressionTests =
         let slicedA = arr.[..15]
         Expect.equal slicedT.Length slicedA.Length "Vector slice should be equivalent to array slice for transients as well"
 
-    ftestCase "Splitting (via an insert) the root of a transient will cause an expanded node to be the new root" <| fun _ ->
+    testCase "Splitting (via an insert) the root of a transient will cause an expanded node to be the new root" <| fun _ ->
         let repr = "30 32 29 29 30 24 30 30 30 32 29 31 25 27 25 28 30 28 T32"
         let vec = RRBVectorGen.treeReprStrToVec repr
         let push = RRBVectorTransientCommands.VecCommands.push
@@ -855,11 +855,11 @@ let regressionTests =
         // logger.debug (eventX "Starting with {vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
         let mutable current = (vec :?> RRBPersistentVector<_>).Transient()
         let logVec action vec =
-            logger.warn (
-                eventX "After {cmd}, vec was {vec} with actual structure {structure}"
-                >> setField "cmd" action
-                >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec)
-                >> setField "structure" (sprintf "%A" vec))
+            // logger.warn (
+            //     eventX "After {cmd}, vec was {vec} with actual structure {structure}"
+            //     >> setField "cmd" action
+            //     >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec)
+            //     >> setField "structure" (sprintf "%A" vec))
             ()
         for action in cmds do
             if action.ToString() = "insert (-76,34)" then
@@ -1182,12 +1182,12 @@ let splitTransientTests =
     // etestProp (116284201, 296649907) "large vectors (up to about 3-4 levels high)" doSplitTransientTest
     testPropSm "small vectors into thing" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doTestXL vec
-    ftestPropSm "small commands" <| fun (vec : RRBVector<int>) ->
+    ptestPropSm "small commands" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doComplexTest vec
-    etestPropMed (486436647, 296650093) "medium commands" <| fun (vec : RRBVector<int>) ->
-        RRBVectorTransientCommands.doComplexTest vec
-    etestProp (375920089, 296650093) (*486436647, 296650093*) "large commands" <| fun (vec : RRBVector<int>) ->
-        RRBVectorTransientCommands.doComplexTest vec
+    // etestPropMed (486436647, 296650093) "medium commands" <| fun (vec : RRBVector<int>) ->
+    //     RRBVectorTransientCommands.doComplexTest vec
+    // etestProp (375920089, 296650093) (*486436647, 296650093*) "large commands" <| fun (vec : RRBVector<int>) ->
+    //     RRBVectorTransientCommands.doComplexTest vec
 
     // Individual test cases that were once failures of the above properties
 
@@ -2259,34 +2259,34 @@ let tests =
     // longRunningTests
     splitTransientTests
     regressionTests
-//     threeLevelVectorTests
-//     transientResidueTests
-//     moreTransientResidueTests
+    threeLevelVectorTests
+    transientResidueTests
+    moreTransientResidueTests
 // //   ]
 // // ignore
 // //   [
 
-//     isolatedTest
-//     emptyTests
-//     singletonTests
-//     dualTests
-//     halfFullTailTests
-//     fullTailTests
-//     fullTailPlusOneTests
-//     fullSaplingMinusOneTests
-//     fullSaplingTests
-//     fullSaplingPlusOneTests
+    isolatedTest
+    emptyTests
+    singletonTests
+    dualTests
+    halfFullTailTests
+    fullTailTests
+    fullTailPlusOneTests
+    fullSaplingMinusOneTests
+    fullSaplingTests
+    fullSaplingPlusOneTests
 
-//     arrayTests
-//     simpleVectorTests
-//     manualVectorTests
-//     constructedVectorSplitTests
-//     splitJoinTests
-//     insertTests
-//     operationTests // Operational tests not yet ported to new API
+    arrayTests
+    simpleVectorTests
+    manualVectorTests
+    constructedVectorSplitTests
+    splitJoinTests
+    insertTests
+    operationTests // Operational tests not yet ported to new API
     vectorTests
-//     nodeVecGenerationTests
-//     mergeTests
+    nodeVecGenerationTests
+    mergeTests
     // apiTests
 
     // perfTests
