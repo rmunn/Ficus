@@ -8,7 +8,7 @@
             "name": "Launch",
             "type": "coreclr",
             "request": "launch",
-            "program": "${workspaceRoot}/tests/Ficus.Tests/bin/Debug/netcoreapp2.0/Ficus.TestsNew.dll",
+            "program": "${workspaceRoot}/tests/Ficus.Tests/bin/Debug/netcoreapp2.0/Ficus.Tests.dll",
             // "type": "mono",
             // "program": "${workspaceRoot}/tests/Ficus.Tests/bin/Debug/net461/Ficus.TestsNew.exe",
             "args": [
@@ -21,7 +21,7 @@
             "preLaunchTask": "build.sh DotnetBuild",
             "type": "coreclr",
             "request": "launch",
-            "program": "${workspaceRoot}/tests/Ficus.Tests/bin/Debug/netcoreapp2.0/Ficus.TestsNew.dll",
+            "program": "${workspaceRoot}/tests/Ficus.Tests/bin/Debug/netcoreapp2.0/Ficus.Tests.dll",
             // "type": "mono",
             // "program": "${workspaceRoot}/tests/Ficus.Tests/bin/Debug/net461/Ficus.TestsNew.exe",
             "args": [
