@@ -138,7 +138,7 @@ Target.create "DotnetBuild" <| fun ctx ->
 
 let invokeAsync f = async { f () }
 
-let coverageThresholdPercent = 80
+let coverageThresholdPercent = 1
 
 Target.create "DotnetTest" <| fun ctx ->
     let excludeCoverage =
@@ -149,9 +149,9 @@ Target.create "DotnetTest" <| fun ctx ->
         let args =
             [
                 "--no-build"
-                // "/p:AltCover=true"
-                // sprintf "/p:AltCoverThreshold=%d" coverageThresholdPercent
-                // sprintf "/p:AltCoverAssemblyExcludeFilter=%s" excludeCoverage
+                "/p:AltCover=true"
+                sprintf "/p:AltCoverThreshold=%d" coverageThresholdPercent
+                sprintf "/p:AltCoverAssemblyExcludeFilter=%s" excludeCoverage
             ] |> String.concat " "
         { c with
             Configuration = configuration (ctx.Context.AllExecutingTargets)
