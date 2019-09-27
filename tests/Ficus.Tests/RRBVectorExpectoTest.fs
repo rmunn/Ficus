@@ -1188,18 +1188,21 @@ let splitTransientTests =
         RRBVectorTransientCommands.doComplexTest vec
     // etestProp (375920089, 296650093) (*486436647, 296650093*) "large commands" <| fun (vec : RRBVector<int>) ->
     //     logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
+    //     RRBVectorProps.checkProperties vec "Original persistent vector"
     //     RRBVectorTransientCommands.doComplexTest vec
 
     // Test cases to move into regressionTests once they're done
-    ftestCase "FIgure out the name" <| fun _ ->
-        // Note that it fails on the *original* transient vector. And indeed, there's one node in there of size 43! I suspect I copied the data wrong.
+    ftestCase "Figure out the name" <| fun _ ->
         let vec = RRBVectorGen.looserTreeReprStrToVec TestData.ridiculouslyLargeVector
         RRBVectorProps.checkProperties vec "Original persistent vector"
         let mutable t = (vec :?> RRBPersistentVector<_>).Transient()
         RRBVectorProps.checkProperties t "Original transient vector"
-        for i = 1 to 88 do
+        for i = 1 to 8 do
             t <- t.Push i :?> RRBTransientVector<_>
+            // logger.warn (eventX "Transient after push {i}: {vec}" >> setField "i" i >> setField "vec" (RRBVectorGen.vecToTreeReprStr t))
             RRBVectorProps.checkProperties t <| sprintf "Transient after push %d" i
+        // After push 7, we're fine. THe eight push builds a new path to the root, and apparently fails to clean up the old path
+        // so that we get "If a tree's root is an expanded Node variant, its right spine should contain expanded nodes but nothing else should"
 
     testCase "A push that grows the height of a transient vector will leave it with a properly relaxed and expanded root" <| fun _ ->
         let vec = RRBVectorGen.treeReprStrToVec "M 17 16 M 29 30 24 30 30 30 M 29 M-1 25 27 25 28 30 28 M M M M M 17 16 M 17 16 M M M T32"
