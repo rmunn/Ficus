@@ -1191,6 +1191,12 @@ let splitTransientTests =
         RRBVectorProps.checkProperties vec "Original persistent vector"
         RRBVectorTransientCommands.doComplexTest vec
 
+    ftestCase "Transients can be split apart and re-appended again" <| fun _ ->
+        let vec = (RRBVectorGen.treeReprStrToVec "M T5" :?> RRBPersistentVector<_>).Transient()
+        let vL, vR = vec.Split (Literals.blockSize + 2)
+        vL.Append vR |> ignore
+        RRBVectorProps.checkProperties vL "Vector after appending"
+
     // Test cases to move into regressionTests once they're done
     testCase "Figure out the name" <| fun _ ->
         let vec = RRBVectorGen.looserTreeReprStrToVec TestData.ridiculouslyLargeVector
