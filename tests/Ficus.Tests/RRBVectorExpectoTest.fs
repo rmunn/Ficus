@@ -1197,12 +1197,13 @@ let splitTransientTests =
         RRBVectorProps.checkProperties vL "Vector after appending"
 
     // Test cases to move into regressionTests once they're done
-    ftestCase "split commands that failed, medium" <| fun _ ->
+    ptestCase "template for regression tests on split commands that failed" <| fun _ ->
         let push = RRBVectorTransientCommands.VecCommands.push
         let pop = RRBVectorTransientCommands.VecCommands.pop
         let insert = RRBVectorTransientCommands.VecCommands.insert
         let remove = RRBVectorTransientCommands.VecCommands.remove
         let slice = RRBVectorTransientCommands.VecCommands.slice
+        // Edit cmdsL and cmdsR below
         let cmdsL = [push 46; remove 62; insert (-45,31); insert (21,100); insert (58,34); pop 61; remove -56; remove 57; insert (63,15); insert (-36,21)]
         let cmdsR = [insert (77,55); insert (-58,89); push 51; push 85; insert (82,98); insert (-53,70); insert (-16,39); slice (Some -70,Some 81); remove 3; remove -20]
 
@@ -1214,6 +1215,7 @@ let splitTransientTests =
             //     >> setField "structure" (sprintf "%A" vec))
             ()
 
+        // Edit vec below
         let vec = RRBVectorGen.treeReprStrToVec "[M*M]*12 T8"
         let mutable current = (vec :?> RRBPersistentVector<_>).Transient()
         let vL, vR = current.Split 99
@@ -1245,12 +1247,21 @@ let splitTransientTests =
             >> setField "structure" (sprintf "%A" vec))
         RRBVectorProps.checkProperties joined "Joined vector after all commands run"
 
+    ftestCase "Join transients where left root fits neatly into leftmost trig of right tree" <| fun _ ->
+        let vL = RRBVectorGen.treeReprStrToVec "M-1 17 16 T22"
+        let vR = RRBVectorGen.treeReprStrToVec "[13 M*26] [M*M]*10 [M*16] [M*14 17 16 M M M-1] T13"
+        let tL = (vL :?> RRBPersistentVector<_>).Transient()
+        let tR = (vR :?> RRBPersistentVector<_>).Transient()
+        tR.Owner <- tL.Owner  // So they can be joined still as transients. Not a good idea outside of unit tests.
+        tL.Append tR |> ignore
+        RRBVectorProps.checkProperties tL "Joined vector after all commands run"
+
     ftestCase "split commands that failed, medium, simpler" <| fun _ ->
         let vL = RRBVectorGen.treeReprStrToVec "17 16 M-1 17 17 M M 17 16 M T15"
         let vR = RRBVectorGen.treeReprStrToVec "5 24 30 28 M 28 26 M M-1 M 26 29 M-1 24 M 27 28 26 30 M M 17 25 24 M M M T3"
         let tL = (vL :?> RRBPersistentVector<_>).Transient()
         let tR = (vR :?> RRBPersistentVector<_>).Transient()
-        tR.Owner <- tL.Owner  // So they can be joined still as transients. Not a good idea normally.
+        tR.Owner <- tL.Owner  // So they can be joined still as transients. Not a good idea outside of unit tests.
         tL.Append tR |> ignore
         RRBVectorProps.checkProperties tL "Joined vector after all commands run"
 // 	RRBPersistentVector<length=648,shift=5,tailOffset=636,root=RelaxedNode(length=22, sizetable=[|30; 60; 86; 115; 142; 174; 202; 228; 260; 291; 323; 349; 378; 409; 433; 465;
