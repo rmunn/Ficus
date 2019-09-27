@@ -2671,7 +2671,6 @@ RRBPersistentVector:
 RRBTransientVector:
   ToString() - convert to a useful-for-users format, then test
   ThrowIfNotValid - set up several operations where the transient is NOT valid (many manual tests)
-  ShortenTree - we only exercise this at height 1. We need some taller transient trees to test.
   ShiftNodesFromTailIfNeeded - the "if not <| isSameObj newRoot this.Root then" paths are never followed, but I can't come up with
   a scenario in which they would ever be. The root is going to have the right owner already, so we can't make that happen. Ignore.
   IsEmpty - manual tests, a couple of them
@@ -2682,16 +2681,14 @@ RRBTransientVector:
   RevIterItems - ditto; this would exercise RevIterLeaves
   Peek - manual test, pretty simple
   Pop() on empty vector - manual test to verify that exception thrown
-  Take - not at all tested
-  Skip - ditto
-  Split - ditto
+  Take - test idx <= 0 (take no items, or take negative items, is a no-op - write tests to verify that)
   Slice, GetSlice - ditto, WIP (will exercise Take and Skip at the same time)
-  Append - not at all tested
+  Append - no tests where tail can NOT fit into the merged tree. Need to exercise that in case of bugs.
+           Also, no tests with transient left and persistent right, or with transient right from a different owner. The latter is especially interesting.
   Insert - "if not <| isSameObj newRoot this.Root then" path not taken. Might need to exercise "insert pushes root up" scenario (initially full tree, insert into full tail)
            Also, SplitNode not exercised. Exercise the "insert pushes root up" with insert in the main body of a full tree. Other two match paths are impossible; ignore.
   RemoveWithoutRebalance - not exercised. Property test for this, making sure it returns same result as Remove albeit with a possible-less-efficient tree.
     (Note: windowedSeq cannot exercise this, as it only does RemoveWithoutRebalance on persistents)
-  RemoveImpl - haven't exercised the code path where you remove one item from a length-one tail (last item of vector)
   Update - not exercised
   GetItem - not exercised
   EnsureValidIndex - exercise by testing that exceptions are thrown correctly
