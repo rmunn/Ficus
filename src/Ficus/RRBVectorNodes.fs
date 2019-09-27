@@ -972,7 +972,7 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
                     |> shrinkLeftNode owner shift shouldKeepExpandedLeftNode
             | childL', Some childR' ->
                 let parentL = this.UpdateChildSAbs owner shift (this.NodeSize - 1) childL' (childL'.TreeSize (down shift))
-                // I think the next line is not needed here, as there's no way for childR' to be expanded unless right.NodeSize = 1
+                // I think the next line is probably needed, but I want to get a regression test for it. So comment it out and find a regression.
                 // let childR' = if right.NodeSize > 1 then (childR' :?> RRBFullNode<'T>).ShrinkRightSpine owner (down rightShift) else childR'
                 let parentR = right.UpdateChildSAbs owner rightShift 0 childR' (childR'.TreeSize (down rightShift))
                 (parentL :?> RRBFullNode<'T>).ConcatNodes owner shift (parentR :?> RRBFullNode<'T>)
@@ -986,9 +986,10 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
                 (parentR, None)  // TODO: Test this: do I need to shrink parentR?
                 |> shrinkLeftNode owner rightShift shouldKeepExpandedLeftNode
             | childL', Some childR' ->
-                let parentL = (childL' :?> RRBFullNode<'T>).NewParent owner (down rightShift) [|childL'|]
-                // I think the next line is not needed here, as there's no way for childR' to be expanded unless right.NodeSize = 1
-                // let childR' = if right.NodeSize > 1 then (childR' :?> RRBFullNode<'T>).ShrinkRightSpine owner (down rightShift) else childR'
+                // Yes, really: next line is not a mistake. We want childR'.NewParent with [|childL'|] as data
+                let parentL = (childR' :?> RRBFullNode<'T>).NewParent owner (down rightShift) [|childL'|]
+                // Turns out the next line *is* needed here, so the other one (above) probably is too
+                let childR' = if right.NodeSize > 1 then (childR' :?> RRBFullNode<'T>).ShrinkRightSpine owner (down rightShift) else childR'
                 let parentR = right.UpdateChildSAbs owner rightShift 0 childR' (childR'.TreeSize (down rightShift))
                 (parentL :?> RRBFullNode<'T>).ConcatNodes owner rightShift (parentR :?> RRBFullNode<'T>)
                 |> shrinkLeftNode owner rightShift shouldKeepExpandedLeftNode
