@@ -1186,9 +1186,9 @@ let splitTransientTests =
     //     RRBVectorTransientCommands.doComplexTest vec
     // etestPropMed (1198601253, 296650358) "medium commands" <| fun (vec : RRBVector<int>) ->
     //     RRBVectorTransientCommands.doComplexTest vec
-    etestProp (1198601605, 296650358) "large commands" <| fun (vec : RRBVector<int>) ->
-        // logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
-        RRBVectorTransientCommands.doComplexTest vec
+    // etestProp (1198601605, 296650358) "large commands" <| fun (vec : RRBVector<int>) ->
+    //     // logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
+    //     RRBVectorTransientCommands.doComplexTest vec
 
     testCase "Transients can be split apart and re-appended again" <| fun _ ->
         let vec = (RRBVectorGen.treeReprStrToVec "M T5" :?> RRBPersistentVector<_>).Transient()
@@ -1205,8 +1205,8 @@ let splitTransientTests =
         let slice = RRBVectorTransientCommands.VecCommands.slice
         // Edit cmdsL and cmdsR below
         let cmds = []
-        let cmdsL = [remove 60; insert (-88,52); insert (-51,58); insert (15,30); remove 40; insert (-46,39); insert (20,11); slice (Some -34,Some 61); remove 87; remove -1; insert (62,26); insert (-73,32); push 22]
-        let cmdsR = [insert (16,82); insert (82,54); pop 81; push 15; remove 41; insert (20,97); insert (86,69); insert (-78,75); push 65; remove 59; insert (91,50); insert (-73,56); insert (-7,25); pop 52; remove -59]
+        let cmdsL = [insert (74,46); remove 29; push 23; insert (-34,2); insert (-32,7); insert (-43,20); push 16; remove -66; remove 91; push 17; insert (-27,10); insert (39,79); pop 44; push 37; insert (25,77); push 100]
+        let cmdsR = [push 39; push 63; insert (71,95); insert (75,64); remove -49; insert (49,68); pop 95; push 67; remove -51; insert (54,14); insert (-81,83); pop 10; push 82; remove -33; insert (-76,64); insert (-39,70)]
 
         let logVec cmd vec =
             // logger.debug (
@@ -1217,14 +1217,15 @@ let splitTransientTests =
             ()
 
         // Edit vec below
-        let vec = RRBVectorGen.looserTreeReprStrToVec TestData.anotherLargeVector
+        let vec = RRBVectorGen.looserTreeReprStrToVec "[[M*M]*M]*2 T15"
+        // Original was *28, but *2 is more than enough
         let mutable current = (vec :?> RRBPersistentVector<_>).Transient()
         // for cmd in cmds do
         //     current <- current |> cmd.RunActual
         //     logVec (cmd.ToString()) current
         //     RRBVectorProps.checkProperties current <| sprintf "Pre-split vector after %s" (cmd.ToString())
 
-        let vL, vR = current.Split 38
+        let vL, vR = current.Split 34
 
         current <- vL :?> RRBTransientVector<_>
         for cmd in cmdsL do
@@ -1240,18 +1241,37 @@ let splitTransientTests =
 
         logger.warn (
             eventX "After all commands, vL was {vec} with actual structure {structure}"
-            >> setField "vec" (RRBVectorGen.vecToTreeReprStr vL)
-            >> setField "structure" (sprintf "%A" vec))
+            >> setField "vec" (RRBVectorGen.vecToTreeReprStr vL))
+            // >> setField "structure" (sprintf "%A" vL))
         logger.warn (
             eventX "After all commands, vR was {vec} with actual structure {structure}"
-            >> setField "vec" (RRBVectorGen.vecToTreeReprStr vR)
-            >> setField "structure" (sprintf "%A" vec))
+            >> setField "vec" (RRBVectorGen.vecToTreeReprStr vR))
+            // >> setField "structure" (sprintf "%A" vR))
         let joined = vL.Append vR
         logger.warn (
             eventX "After all commands, joined vector was {vec} with actual structure {structure}"
-            >> setField "vec" (RRBVectorGen.vecToTreeReprStr joined)
-            >> setField "structure" (sprintf "%A" vec))
+            >> setField "vec" (RRBVectorGen.vecToTreeReprStr joined))
+            // >> setField "structure" (sprintf "%A" joined))
         RRBVectorProps.checkProperties joined "Joined vector after all commands run"
+
+    ftestCase "Join transients where they... do something, left smaller" <| fun _ ->
+        let vL = RRBVectorGen.treeReprStrToVec "17 27 M M M M T15"
+        let vR = RRBVectorGen.treeReprStrToVec "[[M M 18 16 M*28] [M*M]*M-1] [[M*M]*M] [[17 16 M M 17 16]*1] T31"
+        let tL = (vL :?> RRBPersistentVector<_>).Transient()
+        let tR = (vR :?> RRBPersistentVector<_>).Transient()
+        tR.Owner <- tL.Owner  // So they can be joined still as transients. Not a good idea outside of unit tests.
+        tL.Append tR |> ignore
+        RRBVectorProps.checkProperties tL "Joined vector after all commands run"
+
+    testCase "Join transients where they... do something, right smaller" <| fun _ ->
+        // This one passes, BTW
+        let vL = RRBVectorGen.treeReprStrToVec "[[M M 18 16 M*28] [M*M]*M-1] [[M*M]*M] [[17 16 M M 17 16]*1] T31"
+        let vR = RRBVectorGen.treeReprStrToVec "17 27 M M M M T15"
+        let tL = (vL :?> RRBPersistentVector<_>).Transient()
+        let tR = (vR :?> RRBPersistentVector<_>).Transient()
+        tR.Owner <- tL.Owner  // So they can be joined still as transients. Not a good idea outside of unit tests.
+        tL.Append tR |> ignore
+        RRBVectorProps.checkProperties tL "Joined vector after all commands run"
 
     testCase "Join transients where they trigger a rebalance above the twig level, left smaller" <| fun _ ->
         let vL = RRBVectorGen.treeReprStrToVec "14 17 T25"
