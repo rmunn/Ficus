@@ -1176,17 +1176,17 @@ let doSplitTransientTest (RRBVectorTransientCommands.SplitTestInput (vec, cmds))
 
 let splitTransientTests =
   testList "MailboxProcessor + Transient tests" [
-    // etestPropSm (116283732, 296649907) "small vectors (up to root+tail in size)" doSplitTransientTest
-    // etestPropMed (116284273, 296649907) "medium vectors (up to about 1-2 levels high)" doSplitTransientTest
-    // etestProp (116284201, 296649907) "large vectors (up to about 3-4 levels high)" doSplitTransientTest
+    testPropSm "small vectors (up to root+tail in size)" doSplitTransientTest
+    testPropMed "medium vectors (up to about 1-2 levels high)" doSplitTransientTest
+    testProp "large vectors (up to about 3-4 levels high)" doSplitTransientTest
     testPropSm "small vectors into thing" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doTestXL vec
     testPropSm "small commands" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doComplexTest vec
     testPropMed "medium commands" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doComplexTest vec
-    etestProp (902165491, 296650450) "large commands" <| fun (vec : RRBVector<int>) ->
-        logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
+    testProp "large commands" <| fun (vec : RRBVector<int>) ->
+        // logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
         RRBVectorTransientCommands.doComplexTest vec
 
     testCase "Transients can be split apart and re-appended again" <| fun _ ->
@@ -1253,7 +1253,7 @@ let splitTransientTests =
             // >> setField "structure" (sprintf "%A" joined))
         RRBVectorProps.checkProperties joined "Joined vector after all commands run"
 
-    ftestCase "Join transients where they... do something else, left smaller" <| fun _ ->
+    testCase "Join transients where they... do something else, left smaller" <| fun _ ->
         let vL = RRBVectorGen.treeReprStrToVec "17 26 24 M M M M M T21"
         let vR = RRBVectorGen.treeReprStrToVec "[27 18 25 24 M-1 M 27 M M 28 M-1 M-1 30 M M M M M-1 M M M M-1 M M M M] [28 27 M 30 30 M-1 30 M M M M M 29 M M M 27 M M M M 28 M M M M-1 30 30 29 M-1 27 M] [M M 29 28 M M M M 28 29 29 M M M M M 27 26 29 30 M M 29 30 28 28 28 M 29] [M M-1 M M M M M 24 28 28 29 30 M M-1 25 26 29 M M M M-1 M M M 28 M M] [M M M M M M M M M M M M M M M M M M M M M M 30 M M M M-1 M M M] [M M 27 M 30 M M M-1 25 M 27 M M 30 M 30 28 M M M M-1 M 25 28 29 29] [M M M M-1 M M 27 28 M 26 M M 29 30 M M 29 M M-1 M M-1 M 29 M M 30 M M] [M-1 29 24 29 M M M 30 M 28 28 M M M M-1 M 30 30 M M M-1 M M 30 29 M M M M M] [M M M 30 M M M 29 M M M M 26 M M M M M M M M-1 M 23 M] [M M M M M M-1 29 29 M M M-1 M M M M M M M M M M 26 M-1 M M M 28 M-1 M-1 27] [M M M M M M M M M-1 30 M M M M M M M M M M 26 M M M M M M-1 M-1 M M M] [M M M M 30 M M M M M M M M M M M 27 M M M M M M M M M M M M 23 M] [M M M M M M M M M M M M M M M-1 M M M M M M M M M M] [M-1 M M M M M M-1 M M M M M M-1 M M M M M-1 M M M M M 30 M M] [30 M 29 M 25 30 M 24 27 M 29 M 28 M M-1 28 M 27 M 30 27 24 25 28 29 30 M 30 M 26 M 28] [26 24 M M 28 28 26 28 M M-1 M M-1 M M 28 27 24 M 30 27 M M 24 27 24 25 26] [30 27 M M-1 M 28 M 25 28 M-1 M M 29 28 M 28 25 M M-1 M 29 29 28 27 M-1 28 30 M 30 29 M-1 26] [M M M 29 26 29 26 M 29 M M 22 28 M 28 28 M 28 M 24 M M 29 27 M M 24 26 27 M] [26 M M M M 23 27 M M-1 30 M 30 30 29 28 M M-1 M M 27 23 29 M 23 M M M 26 M M] [26 27 M 27 28 M 30 M-1 M-1 29 M 30 30 M 27 23 26 M M M 20 26 30 M-1 M M] [26 M-1 26 M M-1 30 28 M M 28 M M M M M M 28 29 M 26 M M M 27 28 M M M 26 M M-1 28] [M M M M 27 30 M M M M M-1 29 M 25 21 29 28 28 M M-1 M 28 25 27 M M-1 28] [M 26 M 28 27 25 30 M M 29 M M M-1 M M M M M M M 26 M-1 27 M M M 25] [M M M M M M M 27 M-1 M 29 28 27 M-1 M M M 29 29 29 24 26 30 30 M M] T23"
         let tL = (vL :?> RRBPersistentVector<_>).Transient()
@@ -2561,37 +2561,37 @@ let tests =
         // )
         // Expect.equal vec.Length (size - Literals.blockSize - 1) <| sprintf "Vector has wrong size after pops"
 
-    // longRunningTests
+    longRunningTests
     splitTransientTests
-//     regressionTests
-//     threeLevelVectorTests
-//     transientResidueTests
-//     moreTransientResidueTests
-// // //   ]
-// // // ignore
-// // //   [
+    regressionTests
+    threeLevelVectorTests
+    transientResidueTests
+    moreTransientResidueTests
+// //   ]
+// // ignore
+// //   [
 
-//     isolatedTest
-//     emptyTests
-//     singletonTests
-//     dualTests
-//     halfFullTailTests
-//     fullTailTests
-//     fullTailPlusOneTests
-//     fullSaplingMinusOneTests
-//     fullSaplingTests
-//     fullSaplingPlusOneTests
+    isolatedTest
+    emptyTests
+    singletonTests
+    dualTests
+    halfFullTailTests
+    fullTailTests
+    fullTailPlusOneTests
+    fullSaplingMinusOneTests
+    fullSaplingTests
+    fullSaplingPlusOneTests
 
-//     arrayTests
-//     simpleVectorTests
-//     manualVectorTests
-//     constructedVectorSplitTests
-//     splitJoinTests
-//     insertTests
-//     operationTests // Operational tests not yet ported to new API
-//     vectorTests
-//     nodeVecGenerationTests
-//     mergeTests
+    arrayTests
+    simpleVectorTests
+    manualVectorTests
+    constructedVectorSplitTests
+    splitJoinTests
+    insertTests
+    operationTests // Operational tests not yet ported to new API
+    vectorTests
+    nodeVecGenerationTests
+    mergeTests
     // apiTests
 
     // perfTests
