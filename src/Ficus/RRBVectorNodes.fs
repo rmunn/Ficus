@@ -986,8 +986,7 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
                 (parentR, None)  // TODO: Test this: do I need to shrink parentR?
                 |> shrinkLeftNode owner rightShift shouldKeepExpandedLeftNode
             | childL', Some childR' ->
-                // Yes, really: next line is not a mistake. We want childR'.NewParent with [|childL'|] as data
-                let parentL = (childR' :?> RRBFullNode<'T>).NewParent owner (down rightShift) [|childL'|]
+                let parentL = this.NewParent owner (down rightShift) [|childL'|]
                 // Turns out the next line *is* needed here, so the other one (above) probably is too
                 let childR' = if right.NodeSize > 1 then (childR' :?> RRBFullNode<'T>).ShrinkRightSpine owner (down rightShift) else childR'
                 let parentR = right.UpdateChildSAbs owner rightShift 0 childR' (childR'.TreeSize (down rightShift))
@@ -1002,7 +1001,7 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
                 |> shrinkLeftNode owner shift shouldKeepExpandedLeftNode
             | childL', Some childR' ->
                 let parentL = this.UpdateChildSAbs owner shift (this.NodeSize - 1) childL' (childL'.TreeSize (down shift))
-                let parentR = (childR' :?> RRBFullNode<'T>).NewParent owner (down shift) [|childR'|]
+                let parentR = this.NewParent owner (down shift) [|childR'|]
                 (parentL :?> RRBFullNode<'T>).ConcatNodes owner shift (parentR :?> RRBFullNode<'T>)
                 |> shrinkLeftNode owner shift shouldKeepExpandedLeftNode
 

@@ -1182,13 +1182,13 @@ let splitTransientTests =
     // etestProp (116284201, 296649907) "large vectors (up to about 3-4 levels high)" doSplitTransientTest
     testPropSm "small vectors into thing" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doTestXL vec
-    // etestPropSm (1198601302, 296650358) "small commands" <| fun (vec : RRBVector<int>) ->
-    //     RRBVectorTransientCommands.doComplexTest vec
-    // etestPropMed (1198601253, 296650358) "medium commands" <| fun (vec : RRBVector<int>) ->
-    //     RRBVectorTransientCommands.doComplexTest vec
-    // etestProp (1198601605, 296650358) "large commands" <| fun (vec : RRBVector<int>) ->
-    //     // logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
-    //     RRBVectorTransientCommands.doComplexTest vec
+    testPropSm "small commands" <| fun (vec : RRBVector<int>) ->
+        RRBVectorTransientCommands.doComplexTest vec
+    testPropMed "medium commands" <| fun (vec : RRBVector<int>) ->
+        RRBVectorTransientCommands.doComplexTest vec
+    etestProp (902165491, 296650450) "large commands" <| fun (vec : RRBVector<int>) ->
+        logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
+        RRBVectorTransientCommands.doComplexTest vec
 
     testCase "Transients can be split apart and re-appended again" <| fun _ ->
         let vec = (RRBVectorGen.treeReprStrToVec "M T5" :?> RRBPersistentVector<_>).Transient()
@@ -1254,7 +1254,7 @@ let splitTransientTests =
             // >> setField "structure" (sprintf "%A" joined))
         RRBVectorProps.checkProperties joined "Joined vector after all commands run"
 
-    ftestCase "Join transients where they... do something, left smaller" <| fun _ ->
+    testCase "Join transients where they... do something, left smaller" <| fun _ ->
         let vL = RRBVectorGen.treeReprStrToVec "17 27 M M M M T15"
         let vR = RRBVectorGen.treeReprStrToVec "[[M M 18 16 M*28] [M*M]*M-1] [[M*M]*M] [[17 16 M M 17 16]*1] T31"
         let tL = (vL :?> RRBPersistentVector<_>).Transient()
