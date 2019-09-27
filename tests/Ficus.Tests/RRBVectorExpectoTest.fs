@@ -1182,13 +1182,13 @@ let splitTransientTests =
     // etestProp (116284201, 296649907) "large vectors (up to about 3-4 levels high)" doSplitTransientTest
     testPropSm "small vectors into thing" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doTestXL vec
-    etestPropSm (1198601302, 296650358) "small commands" <| fun (vec : RRBVector<int>) ->
-        RRBVectorTransientCommands.doComplexTest vec
-    etestPropMed (1198601253, 296650358) "medium commands" <| fun (vec : RRBVector<int>) ->
-        RRBVectorTransientCommands.doComplexTest vec
-    etestProp (1198601605, 296650358) "large commands" <| fun (vec : RRBVector<int>) ->
-        // logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
-        RRBVectorTransientCommands.doComplexTest vec
+    // etestPropSm (1198601302, 296650358) "small commands" <| fun (vec : RRBVector<int>) ->
+    //     RRBVectorTransientCommands.doComplexTest vec
+    // etestPropMed (1198601253, 296650358) "medium commands" <| fun (vec : RRBVector<int>) ->
+    //     RRBVectorTransientCommands.doComplexTest vec
+    // etestProp (1198601605, 296650358) "large commands" <| fun (vec : RRBVector<int>) ->
+    //     // logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
+    //     RRBVectorTransientCommands.doComplexTest vec
 
     testCase "Transients can be split apart and re-appended again" <| fun _ ->
         let vec = (RRBVectorGen.treeReprStrToVec "M T5" :?> RRBPersistentVector<_>).Transient()
@@ -1197,6 +1197,54 @@ let splitTransientTests =
         RRBVectorProps.checkProperties vL "Vector after appending"
 
     // Test cases to move into regressionTests once they're done
+    ftestCase "split commands that failed, medium" <| fun _ ->
+        let push = RRBVectorTransientCommands.VecCommands.push
+        let pop = RRBVectorTransientCommands.VecCommands.pop
+        let insert = RRBVectorTransientCommands.VecCommands.insert
+        let remove = RRBVectorTransientCommands.VecCommands.remove
+        let slice = RRBVectorTransientCommands.VecCommands.slice
+        let cmdsL = [push 46; remove 62; insert (-45,31); insert (21,100); insert (58,34); pop 61; remove -56; remove 57; insert (63,15); insert (-36,21)]
+        let cmdsR = [insert (77,55); insert (-58,89); push 51; push 85; insert (82,98); insert (-53,70); insert (-16,39); slice (Some -70,Some 81); remove 3; remove -20]
+
+        let logVec cmd vec =
+            // logger.debug (
+            //     eventX "After {cmd}, vec was {vec} with actual structure {structure}"
+            //     >> setField "cmd" cmd
+            //     >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec)
+            //     >> setField "structure" (sprintf "%A" vec))
+            ()
+
+        let vec = RRBVectorGen.treeReprStrToVec "[M*M]*12 T8"
+        let mutable current = (vec :?> RRBPersistentVector<_>).Transient()
+        let vL, vR = current.Split 99
+
+        current <- vL :?> RRBTransientVector<_>
+        for cmd in cmdsL do
+            current <- current |> cmd.RunActual
+            logVec (cmd.ToString()) current
+            RRBVectorProps.checkProperties current <| sprintf "Left vector after %s" (cmd.ToString())
+
+        current <- vR :?> RRBTransientVector<_>
+        for cmd in cmdsR do
+            current <- current |> cmd.RunActual
+            logVec (cmd.ToString()) current
+            RRBVectorProps.checkProperties current <| sprintf "Right vector after %s" (cmd.ToString())
+
+        logger.warn (
+            eventX "After all commands, vL was {vec} with actual structure {structure}"
+            >> setField "vec" (RRBVectorGen.vecToTreeReprStr vL)
+            >> setField "structure" (sprintf "%A" vec))
+        logger.warn (
+            eventX "After all commands, vR was {vec} with actual structure {structure}"
+            >> setField "vec" (RRBVectorGen.vecToTreeReprStr vR)
+            >> setField "structure" (sprintf "%A" vec))
+        let joined = vL.Append vR
+        logger.warn (
+            eventX "After all commands, joined vector was {vec} with actual structure {structure}"
+            >> setField "vec" (RRBVectorGen.vecToTreeReprStr joined)
+            >> setField "structure" (sprintf "%A" vec))
+        RRBVectorProps.checkProperties joined "Joined vector after all commands run"
+
     ftestCase "split commands that failed, medium, simpler" <| fun _ ->
         let vL = RRBVectorGen.treeReprStrToVec "17 16 M-1 17 17 M M 17 16 M T15"
         let vR = RRBVectorGen.treeReprStrToVec "5 24 30 28 M 28 26 M M-1 M 26 29 M-1 24 M 27 28 26 30 M M 17 25 24 M M M T3"
