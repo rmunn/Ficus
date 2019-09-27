@@ -799,7 +799,6 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
         RRBNode<'T>.MkNodeKnownSize owner shift children sizes
 
     member this.RemoveLastLeaf owner shift =
-        // EXPAND: This needs an implementation in expanded nodes, where we expand the new last child after shrinking the child we return
         if shift <= Literals.blockSizeShift then
             // Children are leaves
             let leaf = this.LastChild :?> RRBLeafNode<'T>
@@ -812,7 +811,7 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
                 if newLastChild.NodeSize = 0
                 then this.RemoveLastChild owner shift  // Child had just one child of its own and is now empty, so remove it
                 else this.UpdateChildSAbs owner shift (this.NodeSize - 1) newLastChild (newLastChild.TreeSize (down shift))
-            leaf, newNode
+            leaf, (newNode :?> RRBFullNode<'T>).MaybeExpand owner shift
 
     member this.PopLastLeaf owner shift = this.RemoveLastLeaf owner shift // TODO: Replace all occurrences of "RemoveLastLeaf" in RRBVector code with "PopLastLeaf"
 

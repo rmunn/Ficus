@@ -1192,7 +1192,7 @@ let splitTransientTests =
     //     RRBVectorTransientCommands.doComplexTest vec
 
     // Test cases to move into regressionTests once they're done
-    ftestCase "Figure out the name" <| fun _ ->
+    testCase "Figure out the name" <| fun _ ->
         let vec = RRBVectorGen.looserTreeReprStrToVec TestData.ridiculouslyLargeVector
         RRBVectorProps.checkProperties vec "Original persistent vector"
         let mutable t = (vec :?> RRBPersistentVector<_>).Transient()
@@ -1203,6 +1203,24 @@ let splitTransientTests =
             RRBVectorProps.checkProperties t <| sprintf "Transient after push %d" i
         // After push 7, we're fine. THe eight push builds a new path to the root, and apparently fails to clean up the old path
         // so that we get "If a tree's root is an expanded Node variant, its right spine should contain expanded nodes but nothing else should"
+
+    ftestCase "Figure out the name 2" <| fun _ ->
+        let vec = RRBVectorGen.looserTreeReprStrToVec TestData.ridiculouslyLargeVector
+        RRBVectorProps.checkProperties vec "Original persistent vector"
+        let mutable t = (vec :?> RRBPersistentVector<_>).Transient()
+        RRBVectorProps.checkProperties t "Original transient vector"
+        for i = 1 to 66 do
+            t <- t.Push i :?> RRBTransientVector<_>
+            // logger.warn (eventX "Transient after push {i}: {vec}" >> setField "i" i >> setField "vec" (RRBVectorGen.vecToTreeReprStr t))
+            RRBVectorProps.checkProperties t <| sprintf "Transient after push %d" i
+        for i = 1 to 58 do
+            t <- t.Pop() :?> RRBTransientVector<_>
+            // logger.warn (eventX "Transient after pop {i}: {vec}" >> setField "i" i >> setField "vec" (RRBVectorGen.vecToTreeReprStr t))
+            RRBVectorProps.checkProperties t <| sprintf "Transient after pop %d" i
+        logger.warn (eventX "Transient after pop 58: {vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr t))
+        t <- t.Pop() :?> RRBTransientVector<_>
+        logger.warn (eventX "Transient after pop 59: {vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr t))
+        RRBVectorProps.checkProperties t <| sprintf "Transient after pop 59"
 
     testCase "A push that grows the height of a transient vector will leave it with a properly relaxed and expanded root" <| fun _ ->
         let vec = RRBVectorGen.treeReprStrToVec "M 17 16 M 29 30 24 30 30 30 M 29 M-1 25 27 25 28 30 28 M M M M M 17 16 M 17 16 M M M T32"
