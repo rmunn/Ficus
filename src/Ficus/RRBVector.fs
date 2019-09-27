@@ -856,8 +856,9 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                         newRoot, (max this.Shift right.Shift)
                     | newLeft, Some newRight ->
                         let oldShift = max this.Shift right.Shift
-                        // NOTE: Here we really do want newLeft, not newRight, to be the instance on which we call NewParent
-                        let newRoot = (newLeft :?> RRBFullNode<'T>).NewParent this.Owner oldShift [|newLeft; newRight|]
+                        // NOTE: Here we really do want newRight to be the instance on which we call NewParent.
+                        // We've already shrunk newLeft's inside MergeTree, so newLeft is no longer an expanded node by now.
+                        let newRoot = (newRight :?> RRBFullNode<'T>).NewParent this.Owner oldShift [|newLeft; newRight|]
                         newRoot, (RRBMath.up oldShift)
                 this.TailOffset <- this.Count + right.TailOffset
                 this.Count <- newLen

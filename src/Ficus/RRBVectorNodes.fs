@@ -1613,7 +1613,8 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
             this.SetNodeSize len
             (this.ToRelaxedNodeIfNeeded shift :?> RRBFullNode<'T>).MaybeExpand owner shift
         else
-            (RRBNode<'T>.MkNode owner shift arr :?> RRBFullNode<'T>).MaybeExpand owner shift
+            let node = (RRBNode<'T>.MkNode owner shift arr).Expand owner
+            (node :?> RRBFullNode<'T>).MaybeExpand owner shift
 
     override this.MakeLeftNodeForSplit owner shift children sizes =
         (RRBNode<'T>.MkNodeKnownSize owner shift children sizes).Expand owner
@@ -1942,7 +1943,8 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
             RRBNode<'T>.PopulateSizeTableS shift this.Children len this.SizeTable
             (this.ToFullNodeIfNeeded shift :?> RRBFullNode<'T>).MaybeExpand owner shift
         else
-            (RRBNode<'T>.MkNode owner shift arr :?> RRBFullNode<'T>).MaybeExpand owner shift
+            let node = (RRBNode<'T>.MkNode owner shift arr).Expand owner
+            (node :?> RRBFullNode<'T>).MaybeExpand owner shift
 
     override this.MakeLeftNodeForSplit owner shift children sizes =
         (RRBNode<'T>.MkNodeKnownSize owner shift children sizes).Expand owner
