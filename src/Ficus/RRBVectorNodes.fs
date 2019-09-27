@@ -1702,7 +1702,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         if oldSize > 0 then
             // Expanded nodes always have their rightmost child, and only that child, expanded
             let lastChild = node'.LastChild
-            let shrunkLastChild = lastChild.Shrink owner
+            let shrunkLastChild = lastChild.ShrinkRightSpine owner (down shift)
             if not (isSameObj lastChild shrunkLastChild) then
                 node'.Children.[oldSize - 1] <- shrunkLastChild
         node'.Children.[oldSize] <- newChild.Expand owner
