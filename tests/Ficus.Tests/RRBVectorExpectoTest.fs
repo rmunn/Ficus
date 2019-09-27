@@ -1186,10 +1186,10 @@ let splitTransientTests =
         RRBVectorTransientCommands.doComplexTest vec
     testPropMed "medium commands" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doComplexTest vec
-    // etestProp (375920089, 296650093) (*486436647, 296650093*) "large commands" <| fun (vec : RRBVector<int>) ->
-    //     logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
-    //     RRBVectorProps.checkProperties vec "Original persistent vector"
-    //     RRBVectorTransientCommands.doComplexTest vec
+    etestProp (*375920089, 296650093*) (486436647, 296650093) "large commands" <| fun (vec : RRBVector<int>) ->
+        // logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
+        RRBVectorProps.checkProperties vec "Original persistent vector"
+        RRBVectorTransientCommands.doComplexTest vec
 
     // Test cases to move into regressionTests once they're done
     testCase "Figure out the name" <| fun _ ->
@@ -1204,7 +1204,7 @@ let splitTransientTests =
         // After push 7, we're fine. THe eight push builds a new path to the root, and apparently fails to clean up the old path
         // so that we get "If a tree's root is an expanded Node variant, its right spine should contain expanded nodes but nothing else should"
 
-    ftestCase "Figure out the name 2" <| fun _ ->
+    testCase "Figure out the name 2" <| fun _ ->
         let vec = RRBVectorGen.looserTreeReprStrToVec TestData.ridiculouslyLargeVector
         RRBVectorProps.checkProperties vec "Original persistent vector"
         let mutable t = (vec :?> RRBPersistentVector<_>).Transient()
