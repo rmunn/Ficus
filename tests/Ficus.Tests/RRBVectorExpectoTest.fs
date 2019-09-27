@@ -1204,9 +1204,9 @@ let splitTransientTests =
         let remove = RRBVectorTransientCommands.VecCommands.remove
         let slice = RRBVectorTransientCommands.VecCommands.slice
         // Edit cmdsL and cmdsR below
-        let cmds = [insert (30,85); insert (26,73); insert (12,8); insert (27,50); insert (8,25); insert (80,86); insert (54,13)]
-        let cmdsL = [insert (57,13);(* pop 40;*) push 74; remove 24; insert (62,94); insert (99,28); insert (-36,34); push 27; remove 71; insert (-97,9); insert (-31,15)]
-        let cmdsR = [insert (16,55); push 83; remove 74; insert (-45,30); insert (21,36); insert (58,71); pop 98; remove 92; remove 33; insert (63,51); insert (-72,58)]
+        let cmds = [push 56]
+        let cmdsL = [insert (57,80); insert (-92,19); insert (27,71); insert (13,71); insert (68,66); insert (-74,78); insert (-34,53); push 72; remove -36; insert (3,54); insert (40,88); slice (Some -14,Some -82)]
+        let cmdsR = [remove -48; remove 14; remove -1; insert (12,37); insert (98,40); push 67; insert (-84,42); push 38; insert (29,27); insert (-56,91); insert (57,33); remove -39]
 
         let logVec cmd vec =
             // logger.debug (
@@ -1217,7 +1217,7 @@ let splitTransientTests =
             ()
 
         // Edit vec below
-        let vec = RRBVectorGen.treeReprStrToVec "[27 M 31 M M 31 M 25 31 M 26 31 M M 29 M 27 30 M 30 25 29 29 28 M M 31 M] [27 27 30 21 20 25 24 26 29 29 24 22 24 27 M] T31"
+        let vec = RRBVectorGen.treeReprStrToVec "30 29 31 32 32 32 32 32 29 32 32 32 32 32 32 32 29 29 26 32 32 32 29 32 32 28 32 32 32 T13"
         let mutable current = (vec :?> RRBPersistentVector<_>).Transient()
         for cmd in cmds do
             current <- current |> cmd.RunActual
@@ -1256,6 +1256,15 @@ let splitTransientTests =
     ftestCase "Join transients where left root fits neatly into leftmost trig of right tree" <| fun _ ->
         let vL = RRBVectorGen.treeReprStrToVec "M-1 17 16 T22"
         let vR = RRBVectorGen.treeReprStrToVec "[13 M*26] [M*M]*10 [M*16] [M*14 17 16 M M M-1] T13"
+        let tL = (vL :?> RRBPersistentVector<_>).Transient()
+        let tR = (vR :?> RRBPersistentVector<_>).Transient()
+        tR.Owner <- tL.Owner  // So they can be joined still as transients. Not a good idea outside of unit tests.
+        tL.Append tR |> ignore
+        RRBVectorProps.checkProperties tL "Joined vector after all commands run"
+
+    ftestCase "Join transients where left root doesn't quite fit into leftmost trig of right tree, causing a rebalance - try 2" <| fun _ ->
+        let vL = RRBVectorGen.treeReprStrToVec "10 25 M-1 T3"
+        let vR = RRBVectorGen.treeReprStrToVec "[21 M 25 25 16 M*3 29 M*7 29 29 26 M*3 29 M M 28 M*6] [17 16 M-1] T13"
         let tL = (vL :?> RRBPersistentVector<_>).Transient()
         let tR = (vR :?> RRBPersistentVector<_>).Transient()
         tR.Owner <- tL.Owner  // So they can be joined still as transients. Not a good idea outside of unit tests.
