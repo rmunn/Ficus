@@ -1182,13 +1182,12 @@ let splitTransientTests =
     // etestProp (116284201, 296649907) "large vectors (up to about 3-4 levels high)" doSplitTransientTest
     testPropSm "small vectors into thing" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doTestXL vec
-    testPropSm "small commands" <| fun (vec : RRBVector<int>) ->
+    etestPropSm (1198601302, 296650358) "small commands" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doComplexTest vec
-    testPropMed "medium commands" <| fun (vec : RRBVector<int>) ->
+    etestPropMed (1198601253, 296650358) "medium commands" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doComplexTest vec
-    testProp "large commands" <| fun (vec : RRBVector<int>) ->
+    etestProp (1198601605, 296650358) "large commands" <| fun (vec : RRBVector<int>) ->
         // logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
-        RRBVectorProps.checkProperties vec "Original persistent vector"
         RRBVectorTransientCommands.doComplexTest vec
 
     ftestCase "Transients can be split apart and re-appended again" <| fun _ ->
@@ -1198,6 +1197,26 @@ let splitTransientTests =
         RRBVectorProps.checkProperties vL "Vector after appending"
 
     // Test cases to move into regressionTests once they're done
+    testCase "split commands that failed, medium" <| fun _ ->
+        ()
+// 	RRBPersistentVector<length=648,shift=5,tailOffset=636,root=RelaxedNode(length=22, sizetable=[|30; 60; 86; 115; 142; 174; 202; 228; 260; 291; 323; 349; 378; 409; 433; 465;
+//   492; 520; 546; 576; 607; 636|], children=[|L30; L30; L26; L29; L27; L32; L28; L26; L32; L31; L32; L26; L29; L31; L24; L32;
+//   L27; L28; L26; L30; L31; L29|]),tail=[|88; 59; 63; -50; 84; 55; 59; 30; 80; 51; 55; 26|]>
+// [split (55,
+//   [push 98; remove -11; insert (-18,83); insert (19,52); insert (85,58); push 85; remove 36; insert (89,33); insert (-75,39); insert (-9,73)],
+//   [remove 9; insert (70,30); insert (-65,36); pop 29; push 98; remove 27; insert (-60,17); insert (-23,89); insert (43,58); push 85]
+// )]
+
+    testCase "split commands that failed, large" <| fun _ ->
+        ()
+// 	RRBPersistentVector<length=913,shift=5,tailOffset=900,root=RelaxedNode(length=29, sizetable=[|30; 59; 90; 122; 154; 186; 218; 250; 279; 311; 343; 375; 407; 439; 471; 503;
+//   532; 561; 587; 619; 651; 683; 712; 744; 776; 804; 836; 868; 900|], children=[|L30; L29; L31; L32; L32; L32; L32; L32; L29; L32; L32; L32; L32; L32; L32; L32;
+//   L29; L29; L26; L32; L32; L32; L29; L32; L32; L28; L32; L32; L32|]),tail=[|108; 32; 96; -119; -88; 87; 99; -35; -112; -12; 62; 51; 41|]> [split (-63,[pop 16; remove -64; remove 11; insert (-61,32); insert (5,58); push 85;
+//  insert (65,49); insert (-67,10); insert (39,36); push 29; remove 53;
+//  insert (7,11)],[push 46; remove 46; insert (54,28); insert (-81,62); insert (-44,1); push 66;
+//  insert (38,26); insert (2,6); insert (73,44); push 40; remove 47; remove 63])]
+
+
     testCase "Figure out the name" <| fun _ ->
         let vec = RRBVectorGen.looserTreeReprStrToVec TestData.ridiculouslyLargeVector
         RRBVectorProps.checkProperties vec "Original persistent vector"
@@ -2355,35 +2374,35 @@ let tests =
 
     // longRunningTests
     splitTransientTests
-    regressionTests
-    threeLevelVectorTests
-    transientResidueTests
-    moreTransientResidueTests
-// //   ]
-// // ignore
-// //   [
+//     regressionTests
+//     threeLevelVectorTests
+//     transientResidueTests
+//     moreTransientResidueTests
+// // //   ]
+// // // ignore
+// // //   [
 
-    isolatedTest
-    emptyTests
-    singletonTests
-    dualTests
-    halfFullTailTests
-    fullTailTests
-    fullTailPlusOneTests
-    fullSaplingMinusOneTests
-    fullSaplingTests
-    fullSaplingPlusOneTests
+//     isolatedTest
+//     emptyTests
+//     singletonTests
+//     dualTests
+//     halfFullTailTests
+//     fullTailTests
+//     fullTailPlusOneTests
+//     fullSaplingMinusOneTests
+//     fullSaplingTests
+//     fullSaplingPlusOneTests
 
-    arrayTests
-    simpleVectorTests
-    manualVectorTests
-    constructedVectorSplitTests
-    splitJoinTests
-    insertTests
-    operationTests // Operational tests not yet ported to new API
-    vectorTests
-    nodeVecGenerationTests
-    mergeTests
+//     arrayTests
+//     simpleVectorTests
+//     manualVectorTests
+//     constructedVectorSplitTests
+//     splitJoinTests
+//     insertTests
+//     operationTests // Operational tests not yet ported to new API
+//     vectorTests
+//     nodeVecGenerationTests
+//     mergeTests
     // apiTests
 
     // perfTests

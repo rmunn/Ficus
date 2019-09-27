@@ -238,7 +238,7 @@ module VecCommands =
         2, genPop
         1, genSlice
     ]
-    let genCmdsForSplit = Gen.listOf (Gen.frequency cmdFrequenciesForSplit)
+    let genCmdsForSplit = Gen.sized (fun s -> Gen.listOfLength (s / 10 |> max 2) (Gen.frequency cmdFrequenciesForSplit))
     let genSplit = Gen.map3 (fun idx cmdsL cmdsR -> idx,cmdsL,cmdsR) (Gen.choose(-100,100)) genCmdsForSplit genCmdsForSplit |> Gen.map split
 
 open VecCommands
@@ -249,7 +249,7 @@ let cmdsMedium = [push 1; push 4; push 9; pop 1; pop 4; pop 9; insert5AtHead; in
 let cmdsLarge = [push 1; push 4; push 9; pop 1; pop 4; pop 9; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
 let cmdsExtraLarge = [push 4; push 9; push 33; pop 4; pop 9; pop 33; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
 
-let cmdFrequenciesForComplexOperations = cmdFrequenciesForSplit
+let cmdFrequenciesForComplexOperations = (1, genSplit) :: cmdFrequenciesForSplit
 
 type SplitTestInput = SplitTestInput of RRBVector<int> * (Cmd list)[]
 
