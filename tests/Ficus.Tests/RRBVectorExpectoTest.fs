@@ -1186,7 +1186,7 @@ let splitTransientTests =
         RRBVectorTransientCommands.doComplexTest vec
     testPropMed "medium commands" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doComplexTest vec
-    etestProp (*375920089, 296650093*) (486436647, 296650093) "large commands" <| fun (vec : RRBVector<int>) ->
+    testProp "large commands" <| fun (vec : RRBVector<int>) ->
         // logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
         RRBVectorProps.checkProperties vec "Original persistent vector"
         RRBVectorTransientCommands.doComplexTest vec
@@ -1217,9 +1217,9 @@ let splitTransientTests =
             t <- t.Pop() :?> RRBTransientVector<_>
             // logger.warn (eventX "Transient after pop {i}: {vec}" >> setField "i" i >> setField "vec" (RRBVectorGen.vecToTreeReprStr t))
             RRBVectorProps.checkProperties t <| sprintf "Transient after pop %d" i
-        logger.warn (eventX "Transient after pop 58: {vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr t))
+        // logger.warn (eventX "Transient after pop 58: {vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr t))
         t <- t.Pop() :?> RRBTransientVector<_>
-        logger.warn (eventX "Transient after pop 59: {vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr t))
+        // logger.warn (eventX "Transient after pop 59: {vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr t))
         RRBVectorProps.checkProperties t <| sprintf "Transient after pop 59"
 
     testCase "A push that grows the height of a transient vector will leave it with a properly relaxed and expanded root" <| fun _ ->
@@ -2349,35 +2349,35 @@ let tests =
 
     // longRunningTests
     splitTransientTests
-//     regressionTests
-//     threeLevelVectorTests
-//     transientResidueTests
-//     moreTransientResidueTests
-// // //   ]
-// // // ignore
-// // //   [
+    regressionTests
+    threeLevelVectorTests
+    transientResidueTests
+    moreTransientResidueTests
+// //   ]
+// // ignore
+// //   [
 
-//     isolatedTest
-//     emptyTests
-//     singletonTests
-//     dualTests
-//     halfFullTailTests
-//     fullTailTests
-//     fullTailPlusOneTests
-//     fullSaplingMinusOneTests
-//     fullSaplingTests
-//     fullSaplingPlusOneTests
+    isolatedTest
+    emptyTests
+    singletonTests
+    dualTests
+    halfFullTailTests
+    fullTailTests
+    fullTailPlusOneTests
+    fullSaplingMinusOneTests
+    fullSaplingTests
+    fullSaplingPlusOneTests
 
-//     arrayTests
-//     simpleVectorTests
-//     manualVectorTests
-//     constructedVectorSplitTests
-//     splitJoinTests
-//     insertTests
-//     operationTests // Operational tests not yet ported to new API
-//     vectorTests
-//     nodeVecGenerationTests
-//     mergeTests
+    arrayTests
+    simpleVectorTests
+    manualVectorTests
+    constructedVectorSplitTests
+    splitJoinTests
+    insertTests
+    operationTests // Operational tests not yet ported to new API
+    vectorTests
+    nodeVecGenerationTests
+    mergeTests
     // apiTests
 
     // perfTests
