@@ -1186,9 +1186,9 @@ let splitTransientTests =
     //     RRBVectorTransientCommands.doComplexTest vec
     // etestPropMed (1198601253, 296650358) "medium commands" <| fun (vec : RRBVector<int>) ->
     //     RRBVectorTransientCommands.doComplexTest vec
-    // etestProp (1198601605, 296650358) "large commands" <| fun (vec : RRBVector<int>) ->
-    //     // logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
-    //     RRBVectorTransientCommands.doComplexTest vec
+    etestProp (1198601605, 296650358) "large commands" <| fun (vec : RRBVector<int>) ->
+        // logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
+        RRBVectorTransientCommands.doComplexTest vec
 
     testCase "Transients can be split apart and re-appended again" <| fun _ ->
         let vec = (RRBVectorGen.treeReprStrToVec "M T5" :?> RRBPersistentVector<_>).Transient()
@@ -1204,9 +1204,9 @@ let splitTransientTests =
         let remove = RRBVectorTransientCommands.VecCommands.remove
         let slice = RRBVectorTransientCommands.VecCommands.slice
         // Edit cmdsL and cmdsR below
-        let cmds = [push 56]
-        let cmdsL = [insert (57,80); insert (-92,19); insert (27,71); insert (13,71); insert (68,66); insert (-74,78); insert (-34,53); push 72; remove -36; insert (3,54); insert (40,88); slice (Some -14,Some -82)]
-        let cmdsR = [remove -48; remove 14; remove -1; insert (12,37); insert (98,40); push 67; insert (-84,42); push 38; insert (29,27); insert (-56,91); insert (57,33); remove -39]
+        let cmds = []
+        let cmdsL = [remove 60; insert (-88,52); insert (-51,58); insert (15,30); remove 40; insert (-46,39); insert (20,11); slice (Some -34,Some 61); remove 87; remove -1; insert (62,26); insert (-73,32); push 22]
+        let cmdsR = [insert (16,82); insert (82,54); pop 81; push 15; remove 41; insert (20,97); insert (86,69); insert (-78,75); push 65; remove 59; insert (91,50); insert (-73,56); insert (-7,25); pop 52; remove -59]
 
         let logVec cmd vec =
             // logger.debug (
@@ -1217,12 +1217,12 @@ let splitTransientTests =
             ()
 
         // Edit vec below
-        let vec = RRBVectorGen.treeReprStrToVec "30 29 31 32 32 32 32 32 29 32 32 32 32 32 32 32 29 29 26 32 32 32 29 32 32 28 32 32 32 T13"
+        let vec = RRBVectorGen.looserTreeReprStrToVec TestData.anotherLargeVector
         let mutable current = (vec :?> RRBPersistentVector<_>).Transient()
-        for cmd in cmds do
-            current <- current |> cmd.RunActual
-            logVec (cmd.ToString()) current
-            RRBVectorProps.checkProperties current <| sprintf "Pre-split vector after %s" (cmd.ToString())
+        // for cmd in cmds do
+        //     current <- current |> cmd.RunActual
+        //     logVec (cmd.ToString()) current
+        //     RRBVectorProps.checkProperties current <| sprintf "Pre-split vector after %s" (cmd.ToString())
 
         let vL, vR = current.Split 38
 
@@ -1253,7 +1253,43 @@ let splitTransientTests =
             >> setField "structure" (sprintf "%A" vec))
         RRBVectorProps.checkProperties joined "Joined vector after all commands run"
 
-    ftestCase "Join transients where left root fits neatly into leftmost trig of right tree" <| fun _ ->
+    testCase "Join transients where they trigger a rebalance above the twig level, left smaller" <| fun _ ->
+        let vL = RRBVectorGen.treeReprStrToVec "14 17 T25"
+        let vR = RRBVectorGen.treeReprStrToVec "[[27 29 28 M-1 27 27 M-1 M 28 29 27 26 M 24 M 30 29 M-1 30 28 27 30 M M M 28 30 27 29 M-1 25] [30 M-1 27 M M-1 26 29 25 29 26 28 M 27 M 28 28 30 28 M M-1 27 30 M-1 M 27 M 29 28 30 26 28 29] [28 M M 27 30 24 28 M M 29 M 26 M-1 30 M 29 27 30 M M 24 M-1 M M-1 28 25 28 M 30 M-1 28 M-1] [29 M-1 29 28 27 26 M 29 M-1 M-1 M 29 29 26 25 30 30 M M 29 26 M 27 29 24 24] [M-1 M 28 M 24 M M M-1 26 24 M M 30 M 30 M M 30 M 27 M 24 30 M 25 29 30 M-1 M M-1 29 30] [28 30 28 30 M 29 M-1 M 20 30 30 M M 30 M 25 26 25 M M M M M M M 23 M M 30 M 25 M-1] [27 29 M M-1 M-1 26 29 M M 23 28 M-1 M-1 M-1 24 30 30 M 28 26 M-1 M M M] [30 20 23 M M M M M 28 28 21 28 M 27 M 30 M M 28 26 M M M M M] [29 M M-1 M M M 28 M M 30 M-1 M-1 25 M 30 M-1 M M M M 28 M-1 29 M 28 M M 26 M 26 M 30] [M-1 29 M 28 M 26 M M-1 29 M M M-1 M M-1 M 29 28 M M-1 M 26 M-1 28 27 M M M 28 30 M 29 M] [M M 27 29 M M M 26 M 30 M M M 29 M M 27 M-1 28 M M 29 27 M M-1 M M M M M] [28 M M-1 26 M M M M M 28 M M M M M-1 M M 25 M M-1 27 M M 26 30 M 29 M 29] [28 23 29 28 M M 26 26 M M-1 29 27 27 29 M M-1 27 30 M M-1 30 28 26 M] [M M 29 30 M M 25 M 30 26 M M M M M 26 M 28 M-1 M 26 27 M 29 29 30 27 M M] [20 M M 25 M M 28 M 28 30 M 30 27 M 30 29 M M M M 29 29 29 M 27 M-1 M 28] [M 28 M M M M M-1 M 27 26 29 27 M M M 28 M-1 29 24 29 M M M M-1 M-1] [M 28 M-1 M 28 M 30 M M M 26 28 M 30 23 M 30 M 27 28 25 M M M] [M-1 M M M M-1 29 M M-1 26 M M M 29 M 27 M M M M 30 M 28 30 M M M M 26 M M-1] [M-1 M 28 M M-1 M 29 M M 29 M M 27 M M M M M M 27 M 29 27 28 M M M-1 M M 29 M 30] [M M 30 M M M M 26 M-1 M M M 26 M M M-1 M M M M M M 29 M M M M 28 30 M M M] [M M M 29 M-1 M 28 25 M M M M M 26 M-1 27 M M M M M 29 M M M M] [M M M M-1 28 M M M M M M M-1 M-1 M-1 M-1 M M M M 30 M M M M M M M M M 28] [M M M M M M M M 29 30 M M 30 M M 30 M M M M M M-1 M-1 30 M M 25 M M] [M M M M M M M M M M M 30 M M M M M M M M M M M 29 M M M M] [28 M M M M M M M M M M M M M-1 M M M M M M-1 30 M M M M M 30 M M M M M] [27 29 M M-1 M M-1 M 24 M M M M M M M-1 M M 30 M 26 M 28 M M 29 30 M 29 M 28 M M] [M M M M-1 M M-1 M M M M M M M 28 M M M M M M M M M 30 M M 30 M M M-1 M M] [M 29 27 30 23 M 29 29 M M M 24 M-1 M 29 M 30 M M M 29 M-1 29 M 30 M 30 M M 29 22 M] [M M 30 26 M M 27 M 28 26 25 24 29 25 M M M M-1 M M M 27 27 M M-1 M-1 28 27 M] [29 M 29 M M 30 M M 30 28 M-1 M 21 29 M M-1 26 M-1 30 M M 28 M M 27 M M M M M] [28 M M 27 29 22 30 M M M 27 29 26 27 M 27 30 28 M M M-1 30 M 29 M 29 27 26 28 M 27 M]] [[25 M M-1 28 M 30 M 28 M 28 M-1 M 28 30 M 29 27 28 M 27 M M 27 M M M 26 M M M M M-1] [28 M-1 M M 27 25 30 28 M 27 27 M 23 30 M M-1 30 M-1 30 30 25 M 25 M 29 30 29 M-1 29 M-1 M-1 27] [M 29 M 29 M M 29 27 M M M M M M 20 M M M M 30 28 29 29 M M-1 M M-1 M M 28 M M] [M-1 22 M 21 M M M 26 M M-1 27 M-1 29 M 30 M 23 M M-1 28 27 M-1 21 30 M 30 26 M] [28 M-1 25 30 M 28 M M 25 29 30 25 23 M M-1 M M-1 M 26 26 M M 29 M 28 M-1 M 29 29 27 27 29] [29 M 26 25 M M 28 28 30 M 27 28 M M 28 30 M 26 30 M 26 26 M 27 27 M-1 27 26 M-1 M-1 29 M] [29 M M-1 29 30 28 M-1 M 27 M M-1 M 29 30 M M 28 M-1 M 29 M 29 M-1 M M-1 M 29 30 M M 27 28] [M M M M M M 29 M M M M M M M M M M M M M 27 M M M M 30 M M M-1 M-1 25 M] [30 M 28 M 25 M M 26 30 M-1 M M 23 M 26 29 M 27 26 M M M M-1 M M M 29 25 M 27 M-1 M] [M M M 28 26 M 29 M M 25 M-1 M 29 M M M 30 M 29 M-1 M M 27 M M M M M-1 26 28 28] [25 28 M 29 28 27 M M M M-1 30 28 27 25 M-1 M M 27 29 M 30 M 29 M M 29 M 26 M-1 28 25 M] [M-1 26 M M-1 M M 25 M-1 30 M M 28 27 M M 26 29 M M-1 27 M-1 M M 29 M M M M 27 M M-1 M] [M M M M M M M M M M 28 M M M M M M M M M M M M M M M M M M M M M] [M M M M M M M M M 26 M M M M M M M M M M M M M M M 28 M M M M M M] [M M M 29 M M M 28 29 M 30 M M M 25 30 M M 30 M M M-1 M M-1 M M M M M 22] [28 29 M M M 28 25 30 M-1 28 28 28 M 30 28 26 M M-1 28 30 M M 27 29 26 M-1 M M 29 27 30 27] [M M 23 M M M M M 30 30 M 28 28 M M M M 29 M 27 M M-1 M M M M-1 27 M 27 M M M] [M M 28 29 30 30 M-1 M 26 M M 27 28 M-1 M M 29 29 30 M 27 M-1 M 30 26 27 M-1 M 24 28 26 M] [M M-1 M M 28 M M M M-1 M M M M M 30 30 29 M M M M M M M M 26 30 M M M M M] [M-1 26 28 M M-1 M M M 28 M-1 26 29 29 28 27 M 30 29 29 25 27 M M-1 27 22 25 M] [M-1 30 29 M 30 M M M M M 22 30 23 M-1 M M 30 M 26 20 27 24 28 M M 29 M] [M-1 M M M M-1 M M M M-1 M M M-1 M M 30 M M M M 28 M M M 27 M M M M M 30 M M] [M-1 M M M M M M M M M M M M M M M M M M M M M M M M M M M M-1 M M M] [M M M M M M 30 M M M M M 28 M M M M M-1 M M M M M M M M M M M] [26 M M 27 27 29 M M M-1 26 25 M 26 M M 29 25 25 27 M M M-1 30 27 30 M-1 M-1 M 27 27 27] [29 26 29 29 30 M 30 29 28 25 M-1 27 30 28 M-1 M 24 M 30 28 28 28 27 M-1 28 M 24 M-1 M-1 30 30 M-1] [29 M 29 M M-1 29 M M 30 26 26 28 M M-1 M 25 27 29 M-1 28 30 M 30 M 25 M-1 M 28 30 27 26 M] [M 29 30 25 M 28 M M M M 26 27 M 28 M 27 28 29 25 M M M M-1 M 25 22 28 26 30 M-1 30] [M M M-1 27 26 M-1 28 30 29 28 M M M 29 30 M-1 M 27 M 25 M M M M 27 M-1 29 M M 30 24 27]] [[30 M M M M M M M M M M-1 M M M M M 28 M M M-1 M M M M M M-1 M M 29] [24 M M 29 M 29 M M M M M M M M M M M-1 M 30 M M M M M M M M 30 M M M M] [30 M M M M M 30 30 29 27 30 M M 29 M M 28 M-1 29 24 30 29 28 28 M 30 M-1 M-1 29 30 29 M-1] [26 27 M-1 M-1 M-1 M-1 29 26 28 M 29 29 30 28 M 27 M-1 26 M M 26 28 M M 28 28 26 26 M 29 29 28] [25 M M-1 29 M 21 M 28 29 M-1 M M M 29 M-1 30 M 25 29 M-1 28 M-1 M M M M-1 M 26 M M 27 27] [28 29 M 30 M 28 29 29 M 29 M 30 23 28 M M 25 28 28 M M-1 M-1 29 M 27 M] [M 30 29 M 30 30 M 27 28 M 26 29 M M M M 29 M M-1 28 M 28 M 26 M 28 M 26 27] [30 M M M 29 25 M 27 30 M-1 22 M M M M 30 M M M 30 M 30 27 M-1 M M M 30 M-1 M 30 M] [26 M M M 27 27 29 M M M 29 26 M M-1 M 29 M 27 M M M M M-1 M] [25 27 M 27 25 29 29 M M M 25 M M 25 M 26 30 M 25 27 M M 25 28 M 29 M 27 M 30 M-1 M] [M M-1 M-1 M M M M M M 28 M M M M 29 30 M M M M M 29 M M M 29 M M M M 28] [M-1 M M M M M M 29 25 29 30 M M 29 M M M M-1 M 29 28 M 28 M M 28 27 M M M 28 M] [28 M 27 M M M 29 M 25 26 M-1 28 M 27 29 M-1 30 27 29] [28 M M M-1 M M M-1 M M 25 30 M 30 M M M M M-1 M 29 M M M M 29 M 30 28 M 29 M M-1] [25 M M 30 M M 26 M 27 M M 27 M M M M M 29 M M 30 M M 27 28 M] [M M M M M M M M M M 30 M M 30 M 30 28 30 M M M M 30 30 M M M 26 M M 30 M] [M M M M 29 28 M-1 29 M M M M M M-1 30 M M 26 M 25 30 M M M M M M M M] [M M M 30 M 29 M M M M M M M M M 29 M M M-1 29 M 30 M M M M M M] [M M M 30 M M M-1 M M 30 M M M M M M 25 M M 28 M M M M M M 29 M M M M] [M 29 M M M M M M M M M M M M M-1 M M M M M M M M M M M M M M M M M] [M 30 M M M M M M M 29 30 25 M M M-1 M-1 29 30 M M M M M M 22 M M 29 M-1 M M 29] [30 M M M M-1 30 M 25 24 30 M M M M M-1 28 24 30 M M M M M 26 M] [M M 29 M M M M 29 M 30 M 30 30 M M-1 29 28 M M M M 30 M M M 30 29 M M M M M-1]] [[M M M 26 27 26 M M M 28 28 M M 29 M 28 30 M M M-1 M M-1 28 M-1 M M-1 M-1] [29 M 25 28 30 20 M M 26 M M M 28 30 M 29 M-1 28 29 M 21 M 22 M M 25 M 27 30 M M M] [M 30 M M 29 27 24 30 27 30 M-1 28 M-1 28 M 29 28 25 26 M M-1 M M-1 M-1 M 26 M-1 29 M-1 M M] [30 M 30 M-1 28 30 28 M 29 M M M 29 21 24 M M 29 30 M M-1 25 28 M 28 M 30 30 24 29] [M 27 M M 28 29 M 23 M M M 27 M M M 28 M M M M-1 22 25 M-1 M M M M 26 26] [28 25 M 29 M M-1 30 M 27 M 26 28 M 27 M 28 29 M 27 30 M M M 26 M-1 M M 29 M M-1 29 M-1] [M 30 M 30 29 29 30 26 28 29 M M 26 29 29 26 M M M M M M M-1 M-1 M M 26] [M 29 M-1 30 M 29 M 23 M 26 29 M M 28 M-1 M 30 30 M 27 M M 25 30 30 28 M M] [M-1 M M 29 M-1 28 M M M M M 28 23 30 28 M M M M M M-1 21 M-1 M M] [M M M 25 30 M-1 M M 29 M 27 29 28 M M M M 30 M-1 30 30 30 M M M M 26 29 29] [30 29 30 M M M 24 M M 28 M M M M M 29 M M M M 30 28 29 M M M M M M] [M M 28 27 M M 30 M 30 M M M M M M 28 M M 28 M M-1 M 24 M 28 M 30 M M M M] [M M M M 26 M M M M M M M-1 M M M M 28 M 30 M M M 29 M M M M M 27 M M] [M M M M 26 M M-1 M 27 M M 29 M M M M M M M M M 29 M 30 M M M M M M M 26] [M M M M 30 M M M M M 30 25 M M M M M M M M M M M M M M M M M M] [30 M M M 30 M M 28 M M M M-1 M M M-1 M M M M 29 M M M 29 M M M M M M] [M M M M M M M M M M M M M M-1 M M M M M M M M M M M M M M M M M] [M M M M M M M M M M M M M M 26 M M M M M M M M M M M M M M M M M] [28 M-1 28 26 25 23 M M 30 28 M-1 M M 28 M M M-1 26 M 30 26 28 26 M 25 M 30 M 27 26 M] [30 22 M M M-1 26 27 26 M 28 26 27 M-1 30 30 M 28 M-1 28 M M-1 M 28 M 26 23 M-1 M-1 M-1 29 25] [28 27 M M M M 23 M 23 M M 29 M 23 M 27 27 M 30 M 29 24 M-1 26 M 27 M M 29 M M M] [M M M M M M M M M M M M M M M M 28 M M M-1 M M M M M M M M M M M 29] [30 M M-1 M-1 M 29 M M M M M M 27 M M M M M M M M M M M M M M M-1 M M M M] [23 26 23 M M M 28 24 28 25 29 26 M M M M-1 23 28 26 M 28 M M-1 27 24] [M 29 M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M] [M M 25 27 M M 29 30 M-1 25 M 28 25 M M M M 27 27 26 M 25 28 M 25 M 28 28 M 26 M M] [M-1 M M M 28 M 30 29 30 29 23 28 24 29 M M 23 25 27 29 29 M 25 26 23 M-1] [27 28 M 30 M 27 27 M 23 M 26 M M 25 M 29 M M-1 M M M M 30 23 M 24 M M-1 29 M 28 M] [28 28 28 M-1 27 M M M 26 M-1 M 27 29 23 M M] [25 M 29 M M 28 M 21 M-1 M 30 30 M-1 17 16]] T20"
+        let tL = (vL :?> RRBPersistentVector<_>).Transient()
+        let tR = (vR :?> RRBPersistentVector<_>).Transient()
+        tR.Owner <- tL.Owner  // So they can be joined still as transients. Not a good idea outside of unit tests.
+        tL.Append tR |> ignore
+        RRBVectorProps.checkProperties tL "Joined vector after all commands run"
+
+    testCase "Join transients where they trigger a rebalance above the twig level, right smaller" <| fun _ ->
+        let vL = RRBVectorGen.treeReprStrToVec "[[27 29 28 M-1 27 27 M-1 M 28 29 27 26 M 24 M 30 29 M-1 30 28 27 30 M M M 28 30 27 29 M-1 25] [30 M-1 27 M M-1 26 29 25 29 26 28 M 27 M 28 28 30 28 M M-1 27 30 M-1 M 27 M 29 28 30 26 28 29] [28 M M 27 30 24 28 M M 29 M 26 M-1 30 M 29 27 30 M M 24 M-1 M M-1 28 25 28 M 30 M-1 28 M-1] [29 M-1 29 28 27 26 M 29 M-1 M-1 M 29 29 26 25 30 30 M M 29 26 M 27 29 24 24] [M-1 M 28 M 24 M M M-1 26 24 M M 30 M 30 M M 30 M 27 M 24 30 M 25 29 30 M-1 M M-1 29 30] [28 30 28 30 M 29 M-1 M 20 30 30 M M 30 M 25 26 25 M M M M M M M 23 M M 30 M 25 M-1] [27 29 M M-1 M-1 26 29 M M 23 28 M-1 M-1 M-1 24 30 30 M 28 26 M-1 M M M] [30 20 23 M M M M M 28 28 21 28 M 27 M 30 M M 28 26 M M M M M] [29 M M-1 M M M 28 M M 30 M-1 M-1 25 M 30 M-1 M M M M 28 M-1 29 M 28 M M 26 M 26 M 30] [M-1 29 M 28 M 26 M M-1 29 M M M-1 M M-1 M 29 28 M M-1 M 26 M-1 28 27 M M M 28 30 M 29 M] [M M 27 29 M M M 26 M 30 M M M 29 M M 27 M-1 28 M M 29 27 M M-1 M M M M M] [28 M M-1 26 M M M M M 28 M M M M M-1 M M 25 M M-1 27 M M 26 30 M 29 M 29] [28 23 29 28 M M 26 26 M M-1 29 27 27 29 M M-1 27 30 M M-1 30 28 26 M] [M M 29 30 M M 25 M 30 26 M M M M M 26 M 28 M-1 M 26 27 M 29 29 30 27 M M] [20 M M 25 M M 28 M 28 30 M 30 27 M 30 29 M M M M 29 29 29 M 27 M-1 M 28] [M 28 M M M M M-1 M 27 26 29 27 M M M 28 M-1 29 24 29 M M M M-1 M-1] [M 28 M-1 M 28 M 30 M M M 26 28 M 30 23 M 30 M 27 28 25 M M M] [M-1 M M M M-1 29 M M-1 26 M M M 29 M 27 M M M M 30 M 28 30 M M M M 26 M M-1] [M-1 M 28 M M-1 M 29 M M 29 M M 27 M M M M M M 27 M 29 27 28 M M M-1 M M 29 M 30] [M M 30 M M M M 26 M-1 M M M 26 M M M-1 M M M M M M 29 M M M M 28 30 M M M] [M M M 29 M-1 M 28 25 M M M M M 26 M-1 27 M M M M M 29 M M M M] [M M M M-1 28 M M M M M M M-1 M-1 M-1 M-1 M M M M 30 M M M M M M M M M 28] [M M M M M M M M 29 30 M M 30 M M 30 M M M M M M-1 M-1 30 M M 25 M M] [M M M M M M M M M M M 30 M M M M M M M M M M M 29 M M M M] [28 M M M M M M M M M M M M M-1 M M M M M M-1 30 M M M M M 30 M M M M M] [27 29 M M-1 M M-1 M 24 M M M M M M M-1 M M 30 M 26 M 28 M M 29 30 M 29 M 28 M M] [M M M M-1 M M-1 M M M M M M M 28 M M M M M M M M M 30 M M 30 M M M-1 M M] [M 29 27 30 23 M 29 29 M M M 24 M-1 M 29 M 30 M M M 29 M-1 29 M 30 M 30 M M 29 22 M] [M M 30 26 M M 27 M 28 26 25 24 29 25 M M M M-1 M M M 27 27 M M-1 M-1 28 27 M] [29 M 29 M M 30 M M 30 28 M-1 M 21 29 M M-1 26 M-1 30 M M 28 M M 27 M M M M M] [28 M M 27 29 22 30 M M M 27 29 26 27 M 27 30 28 M M M-1 30 M 29 M 29 27 26 28 M 27 M]] [[25 M M-1 28 M 30 M 28 M 28 M-1 M 28 30 M 29 27 28 M 27 M M 27 M M M 26 M M M M M-1] [28 M-1 M M 27 25 30 28 M 27 27 M 23 30 M M-1 30 M-1 30 30 25 M 25 M 29 30 29 M-1 29 M-1 M-1 27] [M 29 M 29 M M 29 27 M M M M M M 20 M M M M 30 28 29 29 M M-1 M M-1 M M 28 M M] [M-1 22 M 21 M M M 26 M M-1 27 M-1 29 M 30 M 23 M M-1 28 27 M-1 21 30 M 30 26 M] [28 M-1 25 30 M 28 M M 25 29 30 25 23 M M-1 M M-1 M 26 26 M M 29 M 28 M-1 M 29 29 27 27 29] [29 M 26 25 M M 28 28 30 M 27 28 M M 28 30 M 26 30 M 26 26 M 27 27 M-1 27 26 M-1 M-1 29 M] [29 M M-1 29 30 28 M-1 M 27 M M-1 M 29 30 M M 28 M-1 M 29 M 29 M-1 M M-1 M 29 30 M M 27 28] [M M M M M M 29 M M M M M M M M M M M M M 27 M M M M 30 M M M-1 M-1 25 M] [30 M 28 M 25 M M 26 30 M-1 M M 23 M 26 29 M 27 26 M M M M-1 M M M 29 25 M 27 M-1 M] [M M M 28 26 M 29 M M 25 M-1 M 29 M M M 30 M 29 M-1 M M 27 M M M M M-1 26 28 28] [25 28 M 29 28 27 M M M M-1 30 28 27 25 M-1 M M 27 29 M 30 M 29 M M 29 M 26 M-1 28 25 M] [M-1 26 M M-1 M M 25 M-1 30 M M 28 27 M M 26 29 M M-1 27 M-1 M M 29 M M M M 27 M M-1 M] [M M M M M M M M M M 28 M M M M M M M M M M M M M M M M M M M M M] [M M M M M M M M M 26 M M M M M M M M M M M M M M M 28 M M M M M M] [M M M 29 M M M 28 29 M 30 M M M 25 30 M M 30 M M M-1 M M-1 M M M M M 22] [28 29 M M M 28 25 30 M-1 28 28 28 M 30 28 26 M M-1 28 30 M M 27 29 26 M-1 M M 29 27 30 27] [M M 23 M M M M M 30 30 M 28 28 M M M M 29 M 27 M M-1 M M M M-1 27 M 27 M M M] [M M 28 29 30 30 M-1 M 26 M M 27 28 M-1 M M 29 29 30 M 27 M-1 M 30 26 27 M-1 M 24 28 26 M] [M M-1 M M 28 M M M M-1 M M M M M 30 30 29 M M M M M M M M 26 30 M M M M M] [M-1 26 28 M M-1 M M M 28 M-1 26 29 29 28 27 M 30 29 29 25 27 M M-1 27 22 25 M] [M-1 30 29 M 30 M M M M M 22 30 23 M-1 M M 30 M 26 20 27 24 28 M M 29 M] [M-1 M M M M-1 M M M M-1 M M M-1 M M 30 M M M M 28 M M M 27 M M M M M 30 M M] [M-1 M M M M M M M M M M M M M M M M M M M M M M M M M M M M-1 M M M] [M M M M M M 30 M M M M M 28 M M M M M-1 M M M M M M M M M M M] [26 M M 27 27 29 M M M-1 26 25 M 26 M M 29 25 25 27 M M M-1 30 27 30 M-1 M-1 M 27 27 27] [29 26 29 29 30 M 30 29 28 25 M-1 27 30 28 M-1 M 24 M 30 28 28 28 27 M-1 28 M 24 M-1 M-1 30 30 M-1] [29 M 29 M M-1 29 M M 30 26 26 28 M M-1 M 25 27 29 M-1 28 30 M 30 M 25 M-1 M 28 30 27 26 M] [M 29 30 25 M 28 M M M M 26 27 M 28 M 27 28 29 25 M M M M-1 M 25 22 28 26 30 M-1 30] [M M M-1 27 26 M-1 28 30 29 28 M M M 29 30 M-1 M 27 M 25 M M M M 27 M-1 29 M M 30 24 27]] [[30 M M M M M M M M M M-1 M M M M M 28 M M M-1 M M M M M M-1 M M 29] [24 M M 29 M 29 M M M M M M M M M M M-1 M 30 M M M M M M M M 30 M M M M] [30 M M M M M 30 30 29 27 30 M M 29 M M 28 M-1 29 24 30 29 28 28 M 30 M-1 M-1 29 30 29 M-1] [26 27 M-1 M-1 M-1 M-1 29 26 28 M 29 29 30 28 M 27 M-1 26 M M 26 28 M M 28 28 26 26 M 29 29 28] [25 M M-1 29 M 21 M 28 29 M-1 M M M 29 M-1 30 M 25 29 M-1 28 M-1 M M M M-1 M 26 M M 27 27] [28 29 M 30 M 28 29 29 M 29 M 30 23 28 M M 25 28 28 M M-1 M-1 29 M 27 M] [M 30 29 M 30 30 M 27 28 M 26 29 M M M M 29 M M-1 28 M 28 M 26 M 28 M 26 27] [30 M M M 29 25 M 27 30 M-1 22 M M M M 30 M M M 30 M 30 27 M-1 M M M 30 M-1 M 30 M] [26 M M M 27 27 29 M M M 29 26 M M-1 M 29 M 27 M M M M M-1 M] [25 27 M 27 25 29 29 M M M 25 M M 25 M 26 30 M 25 27 M M 25 28 M 29 M 27 M 30 M-1 M] [M M-1 M-1 M M M M M M 28 M M M M 29 30 M M M M M 29 M M M 29 M M M M 28] [M-1 M M M M M M 29 25 29 30 M M 29 M M M M-1 M 29 28 M 28 M M 28 27 M M M 28 M] [28 M 27 M M M 29 M 25 26 M-1 28 M 27 29 M-1 30 27 29] [28 M M M-1 M M M-1 M M 25 30 M 30 M M M M M-1 M 29 M M M M 29 M 30 28 M 29 M M-1] [25 M M 30 M M 26 M 27 M M 27 M M M M M 29 M M 30 M M 27 28 M] [M M M M M M M M M M 30 M M 30 M 30 28 30 M M M M 30 30 M M M 26 M M 30 M] [M M M M 29 28 M-1 29 M M M M M M-1 30 M M 26 M 25 30 M M M M M M M M] [M M M 30 M 29 M M M M M M M M M 29 M M M-1 29 M 30 M M M M M M] [M M M 30 M M M-1 M M 30 M M M M M M 25 M M 28 M M M M M M 29 M M M M] [M 29 M M M M M M M M M M M M M-1 M M M M M M M M M M M M M M M M M] [M 30 M M M M M M M 29 30 25 M M M-1 M-1 29 30 M M M M M M 22 M M 29 M-1 M M 29] [30 M M M M-1 30 M 25 24 30 M M M M M-1 28 24 30 M M M M M 26 M] [M M 29 M M M M 29 M 30 M 30 30 M M-1 29 28 M M M M 30 M M M 30 29 M M M M M-1]] [[M M M 26 27 26 M M M 28 28 M M 29 M 28 30 M M M-1 M M-1 28 M-1 M M-1 M-1] [29 M 25 28 30 20 M M 26 M M M 28 30 M 29 M-1 28 29 M 21 M 22 M M 25 M 27 30 M M M] [M 30 M M 29 27 24 30 27 30 M-1 28 M-1 28 M 29 28 25 26 M M-1 M M-1 M-1 M 26 M-1 29 M-1 M M] [30 M 30 M-1 28 30 28 M 29 M M M 29 21 24 M M 29 30 M M-1 25 28 M 28 M 30 30 24 29] [M 27 M M 28 29 M 23 M M M 27 M M M 28 M M M M-1 22 25 M-1 M M M M 26 26] [28 25 M 29 M M-1 30 M 27 M 26 28 M 27 M 28 29 M 27 30 M M M 26 M-1 M M 29 M M-1 29 M-1] [M 30 M 30 29 29 30 26 28 29 M M 26 29 29 26 M M M M M M M-1 M-1 M M 26] [M 29 M-1 30 M 29 M 23 M 26 29 M M 28 M-1 M 30 30 M 27 M M 25 30 30 28 M M] [M-1 M M 29 M-1 28 M M M M M 28 23 30 28 M M M M M M-1 21 M-1 M M] [M M M 25 30 M-1 M M 29 M 27 29 28 M M M M 30 M-1 30 30 30 M M M M 26 29 29] [30 29 30 M M M 24 M M 28 M M M M M 29 M M M M 30 28 29 M M M M M M] [M M 28 27 M M 30 M 30 M M M M M M 28 M M 28 M M-1 M 24 M 28 M 30 M M M M] [M M M M 26 M M M M M M M-1 M M M M 28 M 30 M M M 29 M M M M M 27 M M] [M M M M 26 M M-1 M 27 M M 29 M M M M M M M M M 29 M 30 M M M M M M M 26] [M M M M 30 M M M M M 30 25 M M M M M M M M M M M M M M M M M M] [30 M M M 30 M M 28 M M M M-1 M M M-1 M M M M 29 M M M 29 M M M M M M] [M M M M M M M M M M M M M M-1 M M M M M M M M M M M M M M M M M] [M M M M M M M M M M M M M M 26 M M M M M M M M M M M M M M M M M] [28 M-1 28 26 25 23 M M 30 28 M-1 M M 28 M M M-1 26 M 30 26 28 26 M 25 M 30 M 27 26 M] [30 22 M M M-1 26 27 26 M 28 26 27 M-1 30 30 M 28 M-1 28 M M-1 M 28 M 26 23 M-1 M-1 M-1 29 25] [28 27 M M M M 23 M 23 M M 29 M 23 M 27 27 M 30 M 29 24 M-1 26 M 27 M M 29 M M M] [M M M M M M M M M M M M M M M M 28 M M M-1 M M M M M M M M M M M 29] [30 M M-1 M-1 M 29 M M M M M M 27 M M M M M M M M M M M M M M M-1 M M M M] [23 26 23 M M M 28 24 28 25 29 26 M M M M-1 23 28 26 M 28 M M-1 27 24] [M 29 M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M] [M M 25 27 M M 29 30 M-1 25 M 28 25 M M M M 27 27 26 M 25 28 M 25 M 28 28 M 26 M M] [M-1 M M M 28 M 30 29 30 29 23 28 24 29 M M 23 25 27 29 29 M 25 26 23 M-1] [27 28 M 30 M 27 27 M 23 M 26 M M 25 M 29 M M-1 M M M M 30 23 M 24 M M-1 29 M 28 M] [28 28 28 M-1 27 M M M 26 M-1 M 27 29 23 M M] [25 M 29 M M 28 M 21 M-1 M 30 30 M-1 17 16]] T20"
+        let vR = RRBVectorGen.treeReprStrToVec "14 17 T25"
+        let tL = (vL :?> RRBPersistentVector<_>).Transient()
+        let tR = (vR :?> RRBPersistentVector<_>).Transient()
+        tR.Owner <- tL.Owner  // So they can be joined still as transients. Not a good idea outside of unit tests.
+        tL.Append tR |> ignore
+        RRBVectorProps.checkProperties tL "Joined vector after all commands run"
+
+    testCase "Join transients where both are twigs and they trigger a rebalance, left smaller" <| fun _ ->
+        let vL = RRBVectorGen.treeReprStrToVec "17 25 24 17 16 T31"
+        let vR = RRBVectorGen.treeReprStrToVec "5 M 30 M M M 17 16 M M M M M M M M M-1 M M M 25 M-1 M 17 16 M M M T2"
+        let tL = (vL :?> RRBPersistentVector<_>).Transient()
+        let tR = (vR :?> RRBPersistentVector<_>).Transient()
+        tR.Owner <- tL.Owner  // So they can be joined still as transients. Not a good idea outside of unit tests.
+        tL.Append tR |> ignore
+        RRBVectorProps.checkProperties tL "Joined vector after all commands run"
+
+    testCase "Join transients where both are twigs and they trigger a rebalance, right smaller" <| fun _ ->
+        let vL = RRBVectorGen.treeReprStrToVec "5 M 30 M M M 17 16 M M M M M M M M M-1 M M M 25 M-1 M 17 16 M M M T2"
+        let vR = RRBVectorGen.treeReprStrToVec "17 25 24 17 16 T31"
+        let tL = (vL :?> RRBPersistentVector<_>).Transient()
+        let tR = (vR :?> RRBPersistentVector<_>).Transient()
+        tR.Owner <- tL.Owner  // So they can be joined still as transients. Not a good idea outside of unit tests.
+        tL.Append tR |> ignore
+        RRBVectorProps.checkProperties tL "Joined vector after all commands run"
+
+    testCase "Join transients where left root fits neatly into leftmost trig of right tree" <| fun _ ->
         let vL = RRBVectorGen.treeReprStrToVec "M-1 17 16 T22"
         let vR = RRBVectorGen.treeReprStrToVec "[13 M*26] [M*M]*10 [M*16] [M*14 17 16 M M M-1] T13"
         let tL = (vL :?> RRBPersistentVector<_>).Transient()
@@ -1262,7 +1298,16 @@ let splitTransientTests =
         tL.Append tR |> ignore
         RRBVectorProps.checkProperties tL "Joined vector after all commands run"
 
-    ftestCase "Join transients where left root doesn't quite fit into leftmost trig of right tree, causing a rebalance - try 2" <| fun _ ->
+    testCase "Join transients where left root fits neatly into leftmost trig of right tree, but reversed" <| fun _ ->
+        let vL = RRBVectorGen.treeReprStrToVec "[13 M*26] [M*M]*10 [M*16] [M*14 17 16 M M M-1] T13"
+        let vR = RRBVectorGen.treeReprStrToVec "M-1 17 16 T22"
+        let tL = (vL :?> RRBPersistentVector<_>).Transient()
+        let tR = (vR :?> RRBPersistentVector<_>).Transient()
+        tR.Owner <- tL.Owner  // So they can be joined still as transients. Not a good idea outside of unit tests.
+        tL.Append tR |> ignore
+        RRBVectorProps.checkProperties tL "Joined vector after all commands run"
+
+    testCase "Join transients where left root doesn't quite fit into leftmost trig of right tree, causing a rebalance" <| fun _ ->
         let vL = RRBVectorGen.treeReprStrToVec "10 25 M-1 T3"
         let vR = RRBVectorGen.treeReprStrToVec "[21 M 25 25 16 M*3 29 M*7 29 29 26 M*3 29 M M 28 M*6] [17 16 M-1] T13"
         let tL = (vL :?> RRBPersistentVector<_>).Transient()
@@ -1271,7 +1316,16 @@ let splitTransientTests =
         tL.Append tR |> ignore
         RRBVectorProps.checkProperties tL "Joined vector after all commands run"
 
-    ftestCase "Join transients where left root doesn't quite fit into leftmost trig of right tree, causing a rebalance" <| fun _ ->
+    testCase "Join transients where left root doesn't quite fit into leftmost trig of right tree, causing a rebalance, reversed" <| fun _ ->
+        let vL = RRBVectorGen.treeReprStrToVec "[21 M 25 25 16 M*3 29 M*7 29 29 26 M*3 29 M M 28 M*6] [17 16 M-1] T13"
+        let vR = RRBVectorGen.treeReprStrToVec "10 25 M-1 T3"
+        let tL = (vL :?> RRBPersistentVector<_>).Transient()
+        let tR = (vR :?> RRBPersistentVector<_>).Transient()
+        tR.Owner <- tL.Owner  // So they can be joined still as transients. Not a good idea outside of unit tests.
+        tL.Append tR |> ignore
+        RRBVectorProps.checkProperties tL "Joined vector after all commands run"
+
+    testCase "Join transients where left root doesn't quite fit into leftmost trig of right tree, causing a rebalance, second version" <| fun _ ->
         let vL = RRBVectorGen.treeReprStrToVec "M 25 24 25 24 T13"
         let vR = RRBVectorGen.treeReprStrToVec "[11 25 25 M-1 M M-1 M 25 M-1 M 26 M-1 M M 29 M 27 30 M 30 25 29 29 28 M M M-1 M] [27 27 30 21 20 25 24 26 29 29 24 22 24 28 M] T17"
         let tL = (vL :?> RRBPersistentVector<_>).Transient()
@@ -1280,7 +1334,16 @@ let splitTransientTests =
         tL.Append tR |> ignore
         RRBVectorProps.checkProperties tL "Joined vector after all commands run"
 
-    ftestCase "split commands that failed, medium, simpler" <| fun _ ->
+    testCase "Join transients where left root doesn't quite fit into leftmost trig of right tree, causing a rebalance, second version, reversed" <| fun _ ->
+        let vL = RRBVectorGen.treeReprStrToVec "[11 25 25 M-1 M M-1 M 25 M-1 M 26 M-1 M M 29 M 27 30 M 30 25 29 29 28 M M M-1 M] [27 27 30 21 20 25 24 26 29 29 24 22 24 28 M] T17"
+        let vR = RRBVectorGen.treeReprStrToVec "M 25 24 25 24 T13"
+        let tL = (vL :?> RRBPersistentVector<_>).Transient()
+        let tR = (vR :?> RRBPersistentVector<_>).Transient()
+        tR.Owner <- tL.Owner  // So they can be joined still as transients. Not a good idea outside of unit tests.
+        tL.Append tR |> ignore
+        RRBVectorProps.checkProperties tL "Joined vector after all commands run"
+
+    testCase "split commands that failed, medium, simpler" <| fun _ ->
         let vL = RRBVectorGen.treeReprStrToVec "17 16 M-1 17 17 M M 17 16 M T15"
         let vR = RRBVectorGen.treeReprStrToVec "5 24 30 28 M 28 26 M M-1 M 26 29 M-1 24 M 27 28 26 30 M M 17 25 24 M M M T3"
         let tL = (vL :?> RRBPersistentVector<_>).Transient()

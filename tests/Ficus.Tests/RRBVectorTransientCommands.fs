@@ -207,9 +207,9 @@ module VecCommands =
 
     let genSlice = Gen.frequency [ 1, Gen.constant None; 7, Gen.choose (-100,100) |> Gen.map Some] |> Gen.two |> Gen.map slice
 
-    let logAndRun (cmd : Cmd) vec =
+    let logCmd (name : string) vec =
         logger.warn (eventX "About to run {cmd} on {repr} = {vec}"
-            >> setField "cmd" (cmd.ToString())
+            >> setField "cmd" (name)
             >> setField "repr" (sprintf "%A" <| RRBVectorGen.vecToTreeReprStr vec)
             >> setField "vec" (sprintf "%A" vec)
             )
@@ -217,6 +217,7 @@ module VecCommands =
     let split (idx : int, cmdsL : Cmd list, cmdsR : Cmd list) =
         { new Cmd() with
             override __.RunActual vec =
+                // if idx = -5 then logCmd "split at -5" vec
                 let idx' = (if idx < 0 then idx + vec.Length else idx) |> min vec.Length |> max 0
                 let vL, vR = vec.Split idx'
                 let vL' = cmdsL |> List.fold (fun vec cmd -> if cmd.Pre (RRBVector.toArray vec) then cmd.RunActual vec else vec) (vL :?> RRBTransientVector<_>)

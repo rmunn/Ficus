@@ -325,10 +325,10 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                         max tmpShift right.Shift, (tmpRoot :?> RRBFullNode<'T>).MergeTree nullOwner tmpShift None right.Shift (right.Root :?> RRBFullNode<'T>) false
                 match mergedTree with
                 | newRoot, None ->
-                    RRBPersistentVector<'T>(newLen, mergedShift, newRoot, right.Tail, this.Count + right.TailOffset) :> RRBVector<'T>
+                    RRBPersistentVector<'T>(newLen, mergedShift, newRoot, right.Tail, this.Count + right.TailOffset).AdjustTree()
                 | newLeft, Some newRight ->
                     let newRoot = (newLeft :?> RRBFullNode<'T>).NewParent nullOwner mergedShift [|newLeft; newRight|]
-                    RRBPersistentVector<'T>(newLen, (RRBMath.up mergedShift), newRoot, right.Tail, this.Count + right.TailOffset) :> RRBVector<'T>
+                    RRBPersistentVector<'T>(newLen, (RRBMath.up mergedShift), newRoot, right.Tail, this.Count + right.TailOffset).AdjustTree()
         // Transient vectors may only stay transient if appended to a transient of the same owner; here, we're a persistent
         | :? RRBTransientVector<'T> as right ->
             this.Append (right.Persistent())
@@ -866,7 +866,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                 this.Root <- newRoot
                 this.Tail <- right.Tail
                 right.Invalidate()
-                this :> RRBVector<'T>
+                this.AdjustTree()
         // Transient vectors may only stay transient if appended to a transient of the same owner
         | :? RRBTransientVector<'T> as right ->
             this.Persistent().Append (right.Persistent())
