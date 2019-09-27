@@ -786,7 +786,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                 let tailLenL = this.Count - this.TailOffset
                 let tailLenR = right.Count - right.TailOffset
                 if tailLenL + tailLenR <= Literals.blockSize then
-                    right.Tail.CopyTo(this.Tail, tailLenL)
+                    Array.blit right.Tail 0 this.Tail tailLenL tailLenR
                     this.Count <- newLen
                     right.Invalidate()
                     this :> RRBVector<'T>
