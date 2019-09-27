@@ -274,6 +274,8 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
         localIdx, child, nextTreeIdx
 
     member this.ChildrenSeq = this.Children |> Seq.truncate this.NodeSize
+    abstract member SafeChildrenArr : RRBNode<'T>[]
+    default this.SafeChildrenArr = this.Children
     member this.LeavesSeq shift =
         if shift <= Literals.blockSizeShift then
             this.ChildrenSeq |> Seq.cast<RRBLeafNode<'T>>
@@ -895,7 +897,7 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
 
     member this.ApplyRebalancePlan owner shift sizes (mergeStart, mergeLen, sizeReduction) childrenEnum =
         if shift > Literals.blockSizeShift then
-            this.ApplyRebalancePlanImpl<RRBNode<'T>> sizes (mergeStart, mergeLen, sizeReduction) childrenEnum (fun (node : RRBNode<'T>) -> (node :?> RRBFullNode<'T>).Children) (RRBNode<'T>.MkNode owner (down shift))
+            this.ApplyRebalancePlanImpl<RRBNode<'T>> sizes (mergeStart, mergeLen, sizeReduction) childrenEnum (fun (node : RRBNode<'T>) -> (node :?> RRBFullNode<'T>).SafeChildrenArr) (RRBNode<'T>.MkNode owner (down shift))
         else
             this.ApplyRebalancePlanImpl<'T> sizes (mergeStart, mergeLen, sizeReduction) childrenEnum (fun (leaf : RRBNode<'T>) -> (leaf :?> RRBLeafNode<'T>).Items) (RRBNode<'T>.MkLeaf owner)
 
@@ -1279,6 +1281,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
     member val CurrentLength : int = defaultArg realSize (Array.length children) with get, set
     override this.NodeSize = this.CurrentLength
     override this.SlotCount = this.Children |> Seq.take this.NodeSize |> Seq.sumBy (fun child -> child.NodeSize)
+    override this.SafeChildrenArr = this.Children |> Array.truncate this.NodeSize
 
     member this.StringRepr : string = sprintf "length=%d, children=%A%s"
                                               this.NodeSize
@@ -1654,6 +1657,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
     member val CurrentLength : int = defaultArg realSize (Array.length children) with get, set
     override this.NodeSize = this.CurrentLength
     override this.SlotCount = this.Children |> Seq.take this.NodeSize |> Seq.sumBy (fun child -> child.NodeSize)
+    override this.SafeChildrenArr = this.Children |> Array.truncate this.NodeSize
 
     member this.StringRepr : string = sprintf "length=%d, sizetable=%A%s, children=%A%s"
                                               this.NodeSize

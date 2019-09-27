@@ -174,7 +174,6 @@ module Expect =
         Expect.equal (v1.Length) (v2.Length) <| sprintf "Vectors should be equal but had different lengths: expected %d and got %d\n%s" v1.Length v2.Length msg
         for i = 0 to v1.Length - 1 do
             Expect.equal (v1.Item i) (v2.Item i) <| sprintf "Not equal at idx %d: expected %A and got %A\n%s" i (v1.Item i) (v2.Item i) msg
-        Expect.equal (RRBVector.toArray v1) (RRBVector.toArray v2) msg
 
     let vecEqualArr (v : RRBVector<'T>) (a : 'T []) msg =
         Expect.equal v.Length a.Length <| sprintf "Vector and array should be equal but had different lengths: expected %d and got %d\n%s" v.Length a.Length msg
@@ -1205,8 +1204,8 @@ let splitTransientTests =
         let slice = RRBVectorTransientCommands.VecCommands.slice
         // Edit cmdsL and cmdsR below
         let cmds = []
-        let cmdsL = [insert (74,46); remove 29; push 23; insert (-34,2); insert (-32,7); insert (-43,20); push 16; remove -66; remove 91; push 17; insert (-27,10); insert (39,79); pop 44; push 37; insert (25,77); push 100]
-        let cmdsR = [push 39; push 63; insert (71,95); insert (75,64); remove -49; insert (49,68); pop 95; push 67; remove -51; insert (54,14); insert (-81,83); pop 10; push 82; remove -33; insert (-76,64); insert (-39,70)]
+        let cmdsL = [insert (-16,57); slice (None,Some -79); remove -15; push 80; remove 46; push 73; remove -7; insert (22,84); insert (59,53); push 80; push 14; insert (27,65)]
+        let cmdsR = [insert (50,59); insert (87,93); insert (-48,71); slice (Some 58,Some -61); remove -85; remove 98; insert (85,85); insert (28,24); insert (-78,76); insert (-64,83); insert (6,72); insert (-90,78); push 40]
 
         let logVec cmd vec =
             // logger.debug (
@@ -1217,7 +1216,7 @@ let splitTransientTests =
             ()
 
         // Edit vec below
-        let vec = RRBVectorGen.looserTreeReprStrToVec "[[M*M]*M]*2 T15"
+        let vec = RRBVectorGen.looserTreeReprStrToVec "[M M M 29 M M M M M 27 M M 28 M-1 M-1 30 M M M M M-1 M M M M-1 M M M M] [28 27 M 30 30 M-1 30 M M M M M 29 M M M 27 M M M M 28 M M M M-1 30 30 29 M-1 27 M] [M M 29 28 M M M M 28 29 29 M M M M M 27 26 29 30 M M 29 30 28 28 28 M 29] [M M-1 M M M M M 24 28 28 29 30 M M-1 25 26 29 M M M M-1 M M M 28 M M] [M M M M M M M M M M M M M M M M M M M M M M 30 M M M M-1 M M M] [M M 27 M 30 M M M-1 25 M 27 M M 30 M 30 28 M M M M-1 M 25 28 29 29] [M M M M-1 M M 27 28 M 26 M M 29 30 M M 29 M M-1 M M-1 M 29 M M 30 M M] [M-1 29 24 29 M M M 30 M 28 28 M M M M-1 M 30 30 M M M-1 M M 30 29 M M M M M] [M M M 30 M M M 29 M M M M 26 M M M M M M M M-1 M 23 M] [M M M M M M-1 29 29 M M M-1 M M M M M M M M M M 26 M-1 M M M 28 M-1 M-1 27] [M M M M M M M M M-1 30 M M M M M M M M M M 26 M M M M M M-1 M-1 M M M] [M M M M 30 M M M M M M M M M M M 27 M M M M M M M M M M M M 23 M] [M M M M M M M M M M M M M M M-1 M M M M M M M M M M] [M-1 M M M M M M-1 M M M M M M-1 M M M M M-1 M M M M M 30 M M] [30 M 29 M 25 30 M 24 27 M 29 M 28 M M-1 28 M 27 M 30 27 24 25 28 29 30 M 30 M 26 M 28] [26 24 M M 28 28 26 28 M M-1 M M-1 M M 28 27 24 M 30 27 M M 24 27 24 25 26] [30 27 M M-1 M 28 M 25 28 M-1 M M 29 28 M 28 25 M M-1 M 29 29 28 27 M-1 28 30 M 30 29 M-1 26] [M M M 29 26 29 26 M 29 M M 22 28 M 28 28 M 28 M 24 M M 29 27 M M 24 26 27 M] [26 M M M M 23 27 M M-1 30 M 30 30 29 28 M M-1 M M 27 23 29 M 23 M M M 26 M M] [26 27 M 27 28 M 30 M-1 M-1 29 M 30 30 M 27 23 26 M M M 20 26 30 M-1 M M] [26 M-1 26 M M-1 30 28 M M 28 M M M M M M 28 29 M 26 M M M 27 28 M M M 26 M M-1 28] [M M M M 27 30 M M M M M-1 29 M 25 21 29 28 28 M M-1 M 28 25 27 M M-1 28] [M 26 M 28 27 25 30 M M 29 M M M-1 M M M M M M M 26 M-1 27 M M M 25] [M M M M M M M 27 M-1 M 29 28 27 M-1 M M M 29 29 29 24 26 29 29 30 M 30] T14"
         // Original was *28, but *2 is more than enough
         let mutable current = (vec :?> RRBPersistentVector<_>).Transient()
         // for cmd in cmds do
@@ -1225,7 +1224,7 @@ let splitTransientTests =
         //     logVec (cmd.ToString()) current
         //     RRBVectorProps.checkProperties current <| sprintf "Pre-split vector after %s" (cmd.ToString())
 
-        let vL, vR = current.Split 34
+        let vL, vR = current.Split 74
 
         current <- vL :?> RRBTransientVector<_>
         for cmd in cmdsL do
@@ -1253,6 +1252,24 @@ let splitTransientTests =
             >> setField "vec" (RRBVectorGen.vecToTreeReprStr joined))
             // >> setField "structure" (sprintf "%A" joined))
         RRBVectorProps.checkProperties joined "Joined vector after all commands run"
+
+    ftestCase "Join transients where they... do something else, left smaller" <| fun _ ->
+        let vL = RRBVectorGen.treeReprStrToVec "17 26 24 M M M M M T21"
+        let vR = RRBVectorGen.treeReprStrToVec "[27 18 25 24 M-1 M 27 M M 28 M-1 M-1 30 M M M M M-1 M M M M-1 M M M M] [28 27 M 30 30 M-1 30 M M M M M 29 M M M 27 M M M M 28 M M M M-1 30 30 29 M-1 27 M] [M M 29 28 M M M M 28 29 29 M M M M M 27 26 29 30 M M 29 30 28 28 28 M 29] [M M-1 M M M M M 24 28 28 29 30 M M-1 25 26 29 M M M M-1 M M M 28 M M] [M M M M M M M M M M M M M M M M M M M M M M 30 M M M M-1 M M M] [M M 27 M 30 M M M-1 25 M 27 M M 30 M 30 28 M M M M-1 M 25 28 29 29] [M M M M-1 M M 27 28 M 26 M M 29 30 M M 29 M M-1 M M-1 M 29 M M 30 M M] [M-1 29 24 29 M M M 30 M 28 28 M M M M-1 M 30 30 M M M-1 M M 30 29 M M M M M] [M M M 30 M M M 29 M M M M 26 M M M M M M M M-1 M 23 M] [M M M M M M-1 29 29 M M M-1 M M M M M M M M M M 26 M-1 M M M 28 M-1 M-1 27] [M M M M M M M M M-1 30 M M M M M M M M M M 26 M M M M M M-1 M-1 M M M] [M M M M 30 M M M M M M M M M M M 27 M M M M M M M M M M M M 23 M] [M M M M M M M M M M M M M M M-1 M M M M M M M M M M] [M-1 M M M M M M-1 M M M M M M-1 M M M M M-1 M M M M M 30 M M] [30 M 29 M 25 30 M 24 27 M 29 M 28 M M-1 28 M 27 M 30 27 24 25 28 29 30 M 30 M 26 M 28] [26 24 M M 28 28 26 28 M M-1 M M-1 M M 28 27 24 M 30 27 M M 24 27 24 25 26] [30 27 M M-1 M 28 M 25 28 M-1 M M 29 28 M 28 25 M M-1 M 29 29 28 27 M-1 28 30 M 30 29 M-1 26] [M M M 29 26 29 26 M 29 M M 22 28 M 28 28 M 28 M 24 M M 29 27 M M 24 26 27 M] [26 M M M M 23 27 M M-1 30 M 30 30 29 28 M M-1 M M 27 23 29 M 23 M M M 26 M M] [26 27 M 27 28 M 30 M-1 M-1 29 M 30 30 M 27 23 26 M M M 20 26 30 M-1 M M] [26 M-1 26 M M-1 30 28 M M 28 M M M M M M 28 29 M 26 M M M 27 28 M M M 26 M M-1 28] [M M M M 27 30 M M M M M-1 29 M 25 21 29 28 28 M M-1 M 28 25 27 M M-1 28] [M 26 M 28 27 25 30 M M 29 M M M-1 M M M M M M M 26 M-1 27 M M M 25] [M M M M M M M 27 M-1 M 29 28 27 M-1 M M M 29 29 29 24 26 30 30 M M] T23"
+        let tL = (vL :?> RRBPersistentVector<_>).Transient()
+        let tR = (vR :?> RRBPersistentVector<_>).Transient()
+        tR.Owner <- tL.Owner  // So they can be joined still as transients. Not a good idea outside of unit tests.
+        tL.Append tR |> ignore
+        RRBVectorProps.checkProperties tL "Joined vector after all commands run"
+
+    testCase "Join transients where they... do something else, right smaller" <| fun _ ->
+        let vL = RRBVectorGen.treeReprStrToVec "[27 18 25 24 M-1 M 27 M M 28 M-1 M-1 30 M M M M M-1 M M M M-1 M M M M] [28 27 M 30 30 M-1 30 M M M M M 29 M M M 27 M M M M 28 M M M M-1 30 30 29 M-1 27 M] [M M 29 28 M M M M 28 29 29 M M M M M 27 26 29 30 M M 29 30 28 28 28 M 29] [M M-1 M M M M M 24 28 28 29 30 M M-1 25 26 29 M M M M-1 M M M 28 M M] [M M M M M M M M M M M M M M M M M M M M M M 30 M M M M-1 M M M] [M M 27 M 30 M M M-1 25 M 27 M M 30 M 30 28 M M M M-1 M 25 28 29 29] [M M M M-1 M M 27 28 M 26 M M 29 30 M M 29 M M-1 M M-1 M 29 M M 30 M M] [M-1 29 24 29 M M M 30 M 28 28 M M M M-1 M 30 30 M M M-1 M M 30 29 M M M M M] [M M M 30 M M M 29 M M M M 26 M M M M M M M M-1 M 23 M] [M M M M M M-1 29 29 M M M-1 M M M M M M M M M M 26 M-1 M M M 28 M-1 M-1 27] [M M M M M M M M M-1 30 M M M M M M M M M M 26 M M M M M M-1 M-1 M M M] [M M M M 30 M M M M M M M M M M M 27 M M M M M M M M M M M M 23 M] [M M M M M M M M M M M M M M M-1 M M M M M M M M M M] [M-1 M M M M M M-1 M M M M M M-1 M M M M M-1 M M M M M 30 M M] [30 M 29 M 25 30 M 24 27 M 29 M 28 M M-1 28 M 27 M 30 27 24 25 28 29 30 M 30 M 26 M 28] [26 24 M M 28 28 26 28 M M-1 M M-1 M M 28 27 24 M 30 27 M M 24 27 24 25 26] [30 27 M M-1 M 28 M 25 28 M-1 M M 29 28 M 28 25 M M-1 M 29 29 28 27 M-1 28 30 M 30 29 M-1 26] [M M M 29 26 29 26 M 29 M M 22 28 M 28 28 M 28 M 24 M M 29 27 M M 24 26 27 M] [26 M M M M 23 27 M M-1 30 M 30 30 29 28 M M-1 M M 27 23 29 M 23 M M M 26 M M] [26 27 M 27 28 M 30 M-1 M-1 29 M 30 30 M 27 23 26 M M M 20 26 30 M-1 M M] [26 M-1 26 M M-1 30 28 M M 28 M M M M M M 28 29 M 26 M M M 27 28 M M M 26 M M-1 28] [M M M M 27 30 M M M M M-1 29 M 25 21 29 28 28 M M-1 M 28 25 27 M M-1 28] [M 26 M 28 27 25 30 M M 29 M M M-1 M M M M M M M 26 M-1 27 M M M 25] [M M M M M M M 27 M-1 M 29 28 27 M-1 M M M 29 29 29 24 26 30 30 M M] T23"
+        let vR = RRBVectorGen.treeReprStrToVec "17 26 24 M M M M M T21"
+        let tL = (vL :?> RRBPersistentVector<_>).Transient()
+        let tR = (vR :?> RRBPersistentVector<_>).Transient()
+        tR.Owner <- tL.Owner  // So they can be joined still as transients. Not a good idea outside of unit tests.
+        tL.Append tR |> ignore
+        RRBVectorProps.checkProperties tL "Joined vector after all commands run"
 
     testCase "Join transients where they... do something, left smaller" <| fun _ ->
         let vL = RRBVectorGen.treeReprStrToVec "17 27 M M M M T15"
