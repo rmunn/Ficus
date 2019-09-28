@@ -975,7 +975,7 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
             | childL', Some childR' ->
                 let parentL = this.UpdateChildSAbs owner shift (this.NodeSize - 1) childL' (childL'.TreeSize (down shift))
                 // I think the next line is probably needed, but I want to get a regression test for it. So comment it out and find a regression.
-                // let childR' = if right.NodeSize > 1 then (childR' :?> RRBFullNode<'T>).ShrinkRightSpine owner (down rightShift) else childR'
+                let childR' = if right.NodeSize > 1 then (childR' :?> RRBFullNode<'T>).ShrinkRightSpine owner (down rightShift) else childR'
                 let parentR = right.UpdateChildSAbs owner rightShift 0 childR' (childR'.TreeSize (down rightShift))
                 (parentL :?> RRBFullNode<'T>).ConcatNodes owner shift (parentR :?> RRBFullNode<'T>)
                 |> shrinkLeftNode owner shift shouldKeepExpandedLeftNode
