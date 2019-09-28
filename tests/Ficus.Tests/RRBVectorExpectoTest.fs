@@ -1195,6 +1195,16 @@ let splitTransientTests =
         vL.Append vR |> ignore
         RRBVectorProps.checkProperties vL "Vector after appending"
 
+    testCase "Remove the last leaf of a tree path" <| fun _ ->
+        let vec = RRBVectorGen.treeReprStrToVec "[1] [M] T7"
+        RRBVectorProps.checkProperties vec "Original vector"
+        let result = vec.Remove 0
+        RRBVectorProps.checkProperties result "Vector after removing"
+        let t = (vec :?> RRBPersistentVector<_>).Transient()
+        RRBVectorProps.checkProperties t "Original vector as transient"
+        let result2 = t.Remove 0
+        RRBVectorProps.checkProperties result2 "Transient vector after removing"
+
     // Test cases to move into regressionTests once they're done
     testCase "Join transients where they fit nicely together at height 2" <| fun _ ->
         let vL = (RRBVectorGen.treeReprStrToVec "[16 19] [M 18 27 24 M M M M-1 16 25 25] T3" :?> RRBPersistentVector<_>).Transient()
