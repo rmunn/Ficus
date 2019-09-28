@@ -706,7 +706,7 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
                 this.RemoveChild owner shift localIdx
             else
                 this.UpdateChildSRel owner shift localIdx child' -1
-        if shouldCheckForRebalancing && node'.NeedsRebalance shift then
+        if shouldCheckForRebalancing && node'.NodeSize > 0 && node'.NeedsRebalance shift then
             item, (node' :?> RRBFullNode<'T>).Rebalance owner shift
             // TODO: Decide whether we need to deal with expanding the node here or not.
         else
