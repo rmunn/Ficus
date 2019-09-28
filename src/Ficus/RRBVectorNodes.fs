@@ -1737,8 +1737,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
     override this.RemoveChild owner shift localIdx =
         if localIdx = this.NodeSize - 1 then this.RemoveLastChild owner shift else
         let node' = this.GetEditableNode owner :?> RRBExpandedRelaxedNode<'T>
-        let size = node'.NodeSize
-        let newSize = size - 1
+        let newSize = node'.NodeSize - 1
         let oldChildSize = node'.SizeTable.[localIdx] - (if localIdx <= 0 then 0 else node'.SizeTable.[localIdx-1])
         for i = localIdx to newSize - 1 do
             node'.Children.[i] <- node'.Children.[i+1]
