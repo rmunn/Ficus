@@ -1185,7 +1185,7 @@ let splitTransientTests =
         RRBVectorTransientCommands.doComplexTest vec
     testPropMed "medium commands" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doComplexTest vec
-    testProp "large commands" <| fun (vec : RRBVector<int>) ->
+    etestProp (1978933078, 296650714) "large commands" <| fun (vec : RRBVector<int>) ->
         // logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
         RRBVectorTransientCommands.doComplexTest vec
 
@@ -1196,6 +1196,13 @@ let splitTransientTests =
         RRBVectorProps.checkProperties vL "Vector after appending"
 
     // Test cases to move into regressionTests once they're done
+    ftestCase "try to repro" <| fun _ ->
+        let vL = (RRBVectorGen.treeReprStrToVec "[16 19] [M 18 27 24 M M M M-1 16 25 25] T3" :?> RRBPersistentVector<_>).Transient()
+        let vR = (RRBVectorGen.treeReprStrToVec "[1 25 25 25 24 M M M M M M M M M M M M M M M M M M M M M M M M M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M-1 M M] [M M M-1 18 25 24 25 25 M M] T10" :?> RRBPersistentVector<_>).Transient()
+        vR.Owner <- vL.Owner  // So they can be joined still as transients. Not a good idea outside of unit tests.
+        vL.Append vR |> ignore
+        RRBVectorProps.checkProperties vL "Vector after appending"
+
     ptestCase "template for regression tests on split commands that failed" <| fun _ ->
         let push = RRBVectorTransientCommands.VecCommands.push
         let pop = RRBVectorTransientCommands.VecCommands.pop
