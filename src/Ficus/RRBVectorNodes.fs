@@ -1966,19 +1966,13 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBLeafNode<'T>(ownerToken : Own
         then this :> RRBNode<'T>
         else RRBLeafNode<'T>(owner, Array.copy items) :> RRBNode<'T>
 
-    // TODO: Change the API to be "GetEditableItemArray" only on RRBLeafNodes, because I suspect we only ever use this on leaves
-    // FIXME: After testing, verify that assertion and then change the API so we don't have to create throwaway nodes when assigning a new transient tail
-    member this.GetEditableNodeOfBlockSizeLength owner =
-        if this.IsEditableBy owner && this.Items.Length = Literals.blockSize
-        then this :> RRBNode<'T>
+    member this.GetEditableArrayOfBlockSizeLength owner =
+        if this.IsEditableBy owner
+        then this.Items |> Array.expandToBlockSize
         else
-            let items =
-                if this.IsEditableBy owner then this.Items |> Array.expandToBlockSize
-                else
-                    let arr = Array.zeroCreate Literals.blockSize
-                    this.Items.CopyTo(arr, 0)
-                    arr
-            RRBLeafNode<'T>(owner, items) :> RRBNode<'T>
+            let arr = Array.zeroCreate Literals.blockSize
+            this.Items.CopyTo(arr, 0)
+            arr
 
     // TODO: This one might not be needed anymore
     member this.LeafNodeWithItems owner (newItems : 'T []) =

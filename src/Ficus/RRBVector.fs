@@ -616,7 +616,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                 if not <| isSameObj newRoot this.Root then
                     this.Root <- newRoot
                 this.TailOffset <- this.TailOffset - newTailNode.NodeSize
-                this.Tail <- (newTailNode.GetEditableNodeOfBlockSizeLength this.Owner :?> RRBLeafNode<'T>).Items
+                this.Tail <- newTailNode.GetEditableArrayOfBlockSizeLength this.Owner
                 this.AdjustTree()
 
     // abstract member Take : int -> RRBVector<'T>
@@ -633,7 +633,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             if not <| isSameObj newRoot this.Root then
                 this.Root <- newRoot
             this.TailOffset <- idx - newTailNode.NodeSize
-            this.Tail <- (newTailNode.GetEditableNodeOfBlockSizeLength this.Owner :?> RRBLeafNode<'T>).Items
+            this.Tail <- newTailNode.GetEditableArrayOfBlockSizeLength this.Owner
             this.AdjustTree()
         elif idx > this.TailOffset then
             // Splitting the tail in two
@@ -649,7 +649,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             if not <| isSameObj newRoot' this.Root then
                 this.Root <- newRoot'
             this.TailOffset <- idx - newTailNode.NodeSize
-            this.Tail <- (newTailNode.GetEditableNodeOfBlockSizeLength this.Owner :?> RRBLeafNode<'T>).Items
+            this.Tail <- newTailNode.GetEditableArrayOfBlockSizeLength this.Owner
             this.AdjustTree()
 
     // abstract member Skip : int -> RRBVector<'T>
@@ -719,7 +719,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             this.Count <- idx
             if not <| isSameObj newRoot this.Root then
                 this.Root <- newRoot
-            this.Tail <- (newTailNode.GetEditableNodeOfBlockSizeLength this.Owner :?> RRBLeafNode<'T>).Items
+            this.Tail <- newTailNode.GetEditableArrayOfBlockSizeLength this.Owner
             this.TailOffset <- idx - newTailNode.NodeSize
             this.AdjustTree(), right :> RRBVector<'T>
         elif idx > this.TailOffset then
@@ -739,7 +739,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             this.Count <- idx
             if not <| isSameObj newRootL this.Root then
                 this.Root <- newRootL
-            this.Tail <- (newTailNodeL.GetEditableNodeOfBlockSizeLength this.Owner :?> RRBLeafNode<'T>).Items
+            this.Tail <- newTailNodeL.GetEditableArrayOfBlockSizeLength this.Owner
             this.TailOffset <- idx - newTailNodeL.NodeSize
             // Have to adjust the tree for both "this" AND "right" in this one, since either one could have become a tall, thin tree
             this.AdjustTree(), right.AdjustTree()
