@@ -111,7 +111,6 @@ type RRBNode<'T>(ownerToken : OwnerToken) =
     abstract member SetNodeSize : int -> unit
 
     abstract member GetEditableNode : OwnerToken -> RRBNode<'T>
-    abstract member GetEditableNodeOfBlockSizeLength : OwnerToken -> RRBNode<'T>
 
     member this.IsEditableBy (owner : OwnerToken) =
         isSameObj owner ownerToken && not (isNull !owner)
@@ -206,18 +205,6 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
         if this.IsEditableBy owner
         then this :> RRBNode<'T>
         else RRBFullNode<'T>(owner, Array.copy this.Children) :> RRBNode<'T>
-
-    override this.GetEditableNodeOfBlockSizeLength owner =
-        if this.IsEditableBy owner && this.Children.Length = Literals.blockSize
-        then this :> RRBNode<'T>
-        else
-            let children =
-                if this.IsEditableBy owner then this.Children |> Array.expandToBlockSize
-                else
-                    let arr = Array.zeroCreate Literals.blockSize
-                    this.Children.CopyTo(arr, 0)
-                    arr
-            RRBFullNode<'T>(owner, children) :> RRBNode<'T>
 
     override this.Shrink owner = this.GetEditableNode owner
     override this.Expand owner =
@@ -1049,20 +1036,6 @@ and [<StructuredFormatDisplay("RelaxedNode({StringRepr})")>] RRBRelaxedNode<'T>(
         then this :> RRBNode<'T>
         else RRBRelaxedNode<'T>(owner, Array.copy this.Children, Array.copy this.SizeTable) :> RRBNode<'T>
 
-    override this.GetEditableNodeOfBlockSizeLength owner =
-        if this.IsEditableBy owner && this.Children.Length = Literals.blockSize
-        then this :> RRBNode<'T>
-        else
-            let children, sizeTable =
-                if this.IsEditableBy owner then this.Children |> Array.expandToBlockSize, this.SizeTable |> Array.expandToBlockSize
-                else
-                    let arrC = Array.zeroCreate Literals.blockSize
-                    let arrS = Array.zeroCreate Literals.blockSize
-                    this.Children.CopyTo(arrC, 0)
-                    this.SizeTable.CopyTo(arrS, 0)
-                    arrC, arrS
-            RRBRelaxedNode<'T>(owner, children, sizeTable) :> RRBNode<'T>
-
     override this.Shrink owner = this.GetEditableNode owner
     override this.Expand owner =
         let node' = this.GetEditableNode owner :?> RRBRelaxedNode<'T>
@@ -1305,9 +1278,6 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         if this.IsEditableBy owner
         then this :> RRBNode<'T>
         else RRBExpandedFullNode<'T>(owner, Array.copy this.Children, this.NodeSize) :> RRBNode<'T>
-
-    override this.GetEditableNodeOfBlockSizeLength owner =
-        this.GetEditableNode owner
 
     override this.SetNodeSize newSize = this.CurrentLength <- newSize
 
@@ -1688,9 +1658,6 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         then this :> RRBNode<'T>
         else RRBExpandedRelaxedNode<'T>(owner, Array.copy this.Children, Array.copy this.SizeTable, this.NodeSize) :> RRBNode<'T>
 
-    override this.GetEditableNodeOfBlockSizeLength owner =
-        this.GetEditableNode owner
-
     override this.SetNodeSize newSize = this.CurrentLength <- newSize
 
     override this.ToFullNodeIfNeeded shift =
@@ -2001,7 +1968,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBLeafNode<'T>(ownerToken : Own
 
     // TODO: Change the API to be "GetEditableItemArray" only on RRBLeafNodes, because I suspect we only ever use this on leaves
     // FIXME: After testing, verify that assertion and then change the API so we don't have to create throwaway nodes when assigning a new transient tail
-    override this.GetEditableNodeOfBlockSizeLength owner =
+    member this.GetEditableNodeOfBlockSizeLength owner =
         if this.IsEditableBy owner && this.Items.Length = Literals.blockSize
         then this :> RRBNode<'T>
         else
