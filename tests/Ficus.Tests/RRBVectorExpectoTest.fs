@@ -1205,10 +1205,31 @@ let splitTransientTests =
         let result2 = t.Remove 0
         RRBVectorProps.checkProperties result2 "Transient vector after removing"
 
+    testCase "Join transients where right side merges neatly into left side and has a root size of 1" <| fun _ ->
+        // let vL = (RRBVectorGen.treeReprStrToVec "[16 19] [M 18 27 24 M M M M-1 16 25 25] T3" :?> RRBPersistentVector<_>).Transient()
+        // let vR = (RRBVectorGen.treeReprStrToVec "[M M M M M M] [M*M] T10" :?> RRBPersistentVector<_>).Transient()
+        let reprL = "[26 25 16 M-1 M M M M M M M M M M M M M] [M*16] [M*M] [M*M] [M*M] [M*M] [M*M] [M*16] [M M M M M M M M M M M M M M M 17 16 M 4 M-1] T32"
+        let reprR = "[4 M-1] T14"
+        let vL = (RRBVectorGen.treeReprStrToVec reprL :?> RRBPersistentVector<_>).Transient()
+        let vR = (RRBVectorGen.treeReprStrToVec reprR :?> RRBPersistentVector<_>).Transient()
+        vR.Owner <- vL.Owner  // So they can be joined still as transients. Not a good idea outside of unit tests.
+        vL.Append vR |> ignore
+        RRBVectorProps.checkProperties vL "Vector after appending"
+
+    testCase "Join transients where right side merges neatly into left side and has a root size of more than 1" <| fun _ ->
+        // let vL = (RRBVectorGen.treeReprStrToVec "[16 19] [M 18 27 24 M M M M-1 16 25 25] T3" :?> RRBPersistentVector<_>).Transient()
+        // let vR = (RRBVectorGen.treeReprStrToVec "[M M M M M M] [M*M] T10" :?> RRBPersistentVector<_>).Transient()
+        let reprL = "[26 25 16 M-1 M M M M M M M M M M M M M] [M*16] [M*M] [M*M] [M*M] [M*M] [M*M] [M*16] [M M M M M M M M M M M M M M M 17 16 M 4 M-1] T32"
+        let reprR = "[4 M-1] [M 17 17 M M M M M] T14"
+        let vL = (RRBVectorGen.treeReprStrToVec reprL :?> RRBPersistentVector<_>).Transient()
+        let vR = (RRBVectorGen.treeReprStrToVec reprR :?> RRBPersistentVector<_>).Transient()
+        vR.Owner <- vL.Owner  // So they can be joined still as transients. Not a good idea outside of unit tests.
+        vL.Append vR |> ignore
+        RRBVectorProps.checkProperties vL "Vector after appending"
     // Test cases to move into regressionTests once they're done
     testCase "Join transients where they fit nicely together at height 2" <| fun _ ->
         let vL = (RRBVectorGen.treeReprStrToVec "[16 19] [M 18 27 24 M M M M-1 16 25 25] T3" :?> RRBPersistentVector<_>).Transient()
-        let vR = (RRBVectorGen.treeReprStrToVec "[1 25 25 25 24 M M M M M M M M M M M M M M M M M M M M M M M M M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M*M] [M M M M M M M M M M M M M M M M M M M M M M M M M M M M M M-1 M M] [M M M-1 18 25 24 25 25 M M] T10" :?> RRBPersistentVector<_>).Transient()
+        let vR = (RRBVectorGen.treeReprStrToVec "[M*M] [M*M] T10" :?> RRBPersistentVector<_>).Transient()
         vR.Owner <- vL.Owner  // So they can be joined still as transients. Not a good idea outside of unit tests.
         vL.Append vR |> ignore
         RRBVectorProps.checkProperties vL "Vector after appending"
@@ -1220,9 +1241,9 @@ let splitTransientTests =
         let remove = RRBVectorTransientCommands.VecCommands.remove
         let slice = RRBVectorTransientCommands.VecCommands.slice
         // Edit cmdsL and cmdsR below
-        let cmds = []
-        let cmdsL = [insert (-16,57); slice (None,Some -79); remove -15; push 80; remove 46; push 73; remove -7; insert (22,84); insert (59,53); push 80; push 14; insert (27,65)]
-        let cmdsR = [insert (50,59); insert (87,93); insert (-48,71); slice (Some 58,Some -61); remove -85; remove 98; insert (85,85); insert (28,24); insert (-78,76); insert (-64,83); insert (6,72); insert (-90,78); push 40]
+        let cmds = [push 51]
+        let cmdsL = [remove -12; insert (23,7); insert (2,12); remove 77; push 86; insert (6,21); insert (61,79); remove -25; insert (-74,20); pop 16]
+        let cmdsR = [remove 7; insert (95,84); remove -46; remove 64; push 44; remove -63; insert (89,59); insert (-46,93); push 55; push 89]
 
         let logVec cmd vec =
             // logger.debug (
@@ -1233,15 +1254,15 @@ let splitTransientTests =
             ()
 
         // Edit vec below
-        let vec = RRBVectorGen.looserTreeReprStrToVec "[M M M 29 M M M M M 27 M M 28 M-1 M-1 30 M M M M M-1 M M M M-1 M M M M] [28 27 M 30 30 M-1 30 M M M M M 29 M M M 27 M M M M 28 M M M M-1 30 30 29 M-1 27 M] [M M 29 28 M M M M 28 29 29 M M M M M 27 26 29 30 M M 29 30 28 28 28 M 29] [M M-1 M M M M M 24 28 28 29 30 M M-1 25 26 29 M M M M-1 M M M 28 M M] [M M M M M M M M M M M M M M M M M M M M M M 30 M M M M-1 M M M] [M M 27 M 30 M M M-1 25 M 27 M M 30 M 30 28 M M M M-1 M 25 28 29 29] [M M M M-1 M M 27 28 M 26 M M 29 30 M M 29 M M-1 M M-1 M 29 M M 30 M M] [M-1 29 24 29 M M M 30 M 28 28 M M M M-1 M 30 30 M M M-1 M M 30 29 M M M M M] [M M M 30 M M M 29 M M M M 26 M M M M M M M M-1 M 23 M] [M M M M M M-1 29 29 M M M-1 M M M M M M M M M M 26 M-1 M M M 28 M-1 M-1 27] [M M M M M M M M M-1 30 M M M M M M M M M M 26 M M M M M M-1 M-1 M M M] [M M M M 30 M M M M M M M M M M M 27 M M M M M M M M M M M M 23 M] [M M M M M M M M M M M M M M M-1 M M M M M M M M M M] [M-1 M M M M M M-1 M M M M M M-1 M M M M M-1 M M M M M 30 M M] [30 M 29 M 25 30 M 24 27 M 29 M 28 M M-1 28 M 27 M 30 27 24 25 28 29 30 M 30 M 26 M 28] [26 24 M M 28 28 26 28 M M-1 M M-1 M M 28 27 24 M 30 27 M M 24 27 24 25 26] [30 27 M M-1 M 28 M 25 28 M-1 M M 29 28 M 28 25 M M-1 M 29 29 28 27 M-1 28 30 M 30 29 M-1 26] [M M M 29 26 29 26 M 29 M M 22 28 M 28 28 M 28 M 24 M M 29 27 M M 24 26 27 M] [26 M M M M 23 27 M M-1 30 M 30 30 29 28 M M-1 M M 27 23 29 M 23 M M M 26 M M] [26 27 M 27 28 M 30 M-1 M-1 29 M 30 30 M 27 23 26 M M M 20 26 30 M-1 M M] [26 M-1 26 M M-1 30 28 M M 28 M M M M M M 28 29 M 26 M M M 27 28 M M M 26 M M-1 28] [M M M M 27 30 M M M M M-1 29 M 25 21 29 28 28 M M-1 M 28 25 27 M M-1 28] [M 26 M 28 27 25 30 M M 29 M M M-1 M M M M M M M 26 M-1 27 M M M 25] [M M M M M M M 27 M-1 M 29 28 27 M-1 M M M 29 29 29 24 26 29 29 30 M 30] T14"
-        // Original was *28, but *2 is more than enough
+        let vec = RRBVectorGen.looserTreeReprStrToVec "[M*M]*7 T2"
+        // let vec = RRBVectorGen.looserTreeReprStrToVec "[26 25 16 M-1 M M M M M M M M M M M M M] [M*16] [M*M] [M*M] [M*M] [M*M] [M*M] [M*16] [M M M M M M M M M M M M M M M 17 16 M 4 M-1] T32"
         let mutable current = (vec :?> RRBPersistentVector<_>).Transient()
         // for cmd in cmds do
         //     current <- current |> cmd.RunActual
         //     logVec (cmd.ToString()) current
         //     RRBVectorProps.checkProperties current <| sprintf "Pre-split vector after %s" (cmd.ToString())
 
-        let vL, vR = current.Split 74
+        let vL, vR = current.Split (current.Length - 89)
 
         current <- vL :?> RRBTransientVector<_>
         for cmd in cmdsL do
