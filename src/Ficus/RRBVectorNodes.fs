@@ -585,6 +585,9 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
         let sibSize = leftSibling.NodeSize
         if localIdx = 0 && thisSize = Literals.blockSize && sibSize = Literals.blockSize - 1 then
             // Special case since the algorithm below would fail on this one scenario
+            // NOTE: This cannot ever happen in the current state of the code, since in InsertedTree we call
+            // InsertAndSlideChildrenLeft with (localIdx + 1): we're inserting the *right* node of the split pair,
+            // after updating localIdx with the left node of the split pair. So localIdx will always be > 0 here.
             let leftSibling' = leftSibling.AppendChild owner shift newChild
             leftSibling', this :> RRBNode<'T>
         else
