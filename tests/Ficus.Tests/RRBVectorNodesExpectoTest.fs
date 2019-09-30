@@ -1098,6 +1098,33 @@ let largeMergeTreeTestsWIP =
 
   ]
 
+let manualTests =
+  testList "Tests of node methods that aren't covered by random testing" [
+    testProp "ToRelaxedNodeIfNeeded never changes an already-full node" <| fun (IsolatedNode node : IsolatedNode<int>) ->
+        node |> isFull ==> fun () ->
+            let maybeRelaxed = (node :?> RRBFullNode<_>).ToRelaxedNodeIfNeeded Literals.blockSizeShift
+            maybeRelaxed |> isFull
+
+    testCase "ToRelaxedNodeIfNeeded will change a full node that has lost an item from a non-final child" <| fun _ ->
+        let vec = RRBVectorGen.treeReprStrToVec "M M M T1" :?> Ficus.RRBVector.RRBPersistentVector<_>
+        let root = vec.Root :?> RRBFullNode<_>
+        let root' = root.RemovedItem nullOwner vec.Shift false (Literals.blockSize + 5) :?> RRBFullNode<_>
+        let maybeRelaxed = root'.ToRelaxedNodeIfNeeded Literals.blockSizeShift
+        Expect.isTrue (maybeRelaxed |> isRelaxed) "Node should have changed to be relaxed"
+
+    testCase "ToRelaxedNodeIfNeeded will NOT change a full node that has lost an item from its final child" <| fun _ ->
+        let vec = RRBVectorGen.treeReprStrToVec "M M M T1" :?> Ficus.RRBVector.RRBPersistentVector<_>
+        let root = vec.Root :?> RRBFullNode<_>
+        let root' = root.RemovedItem nullOwner vec.Shift false (Literals.blockSize * 2 + 5) :?> RRBFullNode<_>
+        // Note that vec.Remove would have adjusted this tree to promote a new leaf, so we use root.RemovedItem instead
+        let maybeRelaxed = root'.ToRelaxedNodeIfNeeded Literals.blockSizeShift
+        Expect.isTrue (maybeRelaxed |> isFull) "Node should still be full"
+
+    testProp "ToFullNodeIfNeeded never changes an already-relaxed node" <| fun (IsolatedNode node : IsolatedNode<int>) ->
+        node |> isRelaxed ==> fun () ->
+            let maybeFull = (node :?> RRBRelaxedNode<_>).ToFullNodeIfNeeded Literals.blockSizeShift
+            maybeFull |> isRelaxed
+  ]
 
 // let debugGenTests =
 //   ftestList "Debugging generators" [
@@ -1129,4 +1156,5 @@ let tests =
     updatePropertyTests
     keepPropertyTests
     splitAndKeepPropertyTests
+    manualTests
   ]
