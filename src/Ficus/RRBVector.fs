@@ -1003,6 +1003,8 @@ module RRBVector =
     let inline remove idx (vec : RRBVector<'T>) = vec.Remove idx
     let inline insert idx (item : 'T) (vec : RRBVector<'T>) = vec.Insert idx item
 
+    let inline empty<'T> = RRBPersistentVector<'T>.MkEmpty() :> RRBVector<'T>
+
     let internal flip f a b = f b a
     let internal flip3 f a b c = f b c a
 
@@ -1081,14 +1083,27 @@ module RRBVector =
             transient.Persistent() :> RRBVector<_>
 
     let concat (vecs : seq<RRBVector<'T>>) =
-        // TODO: Implement concatenation transient RRBVectors so this will be faster (no need to build and throw away so many intermediate result vectors)
-        // ... But *only* when all the vectors involved have the same owner token *and* it's not `nullOwner`,
-        // otherwise the transient->persistent conversions will "eat" all of our gains in speed
-        // TODO: Actually, benchmark that and see if it really is all that much faster, considering the complications inherent in concatenating transients
-        let mutable result = RRBPersistentVector<'T>.MkEmpty() :> RRBVector<'T>
-        for vec in vecs do
-            result <- result.Append vec
-        result
+        // TODO: Benchmark this and see if it really is all that much faster, considering the complications inherent in concatenating transients
+        if vecs |> Seq.isEmpty then
+            empty<'T>
+        elif (vecs |> Seq.head) :? RRBTransientVector<'T> then
+            let t = (vecs |> Seq.head) :?> RRBTransientVector<'T>
+            let token = t.Owner
+            if (vecs |> Seq.forall (fun v -> v :? RRBTransientVector<'T> && (v :?> RRBTransientVector<'T>).Owner = token)) then
+                let mutable result = t
+                for vec in Seq.tail vecs do
+                    result <- result.Append vec :?> RRBTransientVector<'T>
+                result :> RRBVector<'T>
+            else
+                let mutable result = RRBPersistentVector<'T>.MkEmpty() :> RRBVector<'T>
+                for vec in vecs do
+                    result <- result.Append vec
+                result
+        else
+            let mutable result = RRBPersistentVector<'T>.MkEmpty() :> RRBVector<'T>
+            for vec in vecs do
+                result <- result.Append vec
+            result
 
     // TODO FIXME: Find everywhere where we make new transient vectors, and whenever possible make them take the owner token from the original vector
 
@@ -1135,7 +1150,6 @@ module RRBVector =
         else
             vec |> Seq.distinctBy f |> ofSeq
 
-    let inline empty<'T> = RRBPersistentVector<'T>.MkEmpty() :> RRBVector<'T>
     let exactlyOne (vec : RRBVector<'T>) =
         if vec.Length <> 1 then invalidArg "vec" <| sprintf "exactlyOne called on a vector of %d items (requires a vector of exactly 1 item)" vec.Length
         vec.Peek()
