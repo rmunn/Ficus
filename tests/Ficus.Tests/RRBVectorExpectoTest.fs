@@ -2213,6 +2213,88 @@ let apiTests =
         Expect.throwsC (fun () -> vec |> RRBVector.remove 0 |> ignore) (fun e ->
             Expect.equal e.Message "Index must not be past the end of the vector" "RRBVector.pop on empty vector threw wrong exception")
 
+    testProp "insert" <| fun (vec : RRBVector<int>) (NonNegativeInt i) ->
+        let i = i % (vec.Length + 1)
+        let arr = vec |> RRBVector.toArray
+        let expected = arr |> Array.copyAndInsertAt i -512
+        let actual = vec |> RRBVector.insert i -512 |> RRBVector.toArray
+        Expect.equal actual expected "RRBVector.insert did not produce the right results"
+
+    testProp "toArray" <| fun (vec : RRBVector<int>) ->
+        let arr = vec |> RRBVector.toArray
+        Expect.equal arr.Length vec.Length "Array length should equal original vector length"
+        for i = 0 to vec.Length - 1 do
+            Expect.equal (arr.[i]) (vec.[i]) <| sprintf "Array should equal original vector but they differed at index %d. Array had %d and vector had %d" i arr.[i] vec.[i]
+
+    testProp "toSeq" <| fun (vec : RRBVector<int>) ->
+        let s = vec |> RRBVector.toSeq
+        Expect.equal (Seq.length s) vec.Length "Seq length should equal original vector length"
+        use eS = s.GetEnumerator()
+        let mutable i = 0
+        while eS.MoveNext() do
+            Expect.equal (eS.Current) (vec.[i]) <| sprintf "Seq should equal original vector but they differed at index %d. Seq had %d and vector had %d" i eS.Current vec.[i]
+            i <- i + 1
+
+    testProp "toList" <| fun (vec : RRBVector<int>) ->
+        let l = vec |> RRBVector.toList
+        let mutable curL = l
+        let mutable i = 0
+        while not (List.isEmpty curL) do
+            Expect.equal (List.head curL) (vec.[i]) <| sprintf "List should equal original vector but they differed at index %d. Seq had %d and vector had %d" i (List.head curL) vec.[i]
+            i <- i + 1
+            curL <- List.tail curL
+        Expect.equal i vec.Length "List length should equal original vector length"
+
+    testProp "ofSeq" <| fun (l : int list) ->
+        // FsCheck doesn't have seq generators by default, so we generate a list and then treat it as a seq for this test
+        let s = Seq.ofList l
+        let vec = RRBVector.ofSeq s
+        Expect.equal vec.Length (Seq.length s) "Vector length should equal original seq length"
+        use eS = s.GetEnumerator()
+        let mutable i = 0
+        while eS.MoveNext() do
+            Expect.equal (vec.[i]) (eS.Current) <| sprintf "Vector should equal original seq but they differed at index %d. Seq had %d and vector had %d" i eS.Current vec.[i]
+            i <- i + 1
+
+    testProp "ofArray" <| fun (arr : int[]) ->
+        let vec = RRBVector.ofArray arr
+        Expect.equal vec.Length arr.Length "Vector length should equal original array length"
+        for i = 0 to vec.Length - 1 do
+            Expect.equal (vec.[i]) (arr.[i]) <| sprintf "Vector should equal original array but they differed at index %d. Array had %d and vector had %d" i arr.[i] vec.[i]
+
+    testProp "ofList" <| fun (l : int list) ->
+        let vec = RRBVector.ofList l
+        let mutable curL = l
+        let mutable i = 0
+        while not (List.isEmpty curL) do
+            Expect.equal (List.head curL) (vec.[i]) <| sprintf "Seq should equal original vector but they differed at index %d. Seq had %d and vector had %d" i (List.head curL) vec.[i]
+            i <- i + 1
+            curL <- List.tail curL
+        Expect.equal vec.Length i "Vector length should equal original list length"
+
+    testProp "average" <| fun (vec : RRBVector<NormalFloat>) ->
+        vec.Length > 0 ==> fun() ->
+            let vec = vec |> RRBVector.map (fun (NormalFloat n) -> n)
+            let len = vec.Length
+            let mutable sum = 0.0
+            for i = 0 to len - 1 do
+                sum <- sum + vec.[i]
+            let expected = sum / float len
+            let actual = vec |> RRBVector.average
+            Expect.floatClose Accuracy.high expected actual "RRBVector.average did not produce the right result"
+
+    testProp "averageBy" <| fun (vec : RRBVector<NormalFloat>) (f : float -> NormalFloat) ->
+        vec.Length > 0 ==> fun() ->
+            let vec = vec |> RRBVector.map (fun (NormalFloat n) -> n)
+            let f' = f >> (fun (NormalFloat n) -> n)
+            let len = vec.Length
+            let mutable sum = 0.0
+            for i = 0 to len - 1 do
+                sum <- sum + f' vec.[i]
+            let expected = sum / float len
+            let actual = vec |> RRBVector.averageBy f'
+            Expect.floatClose Accuracy.high expected actual "RRBVector.average did not produce the right result"
+
     testProp "slice notation" <| fun (VecPlusArrAndIdx (v,a,idx)) (PositiveInt endIdx) ->
         let endIdx = if v.Length = 0 then 0 else endIdx % v.Length
         let idx, endIdx = if idx <= endIdx then idx,endIdx else endIdx,idx
