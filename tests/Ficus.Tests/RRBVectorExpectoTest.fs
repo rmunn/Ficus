@@ -1183,7 +1183,7 @@ let splitTransientTests =
         RRBVectorTransientCommands.doTestXL vec
     testPropSm "small commands" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doComplexTest vec
-    testPropMed "medium commands" <| fun (vec : RRBVector<int>) ->
+    testPropMed (*446166957, 296651380*) "medium commands" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doComplexTest vec
     testProp "large commands" <| fun (vec : RRBVector<int>) ->
         // logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))
