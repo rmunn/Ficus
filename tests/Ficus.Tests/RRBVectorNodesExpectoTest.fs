@@ -1067,14 +1067,14 @@ let longRunningTests =
 let tests =
   testList "Basic node tests" [
     // debugGenTests
-    // appendAndPrependChildrenPropertyTests  // Put this first since it's so long
-    // splitTreeTests
-    // mergeTreeTestsWIP
-    // rebalanceTestsWIP
-    // appendPropertyTests
-    // insertPropertyTests
-    // removePropertyTests
-    // updatePropertyTests
-    // keepPropertyTests
-    // splitAndKeepPropertyTests
+    appendAndPrependChildrenPropertyTests  // Put this first since it's so long
+    splitTreeTests
+    mergeTreeTestsWIP
+    rebalanceTestsWIP
+    appendPropertyTests
+    insertPropertyTests
+    removePropertyTests
+    updatePropertyTests
+    keepPropertyTests
+    splitAndKeepPropertyTests
   ]

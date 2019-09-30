@@ -1176,9 +1176,9 @@ let doSplitTransientTest (RRBVectorTransientCommands.SplitTestInput (vec, cmds))
 
 let splitTransientTests =
   testList "MailboxProcessor + Transient tests" [
-    testPropSm "small vectors (up to root+tail in size)" doSplitTransientTest
-    testPropMed "medium vectors (up to about 1-2 levels high)" doSplitTransientTest
-    testProp "large vectors (up to about 3-4 levels high)" doSplitTransientTest
+    // testPropSm "small vectors (up to root+tail in size)" doSplitTransientTest
+    // testPropMed "medium vectors (up to about 1-2 levels high)" doSplitTransientTest
+    // etestProp (280210589, 296651609) "large vectors (up to about 3-4 levels high)" doSplitTransientTest
     testPropSm "small vectors into thing" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doTestXL vec
     testPropSm "small commands" <| fun (vec : RRBVector<int>) ->
@@ -2660,23 +2660,32 @@ Something to exercise the final else block in Array.appendAndSplitAt (lenL > spl
 findMergeCandidates - write test that makes sure the one-pass version never finds *better* candidates than the two-pass version
 GetEditableNodeOfBlockSizeLength on tree nodes (currently we only ever call it on leaf nodes)
   Actually, we should change that to be a method on the leaf node, not on an RRBNode since it doesn't actually make sense there
-ExpandRightSpine of full nodes - the "if shift <= Literals.blockSizeShift || this.NodeSize = 0 then" branch is always true so far
-  We need to write tests making persistent trees of many sizes (some manually) and making them transient, then persistent again,
-    and verifying that they kept their "shape". Also do a few operations (push, insert, remove, pop) on the transient and make sure
-    they correspond to the same thing on the persistent.
+ExpandRightSpine of full nodes - the "if isSameObj child' this.LastChild then" branch is never true, but then, it shouldn't be. And it's trivial.
 ToRelaxedNodeIfNeeded on full nodes isn't, apparently, being called (?)
   It's being called in InsertChildS of *expanded* nodes, but not of regular full nodes??
   Ditto for AppendNChildren and MkNodeForRebalance of *expanded* nodes, but not of regular full nodes. Why??
+InsertChild - the "if newChildSize >= (1 <<< shift) then" branch is never true, i.e. we're never inserting a full child.
+  Might need to make a manual test that will make that happen, just to make sure. Although... how would that ever happen? Probably can't.
+RemoveChild of full nodes - not exercised. (UPDATE: full nodes were exercised but not expanded full nodes)
+SplitAndKeepNLeft of full nodes - not exericsed. SplitAndKeepNLeftS happened twice, though. And SplitAndKeepNRight happened once.
+  Probably need more insertion property tests to exercise this more often.
+  Or just put failwith statements in there, run unit tests over and over, and find a failure, then turn that into a test. No need to write it by hand.
+  (NOTE: SplitAndKeepNLeft of relaxed nodes was the same)
+PrependNChildren of full nodes - not exercised. PrependNChildrenS got run a few times. (Ditto for relaxed nodes)
 SlideChildren{Left,Right} of full nodes - aren't testing the n = 0 case (but then, we only tested each of those twice total)
 InsertAndSlideChildrenLeft of full nodes - the "Special case since the algorithm below would fail on this one scenario" block isn't being run
   Also the final else block isn't being run
   But then, we only ran it twice total. Need more test cases that exercise this part of the code.
+  (UPDATE: We ran it once in the most recent run. Still need more test cases for this part)
 InsertAndSlideChildrenRight of full nodes - final else block isn't being run (comment says we need special test case)
 ConcatTwigsPlusLeaf - final failwith is never called (good, but we might need a rewrite to add an #if DEBUG in there so we don't have a dangling else clause)
   Or we might want to rewrite it so that it can fail, and the code above it takes a different path. Maybe not, but we should make sure it's internal.
-MergeTree of full nodes (the only implementation, thankfully) - the childL.MergeTree call in the shift = rightShift branch only produced (child', None) once,
-  which isn't enough for full testing: the "if right.NodeSize > 1" test went down the "then" branch, and we haven't yet tested a case where right.NodeSize = 1
+  UPDATE: It's... allegedly getting called 5 times? Even though my tests never failed? I'm suspicious of these numbers now.
+HasRoomToMergeTheTail - the this.NeedsRebalance2PlusLeaf path isn't being looked at
+MergeTree of full nodes (the only implementation, thankfully) - the childL.MergeTree call in the shift = rightShift branch only produced (child', None) a few times,
+  which isn't enough for full testing: the "if right.NodeSize > 1" test went down the "then" branch every single time, and we haven't yet tested a case where right.NodeSize = 1
   TODO: Run our tests in debug mode with some breakpoints in there, and see when those breakpoints ever get hit
+  Or just stick a failwith in that branch so that we'll finally get a counterexample
 
 MaybeExpand of expanded full nodes - the "if not (isSameObj lastChild expandedLastChild) then" is never true
   (the expanded last child is *always* the same object), so I need to find a scenario where it will be false so I have more confidence
