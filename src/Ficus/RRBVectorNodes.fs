@@ -571,60 +571,48 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
         this', rightSibling'
 
     member this.InsertAndSlideChildrenLeft owner shift localIdx newChild (leftSibling : RRBFullNode<'T>) =
-        // TODO: Change this to calculate the amount to slide over, then use SlideChildrenLeft and SlideChildrenRight just up above
-        // Preconditions: this.NodeSize = Literals.blockSize and leftSibling.NodeSize < Literals.blockSize
-
         // GOAL: we make left and right balanced, with any extra going on the left.
-        // Method: calculate the average size, and make each one fit that average. Extra should go on the side that localIdx isn't on.
-        // Special cases: 32 and 32 = we're not being called in that situation.
-        // 31 and 32: if localIdx = 0, then just AppendChild on the left node and be done with it.
-        // 30 and 32: turns to 31 and 31 and then we can insert on either side.
-        // In the 31/32 case, totalSize will be 63 and that divided by 2 will be 31, so resultSizeL will end up as 31.
-
+        // Method: calculate the average size, and make each one fit that average. Extra node (if total is odd) can go on either side; it doesn't matter much.
         let thisSize = this.NodeSize
         let sibSize = leftSibling.NodeSize
-        if localIdx = 0 && thisSize = Literals.blockSize && sibSize = Literals.blockSize - 1 then
-            // Special case since the algorithm below would fail on this one scenario
-            // NOTE: This cannot ever happen in the current state of the code, since in InsertedTree we call
-            // InsertAndSlideChildrenLeft with (localIdx + 1): we're inserting the *right* node of the split pair,
-            // after updating localIdx with the left node of the split pair. So localIdx will always be > 0 here.
-            let leftSibling' = leftSibling.AppendChild owner shift newChild
-            leftSibling', this :> RRBNode<'T>
+        let totalSize = thisSize + sibSize
+        let resultSizeL = totalSize >>> 1
+        let resultSizeR = totalSize - resultSizeL
+        let n = thisSize - resultSizeR |> max 1
+        let l, r = this.SlideChildrenLeft owner shift n leftSibling
+        let idxAfterSlide = localIdx - n
+        if idxAfterSlide < 0 then
+            // Inserting into left sibling
+            let idx' = idxAfterSlide + l.NodeSize
+            let l' = (l :?> RRBFullNode<'T>).InsertChild owner shift idx' newChild
+            l', r
         else
-            let totalSize = thisSize + sibSize
-            let resultSizeL = totalSize >>> 1
-            let resultSizeR = totalSize - resultSizeL
-            let n = thisSize - resultSizeR |> max 1
-            let l, r = this.SlideChildrenLeft owner shift n leftSibling
-            let idx = localIdx - n   // If we insert at 5 but we slid 3 items over, we're inserting at 2. If we insert at 2 but we slid 3 items over, we're inserting at -1, which is
-            // 1 *before* the node size of the new left sibling. So left sibling was 24, now is 27, we're inserting at 26. Yep.
-            if idx < 0 then
-                // Inserting into left sibling
-                let idx' = idx + l.NodeSize
-                let l' = (l :?> RRBFullNode<'T>).InsertChild owner shift idx' newChild
-                l', r
-            else
-                let r' = (r :?> RRBFullNode<'T>).InsertChild owner shift idx newChild
-                l, r'
-        // Special case of 31/32 must also be considered here. Custom test for that one.
+            // Inserting into right sibling
+            let r' = (r :?> RRBFullNode<'T>).InsertChild owner shift idxAfterSlide newChild
+            l, r'
 
     member this.InsertAndSlideChildrenRight owner shift localIdx newChild (rightSibling : RRBFullNode<'T>) =
         let thisSize = this.NodeSize
         let sibSize = rightSibling.NodeSize
-        let totalSize = thisSize + sibSize
-        let resultSizeL = totalSize >>> 1
-        let resultSizeR = totalSize - resultSizeL
-        let n = thisSize - resultSizeL
-        let l, r = this.SlideChildrenRight owner shift n rightSibling
-        if localIdx < resultSizeL then
-            let l' = (l :?> RRBFullNode<'T>).InsertChild owner shift localIdx newChild
-            l', r
+        if thisSize = Literals.blockSize && localIdx = Literals.blockSize && sibSize = Literals.blockSize - 1 then
+            // Special case because the algorithm below would fail on this corner case: we'd first shift one item to
+            // the right sibling and then try to insert at position 1 in the now-full right sibling. So we skip all
+            // the shifting and just insert into position 0 of the right sibling, which is the right thing in this case.
+            let rightSibling' = rightSibling.InsertChild owner shift 0 newChild
+            this :> RRBNode<'T>, rightSibling'
         else
-            // Inserting into right sibling
-            // TODO: Double-check this calculation with specific unit tests
-            let r' = (r :?> RRBFullNode<'T>).InsertChild owner shift (localIdx - resultSizeL) newChild
-            l, r'
-        // Special case of 31/32 must also be considered here. Custom test for that one.
+            let totalSize = thisSize + sibSize
+            let resultSizeL = totalSize >>> 1
+            let resultSizeR = totalSize - resultSizeL
+            let n = thisSize - resultSizeL
+            let l, r = this.SlideChildrenRight owner shift n rightSibling
+            if localIdx <= resultSizeL then
+                let l' = (l :?> RRBFullNode<'T>).InsertChild owner shift localIdx newChild
+                l', r
+            else
+                // Inserting into right sibling
+                let r' = (r :?> RRBFullNode<'T>).InsertChild owner shift (localIdx - resultSizeL) newChild
+                l, r'
 
     member this.InsertAndSplitNode owner shift localIdx newChild =
         let thisSize = this.NodeSize
@@ -664,11 +652,14 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
                 let newNode = this.UpdateChildSAbs owner shift localIdx newLeftChild (newLeftChild.TreeSize (down shift)) :?> RRBFullNode<'T>
                 SimpleInsertion (newNode.InsertChild owner shift (localIdx + 1) newRightChild)
             else
-                let localIdx, _, _ = this.IndexesAndChild shift treeIdx
+                let localIdx, _, _ = this.IndexesAndChild shift treeIdx // TODO: Remove this and see if any tests fail. I believe localIdx can't change from when it was first calculated above, but can it?
                 match (parentOpt, idxOfNodeInParent) with
                 | Some parent, idx when idx > 0 && parent.Children.[idx - 1].NodeSize < Literals.blockSize ->
                     // Room in the left sibling
                     let leftSib = parent.Children.[idx - 1] :?> RRBFullNode<'T>
+                    // NOTE: Important that we're updating the left child at localIdx, and inserting the right child at localIdx+1.
+                    // If we inserted the left child at localIdx, InsertAndSlideChildrenLeft could fail when localIdx = 0 and the sibling sizes were (M-1, M).
+                    // But updating the left child and inserting the right child avoids that corner case.
                     let newNode = this.UpdateChildSAbs owner shift localIdx newLeftChild (newLeftChild.TreeSize (down shift)) :?> RRBFullNode<'T>
                     let newLeft, newRight = newNode.InsertAndSlideChildrenLeft owner shift (localIdx + 1) newRightChild leftSib
                     SlidItemsLeft (newLeft, newRight)

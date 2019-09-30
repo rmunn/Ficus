@@ -1897,7 +1897,9 @@ let manualInsertTestWithVec idx item vec =
     Expect.equal (actual |> RRBVector.toArray) expected (sprintf "Inserting %A at %d should have produced identical results" item idx)
 
 let manualInsertTest idx item treeRepr =
-    RRBVectorGen.treeReprStrToVec treeRepr |> manualInsertTestWithVec idx item
+    let vec = RRBVectorGen.treeReprStrToVec treeRepr
+    vec |> manualInsertTestWithVec idx item
+    (vec :?> RRBPersistentVector<_>).Transient() |> manualInsertTestWithVec idx item
 
 let insertTests =
   testList "Insert tests" [
@@ -1933,7 +1935,19 @@ let insertTests =
 
     testCase "insert that requires a shift left"  <| fun _ -> manualInsertTest (Literals.blockSize + 3) 512 "[[2 2]] [[M-1 M] [6 6 M]] T2"
     testCase "insert that requires a shift right" <| fun _ -> manualInsertTest 5                        512 "[[2 2]] [[M M-1] [6 6 M]] T2"
+    testCase "insert that requires a shift left where insertion point is left of split point" <| fun _ -> manualInsertTest 222 512 "[M M] [M-1 M*M-1] T24"
+    testCase "insert that requires a shift left where insertion point is right of split point" <| fun _ -> manualInsertTest 888 512 "[M M] [M-1 M*M-1] T24"
+    testCase "insert that requires a shift right where insertion point is left of split point" <| fun _ -> manualInsertTest 222 512 "[M-1 M*M-1] [M M] T24"
+    testCase "insert that requires a shift right where insertion point is right of split point" <| fun _ -> manualInsertTest 888 512 "[M-1 M*M-1] [M M] T24"
+
+    testCase "insert that requires a shift left where left sibling is nearly full, at first child in second node" <| fun _ -> manualInsertTest (Literals.blockSize * (Literals.blockSize - 1) + 5) 512 "[M*M-1] [M*M-2 M-1 M] T24"
+    testCase "insert that requires a shift right where right sibling is nearly full, at last child in first node" <| fun _ -> manualInsertTest (Literals.blockSize * Literals.blockSize - 5) 512 "[M*M-3 M-1 M M] [M*M-1] T24"
+    testCase "insert that requires a shift right where right sibling is nearly full, at next-to-last child in first node" <| fun _ -> manualInsertTest (Literals.blockSize * (Literals.blockSize - 1) - 5) 512 "[M*M-4 M-1 M M M] [M*M-1] T24"
+
+// [17 17 32 17 17 32 24 29 32 32 32 32 30 30 25 26 25 24 32 32 31 32 32 17 16 32 31 32 31 32 32 17]  ... second node is an ExpandedFullNode that looks like [24 M M ...]??? That is *not* a full node! Not at all! Something's wrong.
   ]
+
+
 
 // let bigTestVec = [0..1092] |> ofList
 // bigTestVec.shift
