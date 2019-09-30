@@ -350,11 +350,8 @@ let checkVectorProperty name pred vec =
     | :? System.IndexOutOfRangeException ->
         ["Index out of range while checking " + name]
 
-// TODO: Can probably use List.collect instead of List.fold combine
-let combine r1 r2 = (r1 @ r2)
-
 let getNodePropertyResults shift root =
-    nodeProperties |> List.map (fun (name,pred) -> checkNodeProperty name pred shift root) |> List.fold combine []
+    nodeProperties |> List.collect (fun (name,pred) -> checkNodeProperty name pred shift root)
 
 let checkNodeProperties shift root label =
     let result = getNodePropertyResults shift root
@@ -365,7 +362,7 @@ let checkNodeProperties shift root label =
 let checkNodePropertiesSimple shift root = checkNodeProperties shift root "Node"
 
 let getVecPropertyResults props vec =
-    props |> List.map (fun (name,pred) -> checkVectorProperty name pred vec) |> List.fold combine []
+    props |> List.collect (fun (name,pred) -> checkVectorProperty name pred vec)
 
 let getVecAndNodePropertyResults props shift (root : RRBNode<'T>) vec =
     let vecProps = getVecPropertyResults props vec
