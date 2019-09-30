@@ -147,7 +147,7 @@ type RRBNode<'T>(ownerToken : OwnerToken) =
 
     abstract member UpdatedTree : OwnerToken -> int -> int -> 'T -> RRBNode<'T>  // Params: owner shift treeIdx newItem
     abstract member InsertedTree : OwnerToken -> int -> int -> 'T -> RRBFullNode<'T> option -> int -> SlideResult<RRBNode<'T>>  // Params: owner shift treeIdx (item : 'T) (parentOpt : Node option) idxOfNodeInParent
-    abstract member RemovedItem : OwnerToken -> int -> bool -> int -> 'T * RRBNode<'T>  // TODO: Rename to RemovedTree for consistency??
+    abstract member RemovedItem : OwnerToken -> int -> bool -> int -> RRBNode<'T>  // TODO: Rename to RemovedTree for consistency??
     abstract member GetTreeItem : int -> int -> 'T
 
     abstract member KeepNTreeItems : OwnerToken -> int -> int -> RRBNode<'T>
@@ -685,17 +685,16 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
 
     override this.RemovedItem owner shift shouldCheckForRebalancing treeIdx =
         let localIdx, child, nextTreeIdx = this.IndexesAndChild shift treeIdx
-        let item, child' = child.RemovedItem owner (down shift) shouldCheckForRebalancing nextTreeIdx
+        let child' = child.RemovedItem owner (down shift) shouldCheckForRebalancing nextTreeIdx
         let node' =
             if child'.NodeSize <= 0 then
                 this.RemoveChild owner shift localIdx
             else
                 this.UpdateChildSRel owner shift localIdx child' -1
         if shouldCheckForRebalancing && node'.NodeSize > 0 && node'.NeedsRebalance shift then
-            item, (node' :?> RRBFullNode<'T>).Rebalance owner shift
-            // TODO: Decide whether we need to deal with expanding the node here or not.
+            (node' :?> RRBFullNode<'T>).Rebalance owner shift
         else
-            item, node'
+            node'
 
     override this.KeepNTreeItems owner shift treeIdx =
         // Possibilities:
@@ -2038,9 +2037,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBLeafNode<'T>(ownerToken : Own
 
     // TODO: Consider whether this.RemovedItem should mirror PopLastItem or not. There's not nearly as much demand for RemoveAndReturn from the middle of a list as there is to pop the last item.
     override this.RemovedItem owner shift shouldCheckForRebalancing localIdx =
-        let resultItem = this.Items.[localIdx]
-        let resultLeaf = Array.copyAndRemoveAt localIdx this.Items |> RRBNode<'T>.MkLeaf owner
-        resultItem, resultLeaf
+        Array.copyAndRemoveAt localIdx this.Items |> RRBNode<'T>.MkLeaf owner
 
     override this.KeepNTreeItems owner shift treeIdx =
         this.Items |> Array.truncate treeIdx |> RRBNode<'T>.MkLeaf owner

@@ -378,7 +378,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                 let newTailNode, newRoot = (this.Root :?> RRBFullNode<'T>).PopLastLeaf nullOwner this.Shift
                 RRBPersistentVector<'T>(this.Count - 1, this.Shift, newRoot, newTailNode.Items, this.TailOffset - newTailNode.NodeSize).AdjustTree()
         else
-            let newRoot = this.Root.RemovedItem nullOwner this.Shift shouldCheckForRebalancing idx |> snd  // TODO: We don't actually want to return the removed item
+            let newRoot = this.Root.RemovedItem nullOwner this.Shift shouldCheckForRebalancing idx
             RRBPersistentVector<'T>(this.Count - 1, this.Shift, newRoot, this.Tail, this.TailOffset - 1).AdjustTree()
 
     // abstract member Update : int -> 'T -> RRBVector<'T>
@@ -950,7 +950,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                 this.TailOffset <- this.TailOffset - newTailNode.NodeSize
                 this.AdjustTree()
         else
-            let newRoot = this.Root.RemovedItem this.Owner this.Shift shouldCheckForRebalancing idx |> snd  // TODO: We don't actually want to return the removed item
+            let newRoot = this.Root.RemovedItem this.Owner this.Shift shouldCheckForRebalancing idx
             if not <| isSameObj newRoot this.Root then
                 this.Root <- newRoot
             this.Count <- this.Count - 1
