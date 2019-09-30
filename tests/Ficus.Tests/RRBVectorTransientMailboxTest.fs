@@ -140,7 +140,7 @@ let transientAgent token (completionAgent : MailboxProcessor<SingleThreadResult>
             async {
                 let! msg =
                     try
-                        mailbox.Receive(5000)
+                        mailbox.Receive(25000)
                     with :? System.TimeoutException ->
                         let queueCount = mailbox.CurrentQueueLength
                         async {
@@ -244,7 +244,7 @@ let startSplitTesting (vec : RRBPersistentVector<int>) (cmds : (Cmd list)[]) =
         async {
             let! msg =
                 try
-                    mailbox.Receive(15000)
+                    mailbox.Receive(45000)
                 with :? TimeoutException ->
                     Expecto.Tests.failtest "Split test timed out waiting for initial Go command"
             match msg with
@@ -267,7 +267,7 @@ let startSplitTesting (vec : RRBPersistentVector<int>) (cmds : (Cmd list)[]) =
                 // do! Async.Sleep 500  // Attempt to yield
             let! msg =
                 try
-                    mailbox.Receive(15000)
+                    mailbox.Receive(45000)
                 with :? TimeoutException ->
                     Expecto.Tests.failtest "Split test timed out waiting for results from subthreads!"
             match msg with

@@ -271,8 +271,8 @@ let genBasicOperations (lst : Cmd list) = gen {
 
 // TODO: Add more complex operations like slicing, splitting (and running a *FEW* commands on each side before rejoining), mapping, filtering, and so on
 let genComplexOperations = gen {
-    // let! vec = RRBVectorGen.sizedGenVec
-    let vec = RRBVector.empty<int>
+    let! vec = RRBVectorGen.sizedGenVec
+    // let vec = RRBVector.empty<int>
     let size = expectedSize vec
     let! cmds = Gen.arrayOfLength size (Gen.listOf (Gen.frequency cmdFrequenciesForComplexOperations))
     return SplitTestInput (vec, cmds)
