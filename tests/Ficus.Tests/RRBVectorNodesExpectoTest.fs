@@ -813,23 +813,6 @@ let rebalanceTestsWIP =
         Expect.equal (List.head betterThanTwoPasses) (15, 17, 3) "Optimal solution would reduce by 3"
         Expect.equal (idx2, len2, reduction) (23, 9, 2) "Two-pass solution reduces by 2 but does half the work"
 
-(* Test seed that produced the above counterexample
-    etestProp (377708292, 296651654) "findMergeCandidatesTwoPasses finds an optimum solution" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
-        let sizesL = nodeL.ChildrenSeq |> Seq.map (fun n -> n.NodeSize)
-        let sizesR = nodeR.ChildrenSeq |> Seq.map (fun n -> n.NodeSize)
-        let sizesCombined = Seq.append sizesL sizesR |> Array.ofSeq
-        let invertedSizesCombined = sizesCombined |> Array.map (fun n -> Literals.blockSize - n)
-        let lenBothNodes = nodeL.NodeSize + nodeR.NodeSize
-        let (idx2, len2, reduction) = findMergeCandidatesTwoPasses sizesCombined lenBothNodes
-        let exhaustiveResults = findMergeCandidatesExhaustive sizesCombined lenBothNodes
-        not (List.isEmpty exhaustiveResults) ==> (fun () ->
-            let exhaustiveResultsWithReductions = exhaustiveResults |> List.map (fun (idx, len) ->
-                let exhaustiveReduction = (Array.sub invertedSizesCombined idx len |> Array.sum) / Literals.blockSize
-                idx, len, exhaustiveReduction
-            )
-            let betterThanTwoPasses = exhaustiveResultsWithReductions |> List.filter (fun (idx, len, r) -> r > reduction && (len < len2 * 2))
-            Expect.isEmpty betterThanTwoPasses <| sprintf "Found somewhere where 2 passes is worse than exhaustive %A. idx/len/reduction was %A with 2 passes" betterThanTwoPasses (idx2, len2, reduction))
-*)
     testProp "NeedsRebalancing function uses correct formula" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         let shift = Literals.blockSizeShift
         let slotCountL = if shift <= Literals.blockSizeShift then nodeL.TwigSlotCount else nodeL.SlotCount
