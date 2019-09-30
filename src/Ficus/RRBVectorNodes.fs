@@ -244,13 +244,11 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
 
     abstract member ToRelaxedNodeIfNeeded : int -> RRBNode<'T>
     default this.ToRelaxedNodeIfNeeded shift =
-        // TODO: Use this.BuildSizeTable instead???
         if shift <= 0 then this :> RRBNode<'T> else
             let sizeTable = RRBNode<'T>.CreateSizeTable shift this.Children
             if isSizeTableFullAtShift shift sizeTable sizeTable.Length
             then this :> RRBNode<'T>
             else RRBRelaxedNode<'T>(ownerToken, this.Children, sizeTable) :> RRBNode<'T>
-            // TODO: Check if expanded nodes need to override this
 
     abstract member IndexesAndChild : int -> int -> int * RRBNode<'T> * int
     default this.IndexesAndChild shift treeIdx =
