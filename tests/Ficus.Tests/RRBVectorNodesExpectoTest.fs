@@ -590,7 +590,7 @@ let updatePropertyTests =
 
 let keepPropertyTests =
   testList "KeepN(Left/Right) property tests" [
-    testProp "KeepNLeft on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (PositiveInt n) ->
+    testProp (*1913961525, 296651679*) "KeepNLeft on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (PositiveInt n) ->
         let n = n % (node.NodeSize + 1) |> max 1
         checkNodeProperties Literals.blockSizeShift node "Starting node"
         let result = node.KeepNLeft nullOwner Literals.blockSizeShift n
@@ -599,7 +599,7 @@ let keepPropertyTests =
         let totalKeptSize = keptLeaves |> Array.sumBy (fun leaf -> leaf.NodeSize)
         result.NodeSize = n && result.TreeSize Literals.blockSizeShift = totalKeptSize
 
-    testProp "KeepNRight on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (PositiveInt n) ->
+    testProp (*1914116381, 296651679*) "KeepNRight on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (PositiveInt n) ->
         let n = n % (node.NodeSize + 1) |> max 1
         checkNodeProperties Literals.blockSizeShift node "Starting node"
         let result = node.KeepNRight nullOwner Literals.blockSizeShift n
@@ -1124,6 +1124,10 @@ let manualTests =
         node |> isRelaxed ==> fun () ->
             let maybeFull = (node :?> RRBRelaxedNode<_>).ToFullNodeIfNeeded Literals.blockSizeShift
             maybeFull |> isRelaxed
+
+    // Still TODO: InsertChild on a full node, inserting a full child (let's do a leaf)
+    // Check that full node should still be full after that (check node properties)
+    // Check node properties on the above tests
   ]
 
 // let debugGenTests =
@@ -1146,6 +1150,7 @@ let longRunningTests =
 let tests =
   testList "Basic node tests" [
     // debugGenTests
+
     appendAndPrependChildrenPropertyTests  // Put this first since it's so long
     splitTreeTests
     mergeTreeTestsWIP

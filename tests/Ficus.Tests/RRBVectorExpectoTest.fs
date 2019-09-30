@@ -2233,6 +2233,7 @@ let longRunningTests =
         Expect.vecEqual vec' (RRBVector.rev vec) "Vector halves after split+reverse, when put back together, did not equal reversed vector"
 
     // big join, test 1 passed in 00:03:27.6860000
+    // NOTE: This one is important as it exercises a rarely-tested case in HasRoomToMergeTheTail. Promote it to a regression test
     testCase "big join, test 1" <| fun _ ->
         let bigNum = 5 <<< (Literals.blockSizeShift * 3)
         let v1 = seq {0..bigNum+6} |> RRBVector.ofSeq  // Top level has 5 completely full FullNodes, tail has 7 items
@@ -2657,60 +2658,33 @@ Something to exercise the final else block in Array.appendAndSplitAt (lenL > spl
   Since the split index is the block size, and tailLenL is never allowed to be greater than the block size,
   this will never get exercised "normally", so I should just add something to the array extensions test suite.
 
-findMergeCandidates - write test that makes sure the one-pass version never finds *better* candidates than the two-pass version
-GetEditableNodeOfBlockSizeLength on tree nodes (currently we only ever call it on leaf nodes)
-  Actually, we should change that to be a method on the leaf node, not on an RRBNode since it doesn't actually make sense there
 ExpandRightSpine of full nodes - the "if isSameObj child' this.LastChild then" branch is never true, but then, it shouldn't be. And it's trivial.
-ToRelaxedNodeIfNeeded on full nodes isn't, apparently, being called (?)
-  It's being called in InsertChildS of *expanded* nodes, but not of regular full nodes??
-  Ditto for AppendNChildren and MkNodeForRebalance of *expanded* nodes, but not of regular full nodes. Why??
 InsertChild - the "if newChildSize >= (1 <<< shift) then" branch is never true, i.e. we're never inserting a full child.
   Might need to make a manual test that will make that happen, just to make sure. Although... how would that ever happen? Probably can't.
-RemoveChild of full nodes - not exercised. (UPDATE: full nodes were exercised but not expanded full nodes)
-SplitAndKeepNLeft of full nodes - not exericsed. SplitAndKeepNLeftS happened twice, though. And SplitAndKeepNRight happened once.
-  Probably need more insertion property tests to exercise this more often.
-  Or just put failwith statements in there, run unit tests over and over, and find a failure, then turn that into a test. No need to write it by hand.
-  (NOTE: SplitAndKeepNLeft of relaxed nodes was the same)
-PrependNChildren of full nodes - not exercised. PrependNChildrenS got run a few times. (Ditto for relaxed nodes)
-SlideChildren{Left,Right} of full nodes - aren't testing the n = 0 case (but then, we only tested each of those twice total)
-InsertAndSlideChildrenLeft of full nodes - the "Special case since the algorithm below would fail on this one scenario" block isn't being run
-  Also the final else block isn't being run
-  But then, we only ran it twice total. Need more test cases that exercise this part of the code.
-  (UPDATE: We ran it once in the most recent run. Still need more test cases for this part)
-InsertAndSlideChildrenRight of full nodes - final else block isn't being run (comment says we need special test case)
+SlideChildren{Left,Right} of full nodes - aren't testing the n = 0 case (but then, that can probably never happen)
 ConcatTwigsPlusLeaf - final failwith is never called (good, but we might need a rewrite to add an #if DEBUG in there so we don't have a dangling else clause)
   Or we might want to rewrite it so that it can fail, and the code above it takes a different path. Maybe not, but we should make sure it's internal.
-  UPDATE: It's... allegedly getting called 5 times? Even though my tests never failed? I'm suspicious of these numbers now.
-HasRoomToMergeTheTail - the this.NeedsRebalance2PlusLeaf path isn't being looked at
-MergeTree of full nodes (the only implementation, thankfully) - the childL.MergeTree call in the shift = rightShift branch only produced (child', None) a few times,
-  which isn't enough for full testing: the "if right.NodeSize > 1" test went down the "then" branch every single time, and we haven't yet tested a case where right.NodeSize = 1
-  TODO: Run our tests in debug mode with some breakpoints in there, and see when those breakpoints ever get hit
-  Or just stick a failwith in that branch so that we'll finally get a counterexample
+  Decision: rewrite it so that the elif above is an else, and it inserts at position 0 into the right child.
+  IF there is ever a situation where the failwith would throw, THAT will throw, and we'll get a bug report. Result: a more compact function that is easier to read.
+  So we won't have that "else failwith" block in there at all.
+HasRoomToMergeTheTail - the this.NeedsRebalance2PlusLeaf path IS being looked at, so we can remove this note after committing it once
+  It's exercised in "big join, test 1" and in "Concat-with-leaf test"
 
-MaybeExpand of expanded full nodes - the "if not (isSameObj lastChild expandedLastChild) then" is never true
-  (the expanded last child is *always* the same object), so I need to find a scenario where it will be false so I have more confidence
-MkNodeForRebalance of expanded full nodes - the "if isSameObj arr this.Children && this.IsEditableBy owner" branch is never true
-  Need to write a manual test for this one since it involves merging two carefully-crafted transient trees.
-NewParent of expanded full nodes - the "if size = 1 || (this.NodeSize = Literals.blockSize && this.FullNodeIsTrulyFull shift) then" test
-  is always true. Note the TODO comment before it: maybe a static RRBExpandedRelaxedNode.Create method is a good idea here.
+MkNodeForRebalance of expanded full nodes - in the "if isSameObj arr this.Children && this.IsEditableBy owner" branch, the for loop is never run
+  Not actually a problem, and we won't bother writing code to exercise this one. It can never happen, because the only way a full node would be
+  getting selected to be the target of a rebalance rewriting is if it was *growing* (e.g., append "... [M] T1" to "[M] ...". The right spine's final
+  node would acquire the tail and the left node and grow. The only way it would need to run the for loop is if it was shrinking, and that can't happen
+  to a full node, because the only way to shrink it would be to do a Remove on the tree, and the full node would have to become a relaxed node well
+  before it could ever be the target of a rebalance. Remember that our findMergeCandidates algorithm *skips over* completely full nodes!)
 
-Shrink of expanded relaxed nodes - the "if this.IsEditableBy owner && size = Literals.blockSize then" test is never true.
-  This needs a manual test, where a full tree of height 2 has several items removed from the leaves of the rightmost twig,
-  so that it becomes a relaxed node of size M... and then the tree is made transient so that it's an expanded relaxed node
-  of size M. Then make the tree persistent again, and that will exercise this code path.
 RemoveChild of expanded relaxed nodes - the final else block (where newSize <= 0) is never exercised. We need some tests
   that remove the last item in a skinny path (size 1, size 1, size 1, leaf size 1) of a transient.
 RemoveLastChild of expanded relaxed nodes - ditto.
 KeepNLeft of expanded relaxed nodes - we never exercise this where n = 0
+  Should write some specialized manual tests for this, since normally this would produce bad results in real vectors
 
-MaybeExpand of expanded relaxed nodes is *never* exercised at all.
-MkNodeForRebalance of expanded relaxed nodes - the "if isSameObj arr this.Children && this.IsEditableBy owner then" branch is never true.
-  Need some kind of carefully-crafted test here. TODO: Think about how to write one.
-NewParent of expanded relaxed nodes - only exercised twice, always with siblings being size 1 or 0 so that the
-  "size = 1 || (this.NodeSize = Literals.blockSize && this.FullNodeIsTrulyFull shift)" test is always true
-
-AppendedItem of leaf nodes is never exercised.
-PopLastItem of leaf nodes is never exercised. Should be remove it?
+AppendedItem of leaf nodes is never exercised. We'll remove it soon.
+PopLastItem of leaf nodes is never exercised. We'll remove it soon.
 
 ============
 RRBVector.fs

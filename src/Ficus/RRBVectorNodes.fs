@@ -561,6 +561,7 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
             this.NewParent owner shift [|newLeft; this|], up shift
 
     member this.SlideChildrenLeft owner shift n (leftSibling : RRBFullNode<'T>) =
+        // TODO: Remove the n = 0 case which never happens. (Change it to a `failwith "Never happens"` for a while first)
         if n = 0 then leftSibling :> RRBNode<'T>, this :> RRBNode<'T> else
         let keepCnt = this.NodeSize - n
         let (l, lS), this' = this.SplitAndKeepNRightS owner shift keepCnt
@@ -1584,6 +1585,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
             arr.[i] <- arr.[i].Shrink owner
         if isSameObj arr this.Children && this.IsEditableBy owner then
             for i = len to this.NodeSize - 1 do
+                // NOTE: This loop can never run, but we keep it in anyway so it parallels MkNodeForRebalance in expanded relaxed nodes (where the for loop *can* run)
                 arr.[i] <- null
             this.SetNodeSize len
             (this.ToRelaxedNodeIfNeeded shift :?> RRBFullNode<'T>).MaybeExpand owner shift
@@ -1712,6 +1714,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         if newSize > 0 then
             node'.ToFullNodeIfNeeded shift
         else
+            failwith "Exercise me in RemoveChild of expanded relaxed nodes"
             node' :> RRBNode<'T>
 
     override this.RemoveLastChild owner shift =
@@ -1730,6 +1733,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
                 node'.Children.[newSize - 1] <- expandedLastChild
             node'.ToFullNodeIfNeeded shift
         else
+            failwith "Exercise me in RemoveLastChild of expanded relaxed nodes"
             node' :> RRBNode<'T>
 
     // No need to override UpdateChildSRel and UpdateChildSAbs; versions from compact RRBRelaxedNode will work just fine in expanded nodes
@@ -1748,6 +1752,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
                 node'.Children.[n - 1] <- expandedLastChild
             node'.ToFullNodeIfNeeded shift
         else
+            failwith "Exercise me in KeepNLeft of expanded relaxed nodes"
             node' :> RRBNode<'T>
 
     override this.KeepNRight owner shift n =
@@ -1993,6 +1998,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBLeafNode<'T>(ownerToken : Own
         let newItems = this.Items |> Array.copyAndInsertAt localIdx item
         RRBLeafNode<'T>(owner, newItems)
 
+// TODO: Remove this method entirely as we never use it nor test it
     member this.AppendedItem owner item =
         // Leaf nodes are never expanded and cannot insert in place so there's no point in checking the owner.
         let newItems = this.Items |> Array.copyAndAppend item
@@ -2017,16 +2023,19 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBLeafNode<'T>(ownerToken : Own
                 let newLeftItems, newRightItems = Array.appendAndInsertAndSplitEvenly localIdx item this.Items rightSib.Items
                 // Note that we DON'T use LeafNodeWithItems here: expanded leaves may only be the rightmost leaf in the tree,
                 // so if this is an expanded note that would benefit from using LeafNodeWithItems, we should never reach this branch
+                // TODO: Actually, our implementation has changed (leaf nodes are never expanded), so now we *should* use LeafNodeWithItems
+                // on one of these two leaf nodes - the left, I believe. That way if we had M and M-1, the left leaf won't have to become a new node
                 let newLeft  = RRBNode<'T>.MkLeaf owner newLeftItems
                 let newRight = RRBNode<'T>.MkLeaf owner newRightItems
                 SlidItemsRight (newLeft, newRight)
             | _ ->
-                // Don't need to get fancy with SplitNode here, though expanded leaf nodes will want to do something slightly more clever (ensuring that the new right-hand node is still expanded)
+                // Don't need to get fancy with SplitNode here
                 let newLeftItems, newRightItems = Array.insertAndSplitEvenly localIdx item this.Items
                 let newLeft  = RRBNode<'T>.MkLeaf owner newLeftItems
                 let newRight = this.LeafNodeWithItems owner newRightItems
                 SplitNode (newLeft, newRight)
 
+// TODO: Remove this method entirely as we never use it nor test it
     member this.PopLastItem owner =
         let resultItem = this.Items |> Array.last
         let resultLeaf = this.Items |> Array.copyAndPop |> RRBNode<'T>.MkLeaf owner
