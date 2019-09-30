@@ -1178,12 +1178,12 @@ let splitTransientTests =
   testList "MailboxProcessor + Transient tests" [
     // testPropSm "small vectors (up to root+tail in size)" doSplitTransientTest
     // testPropMed "medium vectors (up to about 1-2 levels high)" doSplitTransientTest
-    // etestProp (280210589, 296651609) "large vectors (up to about 3-4 levels high)" doSplitTransientTest
+    // testProp "large vectors (up to about 3-4 levels high)" doSplitTransientTest
     testPropSm "small vectors into thing" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doTestXL vec
     testPropSm "small commands" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doComplexTest vec
-    testPropMed (*446166957, 296651380*) "medium commands" <| fun (vec : RRBVector<int>) ->
+    testPropMed "medium commands" <| fun (vec : RRBVector<int>) ->
         RRBVectorTransientCommands.doComplexTest vec
     testProp "large commands" <| fun (vec : RRBVector<int>) ->
         // logger.warn (eventX "{vec}" >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec))

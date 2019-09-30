@@ -770,7 +770,7 @@ let rebalanceTestsWIP =
     testProp "Try this" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         doRebalance2Test Literals.blockSizeShift nodeL nodeR
 
-    ftestProp (*775891654, 296651641*) "findMergeCandidates with two passes either finds a better match than with one pass, or finds the same match if there isn't a better one" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+    testProp "findMergeCandidates with two passes either finds a better match than with one pass, or finds the same match if there isn't a better one" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         let sizesL = nodeL.ChildrenSeq |> Seq.map (fun n -> n.NodeSize)
         let sizesR = nodeR.ChildrenSeq |> Seq.map (fun n -> n.NodeSize)
         let sizesCombined = Seq.append sizesL sizesR
@@ -782,7 +782,7 @@ let rebalanceTestsWIP =
         else
             Expect.isGreaterThan reduction 1 "Found somewhere where two passes found no reduction at all"
 
-    ftestCase "findMergeCandidates performs better with two passes than with one (single)" <| fun _ ->
+    testCase "findMergeCandidates performs better with two passes than with one (single)" <| fun _ ->
         let l = RRBVectorGen.treeReprStrToVec "M-2 M M M T1" :?> Ficus.RRBVector.RRBPersistentVector<int>
         let r = RRBVectorGen.treeReprStrToVec "M-4 M M-2 M M-1 M M/2 M M/2+1 M M/2+3 M M/2+4 M M/2+6 T1" :?> Ficus.RRBVector.RRBPersistentVector<int>
         let sizesL = (l.Root :?> RRBFullNode<_>).ChildrenSeq |> Seq.map (fun n -> n.NodeSize)
@@ -795,7 +795,7 @@ let rebalanceTestsWIP =
         Expect.equal (idx2, len2) (10, 9) "findMergeCandidatesTwoPasses finds a length-9 merge and uses it instead"
         Expect.equal reduction 2 "findMergeCandidatesTwoPasses finds merge that reduces size by 2"
 
-    ftestCase "findMergeCandidates does not always find an optimum solution" <| fun _ ->
+    testCase "findMergeCandidates does not always find an optimum solution" <| fun _ ->
         let l = RRBVectorGen.treeReprStrToVec "20 M 32 M 23 M 17 M 26 M 20 M 29 24 M 18 M 27 M 21 M 30 M 24 M 16 M 17 M 19 M 20 T1" :?> Ficus.RRBVector.RRBPersistentVector<int>
         let r = RRBVectorGen.treeReprStrToVec "M*M T1" :?> Ficus.RRBVector.RRBPersistentVector<int>
         let sizesL = (l.Root :?> RRBFullNode<_>).ChildrenSeq |> Seq.map (fun n -> n.NodeSize)
