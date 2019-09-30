@@ -2133,12 +2133,85 @@ let arrayTests =
 
 let apiTests =
   testList "API tests" [
-    // Disabled test until we restore the windowed function
-    // testProp "windowed" <| fun (VecPlusArrAndIdx (v,a,i)) ->
-    //     if i < 1 then () else
-    //     let expected = a |> Array.windowed i
-    //     let actual = v |> RRBVector.windowed i |> Seq.map RRBVector.toArray |> Seq.toArray
-    //     Expect.equal actual expected "RRBVector.windowed did not produce the right results"
+    testProp "windowed" <| fun (vec : RRBVector<int>) (PositiveInt n) ->
+        let arr = vec |> RRBVector.toArray
+        let expected = arr |> Array.windowed n
+        let actual = vec |> RRBVector.windowed n |> Seq.map RRBVector.toArray |> Seq.toArray
+        Expect.equal actual expected "RRBVector.windowed did not produce the right results"
+
+    testProp "item" <| fun (vec : RRBVector<int>) (NonNegativeInt i) ->
+        not (RRBVector.isEmpty vec) ==> fun () ->
+            let i = i % vec.Length
+            let arr = vec |> RRBVector.toArray
+            let expected = arr |> Array.item i
+            let actual = vec |> RRBVector.item i
+            Expect.equal actual expected "RRBVector.item did not produce the right results"
+
+    testProp "nth" <| fun (vec : RRBVector<int>) (NonNegativeInt i) ->
+        not (RRBVector.isEmpty vec) ==> fun () ->
+            let i = i % vec.Length
+            let arr = vec |> RRBVector.toArray
+            let expected = arr |> Array.item i  // There's no Array.nth
+            let actual = vec |> RRBVector.nth i
+            Expect.equal actual expected "RRBVector.nth did not produce the right results"
+
+    testProp "peek" <| fun (vec : RRBVector<int>) ->
+        not (RRBVector.isEmpty vec) ==> fun () ->
+            let arr = vec |> RRBVector.toArray
+            let expected = arr |> Array.last
+            let actual = vec |> RRBVector.peek
+            Expect.equal actual expected "RRBVector.peek did not produce the right results"
+
+    testCase "peek empty" <| fun _ ->
+        let vec = RRBVector.empty<int>
+        Expect.throwsC (fun () -> RRBVector.peek vec |> ignore) (fun e ->
+            Expect.equal e.Message "Can't get last item from an empty vector" "RRBVector.peek on empty vector threw wrong exception")
+
+    testProp "pop" <| fun (vec : RRBVector<int>) ->
+        not (RRBVector.isEmpty vec) ==> fun () ->
+            let arr = vec |> RRBVector.toArray
+            let expected = arr |> Array.copyAndPop
+            let actual = vec |> RRBVector.pop |> RRBVector.toArray
+            Expect.equal actual expected "RRBVector.pop did not produce the right results"
+
+    testCase "pop empty" <| fun _ ->
+        let vec = RRBVector.empty<int>
+        Expect.throwsC (fun () -> RRBVector.pop vec |> ignore) (fun e ->
+            Expect.equal e.Message "Can't pop from an empty vector" "RRBVector.pop on empty vector threw wrong exception")
+
+    testProp "push" <| fun (vec : RRBVector<int>) (i : int) ->
+        let arr = vec |> RRBVector.toArray
+        let expected = arr |> Array.copyAndAppend i
+        let actual = vec |> RRBVector.push i |> RRBVector.toArray
+        Expect.equal actual expected "RRBVector.push did not produce the right results"
+
+    testProp "append" <| fun (vecL : RRBVector<int>) (vecR : RRBVector<int>) ->
+        let arrL = vecL |> RRBVector.toArray
+        let arrR = vecR |> RRBVector.toArray
+        let expected = Array.append arrL arrR
+        let actual = RRBVector.append vecL vecR |> RRBVector.toArray
+        Expect.equal actual expected "RRBVector.append did not produce the right results"
+
+    testProp "split" <| fun (vec : RRBVector<int>) (NonNegativeInt i) ->
+        let i = i % (vec.Length + 1)
+        let arr = vec |> RRBVector.toArray
+        let expectedL, expectedR = arr |> Array.splitAt i
+        let actualL, actualR = vec |> RRBVector.split i
+        Expect.equal (actualL |> RRBVector.toArray) expectedL "RRBVector.split did not produce the right results on left side"
+        Expect.equal (actualR |> RRBVector.toArray) expectedR "RRBVector.split did not produce the right results on right side"
+
+    testProp "remove" <| fun (vec : RRBVector<int>) (NonNegativeInt i) ->
+        not (RRBVector.isEmpty vec) ==> fun () ->
+            let i = i % vec.Length
+            let arr = vec |> RRBVector.toArray
+            let expected = arr |> Array.copyAndRemoveAt i
+            let actual = vec |> RRBVector.remove i |> RRBVector.toArray
+            Expect.equal actual expected "RRBVector.remove did not produce the right results"
+
+    testCase "remove empty" <| fun _ ->
+        let vec = RRBVector.empty<int>
+        Expect.throwsC (fun () -> vec |> RRBVector.remove 0 |> ignore) (fun e ->
+            Expect.equal e.Message "Index must not be past the end of the vector" "RRBVector.pop on empty vector threw wrong exception")
 
     testProp "slice notation" <| fun (VecPlusArrAndIdx (v,a,idx)) (PositiveInt endIdx) ->
         let endIdx = if v.Length = 0 then 0 else endIdx % v.Length
@@ -2620,10 +2693,6 @@ let tests =
     threeLevelVectorTests
     transientResidueTests
     moreTransientResidueTests
-// //   ]
-// // ignore
-// //   [
-
     isolatedTest
     emptyTests
     singletonTests
@@ -2645,7 +2714,7 @@ let tests =
     vectorTests
     nodeVecGenerationTests
     mergeTests
-    // apiTests
+    apiTests
 
     // perfTests
   ]
