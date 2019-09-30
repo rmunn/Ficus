@@ -263,6 +263,7 @@ module Array =
             resultL, resultR
 
     // Basic algorithm found at https://stackoverflow.com/questions/13023188/smallest-subset-of-array-whose-sum-is-no-less-than-key
+    // TODO: Rename to smallestRunOfAtLeastN since the test is not actually "greater than" N, but it's ">= N"
     let smallestRunGreaterThan (n : byte) (arr : byte[]) =
         let mutable acc = 0uy
         let mutable p = 0

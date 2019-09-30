@@ -348,7 +348,8 @@ type MyGenerators =
 Arb.register<MyGenerators>() |> ignore
 let testProp  name fn =  testPropertyWithConfig { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] } name fn
 let ptestProp name fn = ptestPropertyWithConfig { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] } name fn
-let ftestProp replay name fn = etestPropertyWithConfig replay { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] } name fn
+let ftestProp name fn = ftestPropertyWithConfig { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] } name fn
+let etestProp replay name fn = etestPropertyWithConfig replay { FsCheckConfig.defaultConfig with arbitrary = [typeof<MyGenerators>] } name fn
 
 // === Tests here ===
 
@@ -755,12 +756,80 @@ let doRebalance2Test shift (nodeL : RRBNode<'T>) (nodeR : RRBNode<'T>) =
         // TODO: Probably want more here
     )
 
+let findMergeCandidatesExhaustive (sizeSeq : #seq<int>) len =
+    use e = sizeSeq.GetEnumerator()
+    let sizes = Array.init len (fun _ -> if e.MoveNext() then Literals.blockSize - e.Current else 0)
+    let mutable results = []
+    for i = 0 to len-1 do
+        for j = i to len-1 do
+            if Array.sum sizes.[i..j] >= Literals.blockSize then results <- (i, j - i + 1) :: results
+    results |> List.sortBy (fun (idx, len) -> len,idx)
 
 let rebalanceTestsWIP =
   testList "WIP: Rebalance tests" [
-    testProp (*541726758, 296574446*) (*1359582396, 296574428*) "Try this" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+    testProp "Try this" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         doRebalance2Test Literals.blockSizeShift nodeL nodeR
 
+    ftestProp (*775891654, 296651641*) "findMergeCandidates with two passes either finds a better match than with one pass, or finds the same match if there isn't a better one" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+        let sizesL = nodeL.ChildrenSeq |> Seq.map (fun n -> n.NodeSize)
+        let sizesR = nodeR.ChildrenSeq |> Seq.map (fun n -> n.NodeSize)
+        let sizesCombined = Seq.append sizesL sizesR
+        let lenBothNodes = nodeL.NodeSize + nodeR.NodeSize
+        let (idx1, len1) = findMergeCandidates sizesCombined lenBothNodes
+        let (idx2, len2, reduction) = findMergeCandidatesTwoPasses sizesCombined lenBothNodes
+        if reduction = 1 then
+            Expect.equal (idx2, len2) (idx1, len1) <| sprintf "Found somewhere where two passes had a different result than one pass"
+        else
+            Expect.isGreaterThan reduction 1 "Found somewhere where two passes found no reduction at all"
+
+    ftestCase "findMergeCandidates performs better with two passes than with one (single)" <| fun _ ->
+        let l = RRBVectorGen.treeReprStrToVec "M-2 M M M T1" :?> Ficus.RRBVector.RRBPersistentVector<int>
+        let r = RRBVectorGen.treeReprStrToVec "M-4 M M-2 M M-1 M M/2 M M/2+1 M M/2+3 M M/2+4 M M/2+6 T1" :?> Ficus.RRBVector.RRBPersistentVector<int>
+        let sizesL = (l.Root :?> RRBFullNode<_>).ChildrenSeq |> Seq.map (fun n -> n.NodeSize)
+        let sizesR = (r.Root :?> RRBFullNode<_>).ChildrenSeq |> Seq.map (fun n -> n.NodeSize)
+        let sizesCombined = Seq.append sizesL sizesR
+        let lenBothNodes = l.Root.NodeSize + r.Root.NodeSize
+        let (idx1, len1) = findMergeCandidates sizesCombined lenBothNodes
+        let (idx2, len2, reduction) = findMergeCandidatesTwoPasses sizesCombined lenBothNodes
+        Expect.equal (idx1, len1) (8, 5) "findMergeCandidates finds a length-5 merge and stops there"
+        Expect.equal (idx2, len2) (10, 9) "findMergeCandidatesTwoPasses finds a length-9 merge and uses it instead"
+        Expect.equal reduction 2 "findMergeCandidatesTwoPasses finds merge that reduces size by 2"
+
+    ftestCase "findMergeCandidates does not always find an optimum solution" <| fun _ ->
+        let l = RRBVectorGen.treeReprStrToVec "20 M 32 M 23 M 17 M 26 M 20 M 29 24 M 18 M 27 M 21 M 30 M 24 M 16 M 17 M 19 M 20 T1" :?> Ficus.RRBVector.RRBPersistentVector<int>
+        let r = RRBVectorGen.treeReprStrToVec "M*M T1" :?> Ficus.RRBVector.RRBPersistentVector<int>
+        let sizesL = (l.Root :?> RRBFullNode<_>).ChildrenSeq |> Seq.map (fun n -> n.NodeSize)
+        let sizesR = (r.Root :?> RRBFullNode<_>).ChildrenSeq |> Seq.map (fun n -> n.NodeSize)
+        let sizesCombined = Seq.append sizesL sizesR |> Array.ofSeq
+        let invertedSizesCombined = sizesCombined |> Array.map (fun n -> Literals.blockSize - n)
+        let lenBothNodes = (l.Root :?> RRBFullNode<_>).NodeSize + (r.Root :?> RRBFullNode<_>).NodeSize
+        let (idx2, len2, reduction) = findMergeCandidatesTwoPasses sizesCombined lenBothNodes
+        let exhaustiveResults = findMergeCandidatesExhaustive sizesCombined lenBothNodes
+        let exhaustiveResultsWithReductions = exhaustiveResults |> List.map (fun (idx, len) ->
+            let exhaustiveReduction = (Array.sub invertedSizesCombined idx len |> Array.sum) / Literals.blockSize
+            idx, len, exhaustiveReduction
+        )
+        let betterThanTwoPasses = exhaustiveResultsWithReductions |> List.filter (fun (idx, len, r) -> r > reduction && (len < len2 * 2))
+        Expect.equal (List.head betterThanTwoPasses) (15, 17, 3) "Optimal solution would reduce by 3"
+        Expect.equal (idx2, len2, reduction) (23, 9, 2) "Two-pass solution reduces by 2 but does half the work"
+
+(* Test seed that produced the above counterexample
+    etestProp (377708292, 296651654) "findMergeCandidatesTwoPasses finds an optimum solution" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+        let sizesL = nodeL.ChildrenSeq |> Seq.map (fun n -> n.NodeSize)
+        let sizesR = nodeR.ChildrenSeq |> Seq.map (fun n -> n.NodeSize)
+        let sizesCombined = Seq.append sizesL sizesR |> Array.ofSeq
+        let invertedSizesCombined = sizesCombined |> Array.map (fun n -> Literals.blockSize - n)
+        let lenBothNodes = nodeL.NodeSize + nodeR.NodeSize
+        let (idx2, len2, reduction) = findMergeCandidatesTwoPasses sizesCombined lenBothNodes
+        let exhaustiveResults = findMergeCandidatesExhaustive sizesCombined lenBothNodes
+        not (List.isEmpty exhaustiveResults) ==> (fun () ->
+            let exhaustiveResultsWithReductions = exhaustiveResults |> List.map (fun (idx, len) ->
+                let exhaustiveReduction = (Array.sub invertedSizesCombined idx len |> Array.sum) / Literals.blockSize
+                idx, len, exhaustiveReduction
+            )
+            let betterThanTwoPasses = exhaustiveResultsWithReductions |> List.filter (fun (idx, len, r) -> r > reduction && (len < len2 * 2))
+            Expect.isEmpty betterThanTwoPasses <| sprintf "Found somewhere where 2 passes is worse than exhaustive %A. idx/len/reduction was %A with 2 passes" betterThanTwoPasses (idx2, len2, reduction))
+*)
     testProp "NeedsRebalancing function uses correct formula" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         let shift = Literals.blockSizeShift
         let slotCountL = if shift <= Literals.blockSizeShift then nodeL.TwigSlotCount else nodeL.SlotCount
@@ -770,7 +839,7 @@ let rebalanceTestsWIP =
         let needsRebalancing = totalSize - minSize > Literals.radixSearchErrorMax
         Expect.equal (nodeL.NeedsRebalance2 shift nodeR) needsRebalancing <| sprintf "NeedsRebalancing was wrong for left %A and right %A" nodeL nodeR
 
-    testProp (*500188920, 296574447*) (*801697697, 296574440*) "Concat test" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+    testProp "Concat test" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         let shift = Literals.blockSizeShift
         // Need to do this before the concatenation, because after the concatenation the original nodeL may be invalid if it was an expanded node
         let expected = Seq.append (nodeItems shift nodeL) (nodeItems shift nodeR) |> Array.ofSeq
@@ -789,7 +858,7 @@ let rebalanceTestsWIP =
             checkNodeProperties shift newL "Newly-concatenated left node"
             checkNodeProperties shift nodeR' "Newly-concatenated right node"
 
-    testProp (*1489117831, 296575371*) "Concat-with-leaf test" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (LeafNode leaf : LeafNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
+    testProp "Concat-with-leaf test" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (LeafNode leaf : LeafNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         let shift = Literals.blockSizeShift
         // Need to do this before the concatenation, because after the concatenation the original nodeL may be invalid if it was an expanded node
         let expected = Seq.concat [nodeItems shift nodeL; leaf.Items |> Seq.ofArray; nodeItems shift nodeR] |> Array.ofSeq

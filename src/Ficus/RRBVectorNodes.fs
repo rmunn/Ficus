@@ -53,6 +53,12 @@ module RRBMath =
             idx2, len2, 2
         else
             idx1, len1, 1
+        // Note that this will not always find a *theoretically optimum* solution. For example, consider these sizes where blockSize = 32:
+        // [20; 32; 31; 32; 23; 32; 17; 32; 26; 32; 20; 32; 29; 24; 32; 18; 32; 27; 32; 21; 32; 30; 32; 24; 32; 16; 32; 17; 32; 19; 32; 20]
+        // A solution optimized for length would find (15, 17, 3), basically collapsing the right half of the node and saving three slots.
+        // Our solution finds (23, 9, 2), so it only saves two slots. OTOH, it does half the work, so in practice going from 2 to 3 is probably
+        // not worth doubling the work, whereas going from 1 to 2 probably is worth doubling the work. (Though that does need to be benchmarked
+        // and measured to see if it *really* works out in practice.)
 
 
 open RRBMath
