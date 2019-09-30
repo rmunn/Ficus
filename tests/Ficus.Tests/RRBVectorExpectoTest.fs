@@ -2706,8 +2706,9 @@ RRBPersistentVector:
 RRBTransientVector:
   ToString() - convert to a useful-for-users format, then test
   ThrowIfNotValid - set up several operations where the transient is NOT valid (many manual tests)
-  ShiftNodesFromTailIfNeeded - the "if not <| isSameObj newRoot this.Root then" paths are never followed, but I can't come up with
-  a scenario in which they would ever be. The root is going to have the right owner already, so we can't make that happen. Ignore.
+  ShiftNodesFromTailIfNeeded - the "if not <| isSameObj newRoot this.Root then" paths are rarely followed, but they are sometimes
+    being followed in some random tests. Good enough; the logic is the same everywhere, so I don't need to worry about it. It gets
+    tested some of the time, and so I'm sure it will work everywhere.
   IsEmpty - manual tests, a couple of them
   StringRepr - convert to a useful-for-users format, then test
   IterEditableLeavesWithoutTail - not exercised. Need to come up with a way to do so.
