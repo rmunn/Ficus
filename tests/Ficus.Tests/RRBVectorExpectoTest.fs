@@ -1658,7 +1658,7 @@ let simpleVectorTests =
         48,33
         10,5
         15,7
-    ] |> List.mapi (fun i data -> testCase (sprintf "Test %d with data %A" (i+1) data) (fun _ -> splitFullVecTest data))
+    ] |> List.mapi (fun i data -> testCase ((sprintf "Test %d with data %A" (i+1) data).Replace('\n', ' ')) (fun _ -> splitFullVecTest data))
       |> testList "Simple vector tests"
 
 let manualVectorTests =
@@ -2585,7 +2585,7 @@ let mkTestSuite name startingVec =
 
   let pos = if RRBVector.length startingVec = 0 then 0 else (Literals.blockSize + 3) % (RRBVector.length startingVec)
 
-  ftestList name ([
+  testList name ([
     mkTest "nth" (if RRBVector.length startingVec = 0 then id,id else RRBVector.nth pos >> RRBVector.singleton, Array.item pos >> Array.singleton)
     mkTest "item" (if RRBVector.length startingVec = 0 then id,id else RRBVector.item pos >> RRBVector.singleton, Array.item pos >> Array.singleton)
     mkTest "peek" (if RRBVector.length startingVec = 0 then id,id else RRBVector.peek >> RRBVector.singleton, Array.last >> Array.singleton)
