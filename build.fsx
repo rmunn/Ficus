@@ -140,7 +140,7 @@ let invokeAsync f = async { f () }
 
 let coverageThresholdPercent = 1
 
-Target.create "DotnetTest" <| fun ctx ->
+let dotnetTest ctx debug =
     let excludeCoverage =
         !! testsGlob
         |> Seq.map IO.Path.GetFileNameWithoutExtension
@@ -148,10 +148,11 @@ Target.create "DotnetTest" <| fun ctx ->
     DotNet.test(fun c ->
         let args =
             [
-                "--no-build"
-                "/p:AltCover=true"
-                sprintf "/p:AltCoverThreshold=%d" coverageThresholdPercent
-                sprintf "/p:AltCoverAssemblyExcludeFilter=%s" excludeCoverage
+                yield "--no-build"
+                yield "/p:AltCover=true"
+                yield sprintf "/p:AltCoverThreshold=%d" coverageThresholdPercent
+                yield sprintf "/p:AltCoverAssemblyExcludeFilter=%s" excludeCoverage
+                if debug then yield "--verbosity=n"
             ] |> String.concat " "
         { c with
             Configuration = configuration (ctx.Context.AllExecutingTargets)
@@ -161,6 +162,8 @@ Target.create "DotnetTest" <| fun ctx ->
                     (Some(args))
             }) sln
 
+Target.create "DotnetTest" <| fun ctx -> dotnetTest ctx false
+Target.create "DotnetTestDebug" <| fun ctx -> dotnetTest ctx true
 
 Target.create "GenerateCoverageReport" <| fun _ ->
     let coverageReports =
@@ -339,6 +342,8 @@ Target.create "Release" ignore
   ==> "GitRelease"
 //   ==> "GitHubRelease"
   ==> "Release"
+
+"DotnetTest" <=> "DotnetTestDebug"
 
 "DotnetRestore"
  ==> "WatchTests"
