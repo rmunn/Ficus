@@ -1447,9 +1447,10 @@ module RRBVector =
 
     // TODO: Make a variant for when f is of type 'a -> 'a, which does a scan in-place for transients
     let inline scan f initState (vec : RRBVector<'T>) = vec |> Seq.scan f initState |> ofSeq
+    // TODO: Wrong parameter order here. Should be "f vec initState" to match the List and Array API.
     let scanBack initState f (vec : RRBVector<'T>) =
         let f' = flip f
-        vec.RevIterItems() |> Seq.scan f' initState |> ofSeq
+        vec.RevIterItems() |> Seq.scan f' initState |> ofSeq |> rev
 
     let singleton (item : 'T) = RRBPersistentVector<'T>(1, Literals.blockSizeShift, emptyNode, [|item|], 0) :> RRBVector<'T>
 

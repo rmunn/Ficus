@@ -2133,129 +2133,6 @@ let arrayTests =
 
 let apiTests =
   testList "API tests" [
-    testProp "windowed" <| fun (vec : RRBVector<int>) (PositiveInt n) ->
-        let arr = vec |> RRBVector.toArray
-        let expected = arr |> Array.windowed n
-        let actual = vec |> RRBVector.windowed n |> Seq.map RRBVector.toArray |> Seq.toArray
-        Expect.equal actual expected "RRBVector.windowed did not produce the right results"
-
-    testProp "item" <| fun (vec : RRBVector<int>) (NonNegativeInt i) ->
-        not (RRBVector.isEmpty vec) ==> fun () ->
-            let i = i % vec.Length
-            let arr = vec |> RRBVector.toArray
-            let expected = arr |> Array.item i
-            let actual = vec |> RRBVector.item i
-            Expect.equal actual expected "RRBVector.item did not produce the right results"
-
-    testProp "nth" <| fun (vec : RRBVector<int>) (NonNegativeInt i) ->
-        not (RRBVector.isEmpty vec) ==> fun () ->
-            let i = i % vec.Length
-            let arr = vec |> RRBVector.toArray
-            let expected = arr |> Array.item i  // There's no Array.nth
-            let actual = vec |> RRBVector.nth i
-            Expect.equal actual expected "RRBVector.nth did not produce the right results"
-
-    testProp "peek" <| fun (vec : RRBVector<int>) ->
-        not (RRBVector.isEmpty vec) ==> fun () ->
-            let arr = vec |> RRBVector.toArray
-            let expected = arr |> Array.last
-            let actual = vec |> RRBVector.peek
-            Expect.equal actual expected "RRBVector.peek did not produce the right results"
-
-    testCase "peek empty" <| fun _ ->
-        let vec = RRBVector.empty<int>
-        Expect.throwsC (fun () -> RRBVector.peek vec |> ignore) (fun e ->
-            Expect.equal e.Message "Can't get last item from an empty vector" "RRBVector.peek on empty vector threw wrong exception")
-
-    testProp "pop" <| fun (vec : RRBVector<int>) ->
-        not (RRBVector.isEmpty vec) ==> fun () ->
-            let arr = vec |> RRBVector.toArray
-            let expected = arr |> Array.copyAndPop
-            let actual = vec |> RRBVector.pop |> RRBVector.toArray
-            Expect.equal actual expected "RRBVector.pop did not produce the right results"
-
-    testCase "pop empty" <| fun _ ->
-        let vec = RRBVector.empty<int>
-        Expect.throwsC (fun () -> RRBVector.pop vec |> ignore) (fun e ->
-            Expect.equal e.Message "Can't pop from an empty vector" "RRBVector.pop on empty vector threw wrong exception")
-
-    testProp "push" <| fun (vec : RRBVector<int>) (i : int) ->
-        let arr = vec |> RRBVector.toArray
-        let expected = arr |> Array.copyAndAppend i
-        let actual = vec |> RRBVector.push i |> RRBVector.toArray
-        Expect.equal actual expected "RRBVector.push did not produce the right results"
-
-    testProp "append" <| fun (vecL : RRBVector<int>) (vecR : RRBVector<int>) ->
-        let arrL = vecL |> RRBVector.toArray
-        let arrR = vecR |> RRBVector.toArray
-        let expected = Array.append arrL arrR
-        let actual = RRBVector.append vecL vecR |> RRBVector.toArray
-        Expect.equal actual expected "RRBVector.append did not produce the right results"
-
-    testProp "split" <| fun (vec : RRBVector<int>) (NonNegativeInt i) ->
-        let i = i % (vec.Length + 1)
-        let arr = vec |> RRBVector.toArray
-        let expectedL, expectedR = arr |> Array.splitAt i
-        let actualL, actualR = vec |> RRBVector.split i
-        Expect.equal (actualL |> RRBVector.toArray) expectedL "RRBVector.split did not produce the right results on left side"
-        Expect.equal (actualR |> RRBVector.toArray) expectedR "RRBVector.split did not produce the right results on right side"
-
-    testProp "remove" <| fun (vec : RRBVector<int>) (NonNegativeInt i) ->
-        not (RRBVector.isEmpty vec) ==> fun () ->
-            let i = i % vec.Length
-            let arr = vec |> RRBVector.toArray
-            let expected = arr |> Array.copyAndRemoveAt i
-            let actual = vec |> RRBVector.remove i |> RRBVector.toArray
-            Expect.equal actual expected "RRBVector.remove did not produce the right results"
-
-    testCase "remove empty" <| fun _ ->
-        let vec = RRBVector.empty<int>
-        Expect.throwsC (fun () -> vec |> RRBVector.remove 0 |> ignore) (fun e ->
-            Expect.equal e.Message "Index must not be past the end of the vector" "RRBVector.pop on empty vector threw wrong exception")
-
-    testProp "insert" <| fun (vec : RRBVector<int>) (NonNegativeInt i) ->
-        let i = i % (vec.Length + 1)
-        let arr = vec |> RRBVector.toArray
-        let expected = arr |> Array.copyAndInsertAt i -512
-        let actual = vec |> RRBVector.insert i -512 |> RRBVector.toArray
-        Expect.equal actual expected "RRBVector.insert did not produce the right results"
-
-    testProp "toArray" <| fun (vec : RRBVector<int>) ->
-        let arr = vec |> RRBVector.toArray
-        Expect.equal arr.Length vec.Length "Array length should equal original vector length"
-        for i = 0 to vec.Length - 1 do
-            Expect.equal (arr.[i]) (vec.[i]) <| sprintf "Array should equal original vector but they differed at index %d. Array had %d and vector had %d" i arr.[i] vec.[i]
-
-    testProp "toSeq" <| fun (vec : RRBVector<int>) ->
-        let s = vec |> RRBVector.toSeq
-        Expect.equal (Seq.length s) vec.Length "Seq length should equal original vector length"
-        use eS = s.GetEnumerator()
-        let mutable i = 0
-        while eS.MoveNext() do
-            Expect.equal (eS.Current) (vec.[i]) <| sprintf "Seq should equal original vector but they differed at index %d. Seq had %d and vector had %d" i eS.Current vec.[i]
-            i <- i + 1
-
-    testProp "toList" <| fun (vec : RRBVector<int>) ->
-        let l = vec |> RRBVector.toList
-        let mutable curL = l
-        let mutable i = 0
-        while not (List.isEmpty curL) do
-            Expect.equal (List.head curL) (vec.[i]) <| sprintf "List should equal original vector but they differed at index %d. Seq had %d and vector had %d" i (List.head curL) vec.[i]
-            i <- i + 1
-            curL <- List.tail curL
-        Expect.equal i vec.Length "List length should equal original vector length"
-
-    testProp "ofSeq" <| fun (l : int list) ->
-        // FsCheck doesn't have seq generators by default, so we generate a list and then treat it as a seq for this test
-        let s = Seq.ofList l
-        let vec = RRBVector.ofSeq s
-        Expect.equal vec.Length (Seq.length s) "Vector length should equal original seq length"
-        use eS = s.GetEnumerator()
-        let mutable i = 0
-        while eS.MoveNext() do
-            Expect.equal (vec.[i]) (eS.Current) <| sprintf "Vector should equal original seq but they differed at index %d. Seq had %d and vector had %d" i eS.Current vec.[i]
-            i <- i + 1
-
     testProp "ofArray" <| fun (arr : int[]) ->
         let vec = RRBVector.ofArray arr
         Expect.equal vec.Length arr.Length "Vector length should equal original array length"
@@ -2272,38 +2149,16 @@ let apiTests =
             curL <- List.tail curL
         Expect.equal vec.Length i "Vector length should equal original list length"
 
-    testProp "average" <| fun (vec : RRBVector<NormalFloat>) ->
-        vec.Length > 0 ==> fun() ->
-            let vec = vec |> RRBVector.map (fun (NormalFloat n) -> n)
-            let len = vec.Length
-            let mutable sum = 0.0
-            for i = 0 to len - 1 do
-                sum <- sum + vec.[i]
-            let expected = sum / float len
-            let actual = vec |> RRBVector.average
-            Expect.floatClose Accuracy.high expected actual "RRBVector.average did not produce the right result"
-
-    testProp "averageBy" <| fun (vec : RRBVector<NormalFloat>) ->
-        vec.Length > 0 ==> fun() ->
-            let vec = vec |> RRBVector.map (fun (NormalFloat n) -> n)
-            let expected = (vec |> RRBVector.average) * 3.0
-            let actual = vec |> RRBVector.averageBy (fun n -> n * 3.0)
-            Expect.floatClose Accuracy.high expected actual "RRBVector.averageBy did not produce the right result"
-            let expected = (vec |> RRBVector.average) + 1.0
-            let actual = vec |> RRBVector.averageBy (fun n -> n + 1.0)
-            Expect.floatClose Accuracy.high expected actual "RRBVector.averageBy did not produce the right result on second check"
-
-    testProp "choose" <| fun (vec : RRBVector<int>) (f : int -> int option) ->
-        let arr = vec |> RRBVector.toArray
-        let expected = arr |> Array.choose f
-        let actual = vec |> RRBVector.choose f |> RRBVector.toArray
-        Expect.equal actual expected "RRBVector.choose did not produce the right results"
-
-    testProp "chunkBySize" <| fun (vec : RRBVector<int>) (PositiveInt i) ->
-        let arr = vec |> RRBVector.toArray
-        let expected = arr |> Array.chunkBySize i
-        let actual = vec |> RRBVector.chunkBySize i |> RRBVector.map RRBVector.toArray |> RRBVector.toArray
-        Expect.equal actual expected "RRBVector.chunkBySize did not produce the right results"
+    testProp "ofSeq" <| fun (l : int list) ->
+        // FsCheck doesn't have seq generators by default, so we generate a list and then treat it as a seq for this test
+        let s = Seq.ofList l
+        let vec = RRBVector.ofSeq s
+        Expect.equal vec.Length (Seq.length s) "Vector length should equal original seq length"
+        use eS = s.GetEnumerator()
+        let mutable i = 0
+        while eS.MoveNext() do
+            Expect.equal (vec.[i]) (eS.Current) <| sprintf "Vector should equal original seq but they differed at index %d. Seq had %d and vector had %d" i eS.Current vec.[i]
+            i <- i + 1
 
     testProp "concat" <| fun (vec : RRBVector<int>) ->
         // When vec is transient, this will exercise the "concat multiple transients with same owner" logic
@@ -2329,13 +2184,6 @@ let apiTests =
         let actual = actualVec |> RRBVector.toArray
         Expect.equal actual expected "RRBVector.concat did not produce the right results"
 
-    testProp "collect" <| fun (vec : RRBVector<int>) (f : int -> int[]) ->
-        let arr = vec |> RRBVector.toArray
-        let fv = f >> RRBVector.ofArray
-        let expected = arr |> Array.collect f
-        let actual = vec |> RRBVector.collect fv |> RRBVector.toArray
-        Expect.equal actual expected "RRBVector.collect did not produce the right results"
-
     testProp "compareWith" <| fun (vec1 : RRBVector<string>) (vec2 : RRBVector<string>) ->
         let arr1 = vec1 |> RRBVector.toArray
         let arr2 = vec2 |> RRBVector.toArray
@@ -2347,211 +2195,12 @@ let apiTests =
         let actual = RRBVector.compareWith f vec1 vec2
         Expect.equal actual expected "RRBVector.compareWith did not produce the right results"
 
-    testProp "countBy" <| fun (vec : RRBVector<string>) ->
-        let arr = vec |> RRBVector.toArray
-        let f (s : string) = if s |> isNull then -1 else s.Length
-        let expected = Array.countBy f arr
-        let actual = RRBVector.countBy f vec |> RRBVector.toArray
-        Expect.equal actual expected "RRBVector.countBy did not produce the right results"
-
     testProp "contains" <| fun (vec : RRBVector<int>) (i : int) ->
         let arr = vec |> RRBVector.toArray
         let expected = arr |> Array.contains i
         let actual = vec |> RRBVector.contains i
         Expect.equal actual expected "RRBVector.contains did not produce the right results"
 
-    testProp "distinct" <| fun (vec : RRBVector<int>) ->
-        let arr = vec |> RRBVector.toArray
-        let expected = arr |> Array.distinct
-        let actual = vec |> RRBVector.distinct |> RRBVector.toArray
-        Expect.equal actual expected "RRBVector.distinct did not produce the right results"
-
-    testProp "distinctBy" <| fun (vec : RRBVector<string>) ->
-        let arr = vec |> RRBVector.toArray
-        let f (s : string) = if s |> isNull then -1 else s.Length
-        let expected = arr |> Array.distinctBy f
-        let actual = vec |> RRBVector.distinctBy f |> RRBVector.toArray
-        Expect.equal actual expected "RRBVector.distinctBy did not produce the right results"
-
-    testCase "exactlyOne with 0" <| fun () ->
-        let vec = RRBVector.empty<int>
-        Expect.throwsC (fun () -> RRBVector.exactlyOne vec |> ignore) (fun e ->
-            Expect.equal e.Message "exactlyOne called on a vector of 1 items (requires a vector of exactly 1 item)" "RRBVector.exactlyOne on empty vector threw wrong exception")
-
-    testCase "exactlyOne with 1" <| fun () ->
-        let vec = RRBVector.empty<int> |> RRBVector.push 1
-        Expect.equal (RRBVector.exactlyOne vec) 1 "RRBVector.exactlyOne did not produce the right result"
-
-    testCase "exactlyOne with 2" <| fun () ->
-        let vec = RRBVector.empty<int> |> RRBVector.push 1 |> RRBVector.push 2
-        Expect.throwsC (fun () -> RRBVector.exactlyOne vec |> ignore) (fun e ->
-            Expect.equal e.Message "exactlyOne called on a vector of 2 items (requires a vector of exactly 1 item)" "RRBVector.exactlyOne on two-item vector threw wrong exception")
-
-    testProp "except" <| fun (vec : RRBVector<int>) (excludedVec : RRBVector<int>) ->
-        let arr = vec |> RRBVector.toArray
-        let excludedArr = excludedVec |> RRBVector.toArray
-        let expected = arr |> Array.except excludedArr
-        let actual = vec |> RRBVector.except excludedVec |> RRBVector.toArray
-        Expect.equal actual expected "RRBVector.excluded did not produce the right results"
-
-(* Time take to run tests up through countBy:
-
-[21:24:30 INF] EXPECTO? Running tests... <Expecto>
-[21:24:30 DBG] Nodes and vectors/All tests/Single isolated test for popping in persistents starting... <Expecto>
-[21:24:30 DBG] Nodes and vectors/All tests/API tests/nth starting... <Expecto>
-[21:24:30 DBG] Nodes and vectors/All tests/API tests/peek empty starting... <Expecto>
-[21:24:30 DBG] Nodes and vectors/All tests/API tests/push starting... <Expecto>
-[21:24:30 DBG] Nodes and vectors/All tests/Single isolated test for pushing in transients starting... <Expecto>
-[21:24:30 DBG] Nodes and vectors/All tests/API tests/append starting... <Expecto>
-[21:24:30 DBG] Nodes and vectors/All tests/API tests/peek starting... <Expecto>
-[21:24:30 DBG] Nodes and vectors/All tests/API tests/windowed starting... <Expecto>
-[21:24:30 DBG] Nodes and vectors/All tests/API tests/split starting... <Expecto>
-[21:24:30 DBG] Nodes and vectors/All tests/API tests/pop starting... <Expecto>
-[21:24:30 DBG] Nodes and vectors/All tests/API tests/pop empty starting... <Expecto>
-[21:24:30 DBG] Nodes and vectors/All tests/API tests/pop empty passed in 00:00:00.0220000. <Expecto>
-[21:24:30 DBG] Nodes and vectors/All tests/API tests/peek empty passed in 00:00:00.0220000. <Expecto>
-[21:24:30 DBG] Nodes and vectors/All tests/API tests/item starting... <Expecto>
-[21:24:30 DBG] Nodes and vectors/All tests/API tests/remove starting... <Expecto>
-[21:24:30 DBG] Nodes and vectors/All tests/API tests/remove empty starting... <Expecto>
-[21:24:30 DBG] Nodes and vectors/All tests/API tests/remove empty passed in 00:00:00.0010000. <Expecto>
-[21:24:30 DBG] Nodes and vectors/All tests/Single isolated test for popping in persistents passed in 00:00:00.1160000. <Expecto>
-[21:24:30 DBG] Nodes and vectors/All tests/API tests/insert starting... <Expecto>
-[21:24:30 DBG] Nodes and vectors/All tests/Single isolated test for pushing in transients passed in 00:00:00.1180000. <Expecto>
-[21:24:30 DBG] Nodes and vectors/All tests/API tests/toArray starting... <Expecto>
-[21:24:43 DBG] Nodes and vectors/All tests/API tests/toSeq starting... <Expecto>
-[21:25:15 DBG] Nodes and vectors/All tests/API tests/nth passed in 00:00:44.5200000. <Expecto>
-[21:25:15 DBG] Nodes and vectors/All tests/API tests/toList starting... <Expecto>
-[21:25:15 DBG] Nodes and vectors/All tests/API tests/item passed in 00:00:44.5870000. <Expecto>
-[21:25:15 DBG] Nodes and vectors/All tests/API tests/ofSeq starting... <Expecto>
-[21:25:15 DBG] Nodes and vectors/All tests/API tests/ofSeq passed in 00:00:00.1850000. <Expecto>
-[21:25:15 DBG] Nodes and vectors/All tests/API tests/ofArray starting... <Expecto>
-[21:25:15 DBG] Nodes and vectors/All tests/API tests/ofArray passed in 00:00:00.1610000. <Expecto>
-[21:25:15 DBG] Nodes and vectors/All tests/API tests/ofList starting... <Expecto>
-[21:25:15 DBG] Nodes and vectors/All tests/API tests/ofList passed in 00:00:00.1690000. <Expecto>
-[21:25:15 DBG] Nodes and vectors/All tests/API tests/average starting... <Expecto>
-[21:25:21 DBG] Nodes and vectors/All tests/API tests/remove passed in 00:00:50.4690000. <Expecto>
-[21:25:21 DBG] Nodes and vectors/All tests/API tests/averageBy starting... <Expecto>
-[21:25:25 DBG] Nodes and vectors/All tests/API tests/push passed in 00:00:54.8270000. <Expecto>
-[21:25:25 DBG] Nodes and vectors/All tests/API tests/choose starting... <Expecto>
-[21:25:27 DBG] Nodes and vectors/All tests/API tests/split passed in 00:00:57.4700000. <Expecto>
-[21:25:28 DBG] Nodes and vectors/All tests/API tests/chunkBySize starting... <Expecto>
-[21:25:31 DBG] Nodes and vectors/All tests/API tests/pop passed in 00:01:00.5950000. <Expecto>
-[21:25:31 DBG] Nodes and vectors/All tests/API tests/concat starting... <Expecto>
-[21:25:32 DBG] Nodes and vectors/All tests/API tests/peek passed in 00:01:02.0640000. <Expecto>
-[21:25:32 DBG] Nodes and vectors/All tests/API tests/concat part 2 starting... <Expecto>
-[21:25:36 DBG] Nodes and vectors/All tests/API tests/insert passed in 00:01:06.3630000. <Expecto>
-[21:25:36 DBG] Nodes and vectors/All tests/API tests/collect starting... <Expecto>
-[21:26:08 DBG] Nodes and vectors/All tests/API tests/chunkBySize passed in 00:00:40.8370000. <Expecto>
-[21:26:08 DBG] Nodes and vectors/All tests/API tests/compareWith starting... <Expecto>
-[21:26:24 DBG] Nodes and vectors/All tests/API tests/append passed in 00:01:53.8090000. <Expecto>
-[21:26:24 DBG] Nodes and vectors/All tests/API tests/countBy starting... <Expecto>
-[21:26:37 DBG] Nodes and vectors/All tests/API tests/concat passed in 00:01:06.6490000. <Expecto>
-[21:26:37 DBG] Nodes and vectors/All tests/API tests/slice notation starting... <Expecto>
-[21:26:39 DBG] Nodes and vectors/All tests/API tests/slice notation passed in 00:00:01.9560000. <Expecto>
-[21:26:45 DBG] Nodes and vectors/All tests/API tests/toList passed in 00:01:30.2040000. <Expecto>
-[21:27:06 DBG] Nodes and vectors/All tests/API tests/toSeq passed in 00:02:36.0900000. <Expecto>
-[21:27:11 DBG] Nodes and vectors/All tests/API tests/toArray passed in 00:02:40.3950000. <Expecto>
-[21:27:45 DBG] Nodes and vectors/All tests/API tests/windowed passed in 00:03:15.4170000. <Expecto>
-[21:27:48 DBG] Nodes and vectors/All tests/API tests/concat part 2 passed in 00:02:15.5170000. <Expecto>
-[21:27:52 DBG] Nodes and vectors/All tests/API tests/average passed in 00:02:37.0340000. <Expecto>
-[21:28:38 DBG] Nodes and vectors/All tests/API tests/averageBy passed in 00:03:17.5290000. <Expecto>
-[21:46:11 DBG] Nodes and vectors/All tests/API tests/choose passed in 00:20:46.3200000. <Expecto>
-[21:57:36 DBG] Nodes and vectors/All tests/API tests/compareWith passed in 00:31:27.3810000. <Expecto>
-[22:03:46 DBG] Nodes and vectors/All tests/API tests/countBy passed in 00:37:21.7210000. <Expecto>
-[22:11:55 DBG] Nodes and vectors/All tests/API tests/collect passed in 00:46:18.2560000. <Expecto>
-[22:11:55 INF] EXPECTO! 31 tests run in 00:47:24.7531468 for Nodes and vectors/All tests – 31 passed, 0 ignored, 0 failed, 0 errored. Success! <Expecto>
-
-*)
-
-(* Still to write:
-
-    let filter pred (vec : RRBVector<'T>) =
-    let filteri pred (vec : RRBVector<'T>) =
-    let filter2 pred (vec1 : RRBVector<'T>) (vec2 : RRBVector<'T>) =
-    let filteri2 pred (vec1 : RRBVector<'T>) (vec2 : RRBVector<'T>) =
-    let find f (vec : RRBVector<'T>) = vec |> Seq.find f
-    let findBack f (vec : RRBVector<'T>) = vec.RevIterItems() |> Seq.find f
-    let findIndex f (vec : RRBVector<'T>) = vec |> Seq.findIndex f
-    let findIndexBack f (vec : RRBVector<'T>) = vec.RevIterItems() |> Seq.findIndex f
-    let fold folder (initState : 'State) (vec : RRBVector<'T>) = vec |> Seq.fold folder initState
-    let fold2 folder (initState : 'State) (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) = (vec1, vec2) ||> Seq.fold2 folder initState
-    let foldBack (initState : 'State) folder (vec : RRBVector<'T>) = vec.RevIterItems() |> Seq.fold (fun a b -> folder b a) initState
-    let foldBack2 (initState : 'State) folder (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) = (vec1.RevIterItems(), vec2.RevIterItems()) ||> Seq.fold2 (fun a b c -> folder b c a) initState
-    let forall f (vec : RRBVector<'T>) = vec |> Seq.forall f
-    let forall2 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) = (vec1, vec2) ||> Seq.forall2 f
-
-    let groupBy f (vec : RRBVector<'T>) =
-    let head (vec : RRBVector<'T>) =
-    let indexed (vec : RRBVector<'T>) =
-    let init size f = Seq.init size f |> ofSeq
-    let isEmpty (vec : RRBVector<'T>) = vec.IsEmpty()
-    let item idx (vec : RRBVector<'T>) = vec.[idx]
-    let iter f (vec : RRBVector<'T>) = vec |> Seq.iter f
-    let iter2 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) = (vec1, vec2) ||> Seq.iter2 f
-    let iteri f (vec : RRBVector<'T>) = vec |> Seq.iteri f
-    let iteri2 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) = (vec1, vec2) ||> Seq.iteri2 f
-    let last (vec : RRBVector<'T>) =
-    let length (vec : RRBVector<'T>) = vec.Length
-    let map f (vec : RRBVector<'T>) =
-    let map2 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) =
-    let map3 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) (vec3 : RRBVector<'T3>) =
-    let mapi f (vec : RRBVector<'T>) =
-    let mapi2 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) =
-    let mapFold folder initState (vec : RRBVector<'T>) =
-    let mapFoldBack folder (vec : RRBVector<'T>) initState =
-    let max (vec : RRBVector<'T>) = vec |> Seq.max
-    let maxBy f (vec : RRBVector<'T>) = vec |> Seq.maxBy f
-    let min (vec : RRBVector<'T>) = vec |> Seq.min
-    let minBy f (vec : RRBVector<'T>) = vec |> Seq.minBy f
-
-    let pairwise (vec : RRBVector<'T>) =
-    let partition pred (vec : RRBVector<'T>) =
-    let permute f (vec : RRBVector<'T>) = // TODO: Implement a better version once we have transient RRBVectors, so we don't have to build an intermediate array
-    let pick f (vec : RRBVector<'T>) = vec |> Seq.pick f
-    let reduce f (vec : RRBVector<'T>) = vec |> Seq.reduce f
-    let reduceBack f (vec : RRBVector<'T>) = let f' = flip f in vec.RevIterItems() |> Seq.reduce f'
-
-    let replicate count value =
-    let rev (vec : RRBVector<'T>) =
-    let scan f initState (vec : RRBVector<'T>) = vec |> Seq.scan f initState |> ofSeq
-    let scanBack initState f (vec : RRBVector<'T>) =
-    let singleton (item : 'T) = RRBPersistentVector<'T>(1, Literals.blockSizeShift, emptyNode, [|item|], 0) :> RRBVector<'T>
-
-    let skip count (vec : RRBVector<'T>) = vec.Skip count
-    let skipWhile pred (vec : RRBVector<'T>) = // TODO: Test this
-    let sort (vec : RRBVector<'T>) =
-    let sortBy f (vec : RRBVector<'T>) =
-    let sortWith f (vec : RRBVector<'T>) =
-    let sortDescending (vec : RRBVector<'T>) =
-    let sortByDescending f (vec : RRBVector<'T>) =
-    let splitAt idx (vec : RRBVector<'T>) = vec.Split idx
-    let splitInto splitCount (vec : RRBVector<'T>) =
-    let sum (vec : RRBVector<'T>) = vec |> Seq.sum
-    let sumBy f (vec : RRBVector<'T>) = vec |> Seq.sumBy f
-    let tail (vec : RRBVector<'T>) = vec.Remove 0
-    let take n (vec : RRBVector<'T>) =
-    let takeWhile pred (vec : RRBVector<'T>) =  // TODO: Try a version with vec.IterItems() and a counter, and see if that runs faster. Also update skipWhile if it does.
-    let truncate n (vec : RRBVector<'T>) = vec.Take n
-    let tryFind f (vec : RRBVector<'T>) = vec |> Seq.tryFind f
-    let tryFindBack f (vec : RRBVector<'T>) = vec.RevIterItems() |> Seq.tryFindBack f
-    let tryFindIndex f (vec : RRBVector<'T>) = vec |> Seq.tryFindIndex f
-    let tryFindIndexBack f (vec : RRBVector<'T>) = vec.RevIterItems() |> Seq.tryFindIndexBack f
-    let tryHead (vec : RRBVector<'T>) = if vec.Length = 0 then None else Some vec.[0]
-    let tryItem idx (vec : RRBVector<'T>) =
-    let tryLast (vec : RRBVector<'T>) =
-    let tryPick f (vec : RRBVector<'T>) = vec |> Seq.tryPick f
-    let unfold f initState = Seq.unfold f initState |> ofSeq
-
-    let unzip (vec : RRBVector<'T1 * 'T2>) =
-    let unzip3 (vec : RRBVector<'T1 * 'T2 * 'T3>) =
-    let where pred (vec : RRBVector<'T>) = filter pred vec
-
-    let windowedSeq windowSize (vec : RRBVector<'T>) =
-    let windowed windowSize (vec : RRBVector<'T>) = // Already done
-    let zip (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) =
-    let zip3 (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) (vec3 : RRBVector<'T3>) =
-
-*)
     testProp "slice notation" <| fun (VecPlusArrAndIdx (v,a,idx)) (PositiveInt endIdx) ->
         let endIdx = if v.Length = 0 then 0 else endIdx % v.Length
         let idx, endIdx = if idx <= endIdx then idx,endIdx else endIdx,idx
@@ -2921,41 +2570,240 @@ T26
 
 
 let mkTestSuite name startingVec =
-  let runTest testName f =
-    RRBVectorProps.checkProperties startingVec <| sprintf "Starting vector in %s test in %A suite" testName name
-    let result = startingVec |> f
+  let runTest testName vecF arrF =
+    // No need to test startingVec any more; we know it's good by now
+    // RRBVectorProps.checkProperties startingVec <| sprintf "Starting vector in %s test in %A suite" testName name
+    let arr = startingVec |> RRBVector.toArray
+    let expected = arr |> arrF
+    let result = startingVec |> vecF
     RRBVectorProps.checkProperties result <| sprintf "Result of %s test in %A suite" testName name
+    Expect.equal result.Length (expected |> Array.length) <| sprintf "Result had wrong length; should be %d but was %d" (expected |> Array.length) result.Length
+    Expect.equal (result |> RRBVector.toArray) expected <| sprintf "Result of %s test in %A suite was incorrect" testName name
 
-  let mkTest testName f =
-    testCase (sprintf "%s: %s" name testName) <| fun _ -> runTest testName f
+  let mkTest testName (vecF,arrF) =
+    testCase (sprintf "%s: %s" name testName) <| fun _ -> runTest testName vecF arrF
 
   let pos = if RRBVector.length startingVec = 0 then 0 else (Literals.blockSize + 3) % (RRBVector.length startingVec)
 
-  testList name [
-    mkTest "remove" (if RRBVector.length startingVec = 0 then id else RRBVector.remove pos)
-    mkTest "insert" (RRBVector.insert pos -512)
-    mkTest "pop" (if RRBVector.length startingVec = 0 then id else RRBVector.pop)
-    mkTest "push" (RRBVector.push -512)
-    mkTest "push many" (fun vec -> { 0 .. Literals.blockSize } |> Seq.fold (fun v i -> v |> RRBVector.push i) vec)
-    mkTest "take" (RRBVector.take pos)
-    mkTest "truncate" (RRBVector.truncate (Literals.blockSize + 3))
-    mkTest "truncate more" (RRBVector.truncate (Literals.blockSize * Literals.blockSize + 3))
-    mkTest "skip" (RRBVector.skip pos)
-    mkTest "choose" (RRBVector.choose (fun n -> if n % 2 = 0 then Some (n / 2) else None))
-    mkTest "distinct" (RRBVector.distinct)
-    mkTest "map id" (RRBVector.map id)
-    mkTest "scan (+)" (RRBVector.scan (+) 0)
-    mkTest "scanBack (+)" (RRBVector.scanBack 0 (+))
-    mkTest "mergeL tail-only" (RRBVector.append (RRBVectorGen.treeReprStrToVec "T28"))
-    mkTest "mergeR tail-only" (fun vec -> RRBVector.append vec (RRBVectorGen.treeReprStrToVec "T28"))
-    mkTest "mergeL sapling" (RRBVector.append (RRBVectorGen.treeReprStrToVec "M T28"))
-    mkTest "mergeR sapling" (fun vec -> RRBVector.append vec (RRBVectorGen.treeReprStrToVec "M T28"))
-    mkTest "mergeL small non-sapling" (RRBVector.append (RRBVectorGen.treeReprStrToVec "M M T28"))
-    mkTest "mergeR small non-sapling" (fun vec -> RRBVector.append vec (RRBVectorGen.treeReprStrToVec "M M T28"))
-    mkTest "merge with self" (fun vec -> RRBVector.append vec vec)
+  ftestList name ([
+    mkTest "nth" (if RRBVector.length startingVec = 0 then id,id else RRBVector.nth pos >> RRBVector.singleton, Array.item pos >> Array.singleton)
+    mkTest "item" (if RRBVector.length startingVec = 0 then id,id else RRBVector.item pos >> RRBVector.singleton, Array.item pos >> Array.singleton)
+    mkTest "peek" (if RRBVector.length startingVec = 0 then id,id else RRBVector.peek >> RRBVector.singleton, Array.last >> Array.singleton)
+
+    mkTest "pop" (if RRBVector.length startingVec = 0 then id,id else RRBVector.pop, Array.copyAndPop)
+    mkTest "push" (RRBVector.push -512, Array.copyAndAppend -512)
+    mkTest "push many" ((fun vec -> { 0 .. Literals.blockSize } |> Seq.fold (fun v i -> v |> RRBVector.push i) vec), (fun arr -> Array.append arr [| 0 .. Literals.blockSize |]))
+    mkTest "mergeL tail-only" (RRBVector.append (RRBVectorGen.treeReprStrToVec "T28"), (Array.append [| 0 .. 27 |]))
+    mkTest "mergeR tail-only" ((fun vec -> RRBVector.append vec (RRBVectorGen.treeReprStrToVec "T28")), (fun arr -> Array.append arr [| 0 .. 27 |]))
+    mkTest "mergeL sapling" (RRBVector.append (RRBVectorGen.treeReprStrToVec "M T28"), (Array.append [| 0 .. Literals.blockSize + 27 |]))
+    mkTest "mergeR sapling" ((fun vec -> RRBVector.append vec (RRBVectorGen.treeReprStrToVec "M T28")), (fun arr -> Array.append arr [| 0 .. Literals.blockSize + 27 |]))
+    mkTest "mergeL small non-sapling" (RRBVector.append (RRBVectorGen.treeReprStrToVec "M M T28"), Array.append [| 0 .. Literals.blockSize * 2 + 27 |])
+    mkTest "mergeR small non-sapling" ((fun vec -> RRBVector.append vec (RRBVectorGen.treeReprStrToVec "M M T28")), (fun arr -> Array.append arr [| 0 .. Literals.blockSize * 2 + 27 |]))
+    mkTest "merge with self" ((fun vec -> RRBVector.append vec vec), (fun arr -> Array.append arr arr))
+    mkTest "splitL" (RRBVector.split pos >> fst, Array.splitAt pos >> fst)
+    mkTest "splitR" (RRBVector.split pos >> snd, Array.splitAt pos >> snd)
+    mkTest "remove" (if RRBVector.length startingVec = 0 then id,id else RRBVector.remove pos, Array.copyAndRemoveAt pos)
+    mkTest "insert" (RRBVector.insert pos -512, Array.copyAndInsertAt pos -512)
+
+    testCase "toArray" <| fun _ ->
+        let vec = startingVec
+        let arr = vec |> RRBVector.toArray
+        Expect.equal arr.Length vec.Length "Array length should equal original vector length"
+        for i = 0 to vec.Length - 1 do
+            Expect.equal arr.[i] vec.[i] <| sprintf "Array should equal original vector but they differed at index %d. Array had %d and vector had %d" i arr.[i] vec.[i]
+
+    testCase "toList" <| fun _ ->
+        let vec = startingVec
+        let l = vec |> RRBVector.toList
+        let mutable curL = l
+        let mutable i = 0
+        while not (List.isEmpty curL) do
+            Expect.equal (List.head curL) (vec.[i]) <| sprintf "List should equal original vector but they differed at index %d. Seq had %d and vector had %d" i (List.head curL) vec.[i]
+            i <- i + 1
+            curL <- List.tail curL
+        Expect.equal i vec.Length "List length should equal original vector length"
+
+    testCase "toSeq" <| fun _ ->
+        let vec = startingVec
+        let s = vec |> RRBVector.toSeq
+        Expect.equal (Seq.length s) vec.Length "Seq length should equal original vector length"
+        use eS = s.GetEnumerator()
+        let mutable i = 0
+        while eS.MoveNext() do
+            Expect.equal (eS.Current) (vec.[i]) <| sprintf "Seq should equal original vector but they differed at index %d. Seq had %d and vector had %d" i eS.Current vec.[i]
+            i <- i + 1
+
+    // ofArray, ofList, and ofSeq can't be tested with this methodology, so we'll have to use property tests there. Thankfully those are quite short.
+
+    mkTest "average" (if RRBVector.length startingVec = 0 then (RRBVector.map float),(Array.map float) else ((RRBVector.map float) >> RRBVector.average >> RRBVector.singleton, (Array.map float) >> Array.average >> Array.singleton))
+    mkTest "averageBy" (let f = (+) 1.0 in if RRBVector.length startingVec = 0 then (RRBVector.map float),(Array.map float) else ((RRBVector.map float) >> RRBVector.averageBy f >> RRBVector.singleton, (Array.map float) >> Array.averageBy f >> Array.singleton))
+    mkTest "choose" (let f = (fun n -> if n % 2 = 0 then Some (n / 2) else None) in RRBVector.choose f, Array.choose f)
+    mkTest "chunkBySize" (RRBVector.chunkBySize pos >> RRBVector.map RRBVector.toArray, Array.chunkBySize pos)
+    // concat is a property test in apiTests
+    mkTest "collect" (let f = (fun n -> [n; n+1]) in RRBVector.collect (f >> RRBVector.ofList), Array.collect (f >> Array.ofList))
+    // compareWith is a property test in apiTests
+    mkTest "countBy" (let f = (fun n -> n % 10) in RRBVector.countBy f, Array.countBy f)
+    // contains is a property test in apiTests
+    mkTest "distinct" (RRBVector.distinct, Array.distinct)
+    mkTest "distinctBy" (let f =  (fun n -> n % 10) in RRBVector.distinctBy f, Array.distinctBy f)
+
+    testCase "exactlyOne" <| fun () ->
+        let vec = startingVec
+        if vec.Length = 1 then
+            Expect.equal (RRBVector.exactlyOne vec) vec.[0] "exactlyOne should return the first (and only) item"
+        else
+            Expect.throwsT<System.ArgumentException> (fun () -> RRBVector.exactlyOne vec |> ignore) "exactlyOne should throw when called with a vector of length other than one"
+
+    mkTest "except" (let excluded = [| 2..18 |] in RRBVector.except (RRBVector.ofArray excluded), Array.except excluded)
+    mkTest "filter" (let f = (fun n -> n % 3 = 0) in RRBVector.filter f, Array.filter f)
+
+    testCase "filteri" <| fun _ ->
+        let vec = startingVec
+        let arr = vec |> RRBVector.toArray
+        let expected = arr |> Array.skip 20 |> Array.filter (fun n -> n % 3 = 0)
+        let f i n = i > 20 && n % 3 = 0
+        let actual = vec |> RRBVector.filteri f
+        RRBVectorProps.checkProperties actual <| sprintf "Result of filteri test in %A suite" name
+        Expect.equal actual.Length (expected |> Array.length) <| sprintf "Result had wrong length; should be %d but was %d" (expected |> Array.length) actual.Length
+        Expect.equal (actual |> RRBVector.toArray) expected <| sprintf "Result of filteri test in %A suite was incorrect" name
+
+    testCase "filter2" <| fun _ ->
+        let vec = startingVec
+        let arr = vec |> RRBVector.toArray
+        let expected = arr |> Array.filter (fun n -> n % 6 = 0) |> Array.map (fun n -> n,n)
+        let f a b = a % 2 = 0 && b % 3 = 0
+        let actual = (vec,vec) ||> RRBVector.filter2 f
+        RRBVectorProps.checkProperties actual <| sprintf "Result of filteri test in %A suite" name
+        Expect.equal actual.Length (expected |> Array.length) <| sprintf "Result had wrong length; should be %d but was %d" (expected |> Array.length) actual.Length
+        Expect.equal (actual |> RRBVector.toArray) expected <| sprintf "Result of filteri test in %A suite was incorrect" name
+
+    testCase "filteri2" <| fun _ ->
+        let vec = startingVec
+        let arr = vec |> RRBVector.toArray
+        let expected = arr |> Array.skip 20 |> Array.filter (fun n -> n % 6 = 0) |> Array.map (fun n -> n,n)
+        let f i a b = i > 20 && a % 2 = 0 && b % 3 = 0
+        let actual = (vec,vec) ||> RRBVector.filteri2 f
+        RRBVectorProps.checkProperties actual <| sprintf "Result of filteri test in %A suite" name
+        Expect.equal actual.Length (expected |> Array.length) <| sprintf "Result had wrong length; should be %d but was %d" (expected |> Array.length) actual.Length
+        Expect.equal (actual |> RRBVector.toArray) expected <| sprintf "Result of filteri test in %A suite was incorrect" name
+
+    mkTest "find" (if RRBVector.length startingVec = 0 then id,id else RRBVector.find (fun n -> n = pos) >> RRBVector.singleton, Array.find (fun n -> n = pos) >> Array.singleton)
+    mkTest "take" (RRBVector.take pos, Array.take pos)
+    mkTest "truncate" (RRBVector.truncate (Literals.blockSize + 3), Array.truncate (Literals.blockSize + 3))
+    mkTest "truncate more" (RRBVector.truncate (Literals.blockSize * Literals.blockSize + 3), Array.truncate (Literals.blockSize * Literals.blockSize + 3))
+    mkTest "skip" (RRBVector.skip pos, Array.skip pos)
+    mkTest "map id" (RRBVector.map id, Array.map id)
+    mkTest "map (*) 2" (let f x = x * 2 in RRBVector.map f, Array.map f)
+    mkTest "scan (+)" (RRBVector.scan (+) 0, Array.scan (+) 0)
+    mkTest "scanBack (+)" (RRBVector.scanBack 0 (+), (fun arr -> Array.scanBack (+) arr 0))  // TODO: RRBVector.scanBack API needs to swap parameters
+    mkTest "windowed small" (RRBVector.windowed 5 >> RRBVector.map RRBVector.toArray, Array.windowed 5)
+    mkTest "windowed medium" (RRBVector.windowed (Literals.blockSize - 1) >> RRBVector.map RRBVector.toArray, Array.windowed (Literals.blockSize - 1))
+    mkTest "windowed large" (RRBVector.windowed (Literals.blockSize * 3 + 5) >> RRBVector.map RRBVector.toArray, Array.windowed (Literals.blockSize * 3 + 5))
     // TODO: More tests like these
     // testProp "Command tests from constructed vector" <| fun _ -> (Command.toProperty (RRBVectorMoreCommands.specFromData startingVec))
-  ]
+  ] @ if startingVec |> RRBVector.isEmpty then [
+        testCase "peek empty" <| fun _ ->
+            let vec = startingVec
+            Expect.throwsC (fun () -> RRBVector.peek vec |> ignore) (fun e ->
+                Expect.equal e.Message "Can't get last item from an empty vector" "RRBVector.peek on empty vector threw wrong exception")
+
+        testCase "pop empty" <| fun _ ->
+            let vec = startingVec
+            Expect.throwsC (fun () -> RRBVector.pop vec |> ignore) (fun e ->
+                Expect.equal e.Message "Can't pop from an empty vector" "RRBVector.pop on empty vector threw wrong exception")
+
+        testCase "remove empty" <| fun _ ->
+            let vec = startingVec
+            Expect.throwsC (fun () -> vec |> RRBVector.remove 0 |> ignore) (fun e ->
+                Expect.equal e.Message "Index must not be past the end of the vector" "RRBVector.pop on empty vector threw wrong exception")
+
+        ] else [])
+
+(* Still to write:
+
+    let find f (vec : RRBVector<'T>) = vec |> Seq.find f
+    let findBack f (vec : RRBVector<'T>) = vec.RevIterItems() |> Seq.find f
+    let findIndex f (vec : RRBVector<'T>) = vec |> Seq.findIndex f
+    let findIndexBack f (vec : RRBVector<'T>) = vec.RevIterItems() |> Seq.findIndex f
+    let fold folder (initState : 'State) (vec : RRBVector<'T>) = vec |> Seq.fold folder initState
+    let fold2 folder (initState : 'State) (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) = (vec1, vec2) ||> Seq.fold2 folder initState
+    let foldBack (initState : 'State) folder (vec : RRBVector<'T>) = vec.RevIterItems() |> Seq.fold (fun a b -> folder b a) initState
+    let foldBack2 (initState : 'State) folder (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) = (vec1.RevIterItems(), vec2.RevIterItems()) ||> Seq.fold2 (fun a b c -> folder b c a) initState
+    let forall f (vec : RRBVector<'T>) = vec |> Seq.forall f
+    let forall2 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) = (vec1, vec2) ||> Seq.forall2 f
+
+    let groupBy f (vec : RRBVector<'T>) =
+    let head (vec : RRBVector<'T>) =
+    let indexed (vec : RRBVector<'T>) =
+    let init size f = Seq.init size f |> ofSeq
+    let isEmpty (vec : RRBVector<'T>) = vec.IsEmpty()
+    let item idx (vec : RRBVector<'T>) = vec.[idx]
+    let iter f (vec : RRBVector<'T>) = vec |> Seq.iter f
+    let iter2 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) = (vec1, vec2) ||> Seq.iter2 f
+    let iteri f (vec : RRBVector<'T>) = vec |> Seq.iteri f
+    let iteri2 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) = (vec1, vec2) ||> Seq.iteri2 f
+    let last (vec : RRBVector<'T>) =
+    let length (vec : RRBVector<'T>) = vec.Length
+    let map f (vec : RRBVector<'T>) =
+    let map2 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) =
+    let map3 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) (vec3 : RRBVector<'T3>) =
+    let mapi f (vec : RRBVector<'T>) =
+    let mapi2 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) =
+    let mapFold folder initState (vec : RRBVector<'T>) =
+    let mapFoldBack folder (vec : RRBVector<'T>) initState =
+    let max (vec : RRBVector<'T>) = vec |> Seq.max
+    let maxBy f (vec : RRBVector<'T>) = vec |> Seq.maxBy f
+    let min (vec : RRBVector<'T>) = vec |> Seq.min
+    let minBy f (vec : RRBVector<'T>) = vec |> Seq.minBy f
+
+    let pairwise (vec : RRBVector<'T>) =
+    let partition pred (vec : RRBVector<'T>) =
+    let permute f (vec : RRBVector<'T>) = // TODO: Implement a better version once we have transient RRBVectors, so we don't have to build an intermediate array
+    let pick f (vec : RRBVector<'T>) = vec |> Seq.pick f
+    let reduce f (vec : RRBVector<'T>) = vec |> Seq.reduce f
+    let reduceBack f (vec : RRBVector<'T>) = let f' = flip f in vec.RevIterItems() |> Seq.reduce f'
+
+    let replicate count value =
+    let rev (vec : RRBVector<'T>) =
+    let scan f initState (vec : RRBVector<'T>) = vec |> Seq.scan f initState |> ofSeq
+    let scanBack initState f (vec : RRBVector<'T>) =
+    let singleton (item : 'T) = RRBPersistentVector<'T>(1, Literals.blockSizeShift, emptyNode, [|item|], 0) :> RRBVector<'T>
+
+    let skip count (vec : RRBVector<'T>) = vec.Skip count
+    let skipWhile pred (vec : RRBVector<'T>) = // TODO: Test this
+    let sort (vec : RRBVector<'T>) =
+    let sortBy f (vec : RRBVector<'T>) =
+    let sortWith f (vec : RRBVector<'T>) =
+    let sortDescending (vec : RRBVector<'T>) =
+    let sortByDescending f (vec : RRBVector<'T>) =
+    let splitAt idx (vec : RRBVector<'T>) = vec.Split idx
+    let splitInto splitCount (vec : RRBVector<'T>) =
+    let sum (vec : RRBVector<'T>) = vec |> Seq.sum
+    let sumBy f (vec : RRBVector<'T>) = vec |> Seq.sumBy f
+    let tail (vec : RRBVector<'T>) = vec.Remove 0
+    let take n (vec : RRBVector<'T>) =
+    let takeWhile pred (vec : RRBVector<'T>) =  // TODO: Try a version with vec.IterItems() and a counter, and see if that runs faster. Also update skipWhile if it does.
+    let truncate n (vec : RRBVector<'T>) = vec.Take n
+    let tryFind f (vec : RRBVector<'T>) = vec |> Seq.tryFind f
+    let tryFindBack f (vec : RRBVector<'T>) = vec.RevIterItems() |> Seq.tryFindBack f
+    let tryFindIndex f (vec : RRBVector<'T>) = vec |> Seq.tryFindIndex f
+    let tryFindIndexBack f (vec : RRBVector<'T>) = vec.RevIterItems() |> Seq.tryFindIndexBack f
+    let tryHead (vec : RRBVector<'T>) = if vec.Length = 0 then None else Some vec.[0]
+    let tryItem idx (vec : RRBVector<'T>) =
+    let tryLast (vec : RRBVector<'T>) =
+    let tryPick f (vec : RRBVector<'T>) = vec |> Seq.tryPick f
+    let unfold f initState = Seq.unfold f initState |> ofSeq
+
+    let unzip (vec : RRBVector<'T1 * 'T2>) =
+    let unzip3 (vec : RRBVector<'T1 * 'T2 * 'T3>) =
+    let where pred (vec : RRBVector<'T>) = filter pred vec
+
+    let windowedSeq windowSize (vec : RRBVector<'T>) =
+    let windowed windowSize (vec : RRBVector<'T>) = // Already done
+    let zip (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) =
+    let zip3 (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) (vec3 : RRBVector<'T3>) =
+
+*)
 
 let startingVecForTransientResidueTests =
     let mutable current = { 0..(Literals.blockSize * Literals.blockSize + Literals.blockSize) } |> RRBVector.ofSeq
