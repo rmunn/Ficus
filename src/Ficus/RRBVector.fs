@@ -1154,7 +1154,7 @@ module RRBVector =
         if vec.Length <> 1 then invalidArg "vec" <| sprintf "exactlyOne called on a vector of %d items (requires a vector of exactly 1 item)" vec.Length
         vec.Peek()
 
-    let except (vec : RRBVector<'T>) (excludedVec : RRBVector<'T>) =
+    let except (excludedVec : RRBVector<'T>) (vec : RRBVector<'T>) =
         let excludedSet = System.Collections.Generic.HashSet<'T>(excludedVec)
         let mutable transient =
             if vec |> isTransient
