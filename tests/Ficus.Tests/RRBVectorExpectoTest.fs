@@ -2639,7 +2639,7 @@ let mkTestSuite name startingVec =
     mkTest "average" (if RRBVector.length startingVec = 0 then (RRBVector.map float),(Array.map float) else ((RRBVector.map float) >> RRBVector.average >> RRBVector.singleton, (Array.map float) >> Array.average >> Array.singleton))
     mkTest "averageBy" (let f = (+) 1.0 in if RRBVector.length startingVec = 0 then (RRBVector.map float),(Array.map float) else ((RRBVector.map float) >> RRBVector.averageBy f >> RRBVector.singleton, (Array.map float) >> Array.averageBy f >> Array.singleton))
     mkTest "choose" (let f = (fun n -> if n % 2 = 0 then Some (n / 2) else None) in RRBVector.choose f, Array.choose f)
-    mkTest "chunkBySize" (RRBVector.chunkBySize pos >> RRBVector.map RRBVector.toArray, Array.chunkBySize pos)
+    mkTest "chunkBySize" (if pos = 0 then RRBVector.map Array.singleton,Array.map Array.singleton else RRBVector.chunkBySize pos >> RRBVector.map RRBVector.toArray, Array.chunkBySize pos)
     // concat is a property test in apiTests
     mkTest "collect" (let f = (fun n -> [n; n+1]) in RRBVector.collect (f >> RRBVector.ofList), Array.collect (f >> Array.ofList))
     mkTest "compareWith same" (let f = (fun a b -> abs a - abs b) in (fun vec -> RRBVector.compareWith f vec vec) >> RRBVector.singleton, (fun arr -> Array.compareWith f arr arr) >> Array.singleton)
@@ -2673,8 +2673,11 @@ let mkTestSuite name startingVec =
     testCase "filteri" <| fun _ ->
         let vec = startingVec
         let arr = vec |> RRBVector.toArray
-        let expected = arr |> Array.skip 20 |> Array.filter (fun n -> n % 3 = 0)
-        let f i n = i > 20 && n % 3 = 0
+        let expected =
+            if arr.Length < 20
+            then Array.empty
+            else arr |> Array.skip 20 |> Array.filter (fun n -> n % 3 = 0)
+        let f i n = i >= 20 && n % 3 = 0
         let actual = vec |> RRBVector.filteri f
         RRBVectorProps.checkProperties actual <| sprintf "Result of filteri test in %A suite" name
         Expect.equal actual.Length (expected |> Array.length) <| sprintf "Result had wrong length; should be %d but was %d" (expected |> Array.length) actual.Length
@@ -2693,8 +2696,11 @@ let mkTestSuite name startingVec =
     testCase "filteri2" <| fun _ ->
         let vec = startingVec
         let arr = vec |> RRBVector.toArray
-        let expected = arr |> Array.skip 20 |> Array.filter (fun n -> n % 6 = 0) |> Array.map (fun n -> n,n)
-        let f i a b = i > 20 && a % 2 = 0 && b % 3 = 0
+        let expected =
+            if arr.Length < 20
+            then Array.empty
+            else arr |> Array.skip 20 |> Array.filter (fun n -> n % 6 = 0) |> Array.map (fun n -> n,n)
+        let f i a b = i >= 20 && a % 2 = 0 && b % 3 = 0
         let actual = (vec,vec) ||> RRBVector.filteri2 f
         RRBVectorProps.checkProperties actual <| sprintf "Result of filteri test in %A suite" name
         Expect.equal actual.Length (expected |> Array.length) <| sprintf "Result had wrong length; should be %d but was %d" (expected |> Array.length) actual.Length
