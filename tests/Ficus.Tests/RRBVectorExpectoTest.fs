@@ -2184,16 +2184,17 @@ let apiTests =
         let actual = actualVec |> RRBVector.toArray
         Expect.equal actual expected "RRBVector.concat did not produce the right results"
 
-    testProp "compareWith" <| fun (vec1 : RRBVector<string>) (vec2 : RRBVector<string>) ->
-        let arr1 = vec1 |> RRBVector.toArray
-        let arr2 = vec2 |> RRBVector.toArray
-        let f (s1 : string) (s2 : string) =
-            let len1 = if s1 |> isNull then -1 else s1 |> String.length
-            let len2 = if s2 |> isNull then -1 else s2 |> String.length
-            len1 - len2
-        let expected = Array.compareWith f arr1 arr2
-        let actual = RRBVector.compareWith f vec1 vec2
-        Expect.equal actual expected "RRBVector.compareWith did not produce the right results"
+    // Too slow, make this a testCase instead
+    // testProp "compareWith" <| fun (vec1 : RRBVector<string>) (vec2 : RRBVector<string>) ->
+    //     let arr1 = vec1 |> RRBVector.toArray
+    //     let arr2 = vec2 |> RRBVector.toArray
+    //     let f (s1 : string) (s2 : string) =
+    //         let len1 = if s1 |> isNull then -1 else s1 |> String.length
+    //         let len2 = if s2 |> isNull then -1 else s2 |> String.length
+    //         len1 - len2
+    //     let expected = Array.compareWith f arr1 arr2
+    //     let actual = RRBVector.compareWith f vec1 vec2
+    //     Expect.equal actual expected "RRBVector.compareWith did not produce the right results"
 
     testProp "contains" <| fun (vec : RRBVector<int>) (i : int) ->
         let arr = vec |> RRBVector.toArray
@@ -2641,7 +2642,19 @@ let mkTestSuite name startingVec =
     mkTest "chunkBySize" (RRBVector.chunkBySize pos >> RRBVector.map RRBVector.toArray, Array.chunkBySize pos)
     // concat is a property test in apiTests
     mkTest "collect" (let f = (fun n -> [n; n+1]) in RRBVector.collect (f >> RRBVector.ofList), Array.collect (f >> Array.ofList))
-    // compareWith is a property test in apiTests
+    mkTest "compareWith same" (let f = (fun a b -> abs a - abs b) in (fun vec -> RRBVector.compareWith f vec vec) >> RRBVector.singleton, (fun arr -> Array.compareWith f arr arr) >> Array.singleton)
+
+    testCase "compareWith different" <| fun _ ->
+        let vec1 = startingVec
+        let vec2 = startingVec |> RRBVector.push 5
+        let arr1 = vec1 |> RRBVector.toArray
+        let arr2 = vec2 |> RRBVector.toArray
+        let f a b = abs a - abs b
+        Expect.equal (RRBVector.compareWith f vec1 vec2) (Array.compareWith f arr1 arr2) "RRBVector.compareWith should produce same results as Array.compareWith"
+        Expect.isLessThan (RRBVector.compareWith f vec1 vec2) 0 "Comparing [vec] with [vec; 5] should have produced a negative number"
+        let f2 a b = a % 2 - b % 3
+        Expect.equal (RRBVector.compareWith f2 vec1 vec2) (Array.compareWith f2 arr1 arr2) "RRBVector.compareWith should still produce same results as Array.compareWith"
+
     mkTest "countBy" (let f = (fun n -> n % 10) in RRBVector.countBy f, Array.countBy f)
     // contains is a property test in apiTests
     mkTest "distinct" (RRBVector.distinct, Array.distinct)
