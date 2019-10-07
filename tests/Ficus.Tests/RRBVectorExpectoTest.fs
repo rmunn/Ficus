@@ -157,9 +157,10 @@ let doSplitTest vec i =
     vL, vR
 
 let splitTest vec i =
+    let arrOrig = RRBVector.toArray vec
     let vL, vR = doSplitTest vec i
     let aL, aR = RRBVector.toArray vL, RRBVector.toArray vR
-    Expect.equal (Array.append aL aR) (RRBVector.toArray vec) "Vector halves after split, when put back together, did not equal original array"
+    Expect.equal (Array.append aL aR) arrOrig "Vector halves after split, when put back together, did not equal original array"
 
 let splitFullVecTest (len,i) =
     let vec = seq { 0..len-1 } |> RRBVector.ofSeq
