@@ -2958,6 +2958,7 @@ let tests =
         // )
         // Expect.equal vec.Length (size - Literals.blockSize - 1) <| sprintf "Vector has wrong size after pops"
 
+    apiTests
     longRunningTests
     splitTransientTests
     regressionTests
@@ -2985,7 +2986,6 @@ let tests =
     vectorTests
     nodeVecGenerationTests
     mergeTests
-    apiTests
 
     // perfTests
   ]
