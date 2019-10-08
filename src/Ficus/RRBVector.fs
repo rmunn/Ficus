@@ -1039,6 +1039,25 @@ module RRBVector =
             transient <- transient.Push item :?> RRBTransientVector<'T>
         transient.Persistent() :> RRBVector<'T>
 
+    let rev (vec : RRBVector<'T>) =
+        if vec.IsEmpty() then vec else
+        if vec |> isTransient then
+            // Reverse by swapping in-place. TODO: Benchmark and see if this is faster than creating a new copy
+            let lastIdx = vec.Length - 1
+            let mid = vec.Length >>> 1
+            for i = 0 to mid - 1 do
+                let j = lastIdx - i
+                let oldL = vec.[i]
+                let oldR = vec.[j]
+                vec.Update i oldR |> ignore
+                vec.Update j oldL |> ignore
+            vec
+        else
+            let mutable transient = RRBTransientVector<'T>.MkEmpty()
+            for item in vec.RevIterItems() do
+                transient <- transient.Push item :?> RRBTransientVector<'T>
+            transient.Persistent() :> RRBVector<'T>
+
     // TODO: Try improving average and averageBy by using iterLeafArrays(), summing up each array, and then dividing by count at the end. MIGHT be faster than Seq.average.
     let inline average (vec : RRBVector<'T>) = vec |> Seq.average
     let inline averageBy f (vec : RRBVector<'T>) = vec |> Seq.averageBy f
@@ -1212,7 +1231,7 @@ module RRBVector =
     let inline find f (vec : RRBVector<'T>) = vec |> Seq.find f
     let inline findBack f (vec : RRBVector<'T>) = vec.RevIterItems() |> Seq.find f
     let inline findIndex f (vec : RRBVector<'T>) = vec |> Seq.findIndex f
-    let inline findIndexBack f (vec : RRBVector<'T>) = vec.RevIterItems() |> Seq.findIndex f
+    let inline findIndexBack f (vec : RRBVector<'T>) = let idx = vec.RevIterItems() |> Seq.findIndex f in vec.Length - 1 - idx
     let inline fold folder (initState : 'State) (vec : RRBVector<'T>) = vec |> Seq.fold folder initState
     let inline fold2 folder (initState : 'State) (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) = (vec1, vec2) ||> Seq.fold2 folder initState
     let inline foldBack (initState : 'State) folder (vec : RRBVector<'T>) = vec.RevIterItems() |> Seq.fold (fun a b -> folder b a) initState
@@ -1330,7 +1349,7 @@ module RRBVector =
             // TODO: Ditto re: benchmark for Seq.map
 
     let mapFold folder initState (vec : RRBVector<'T>) =
-        if isEmpty vec then vec else
+        if isEmpty vec then vec, initState else
         let resultShouldBeTransient = vec |> isTransient
         let mutable transient =
             if resultShouldBeTransient
@@ -1341,10 +1360,11 @@ module RRBVector =
             let item',state' = folder state item
             transient.Push item' |> ignore
             state <- state'
-        if resultShouldBeTransient then transient :> RRBVector<_> else transient.Persistent() :> RRBVector<_>
+        let result = if resultShouldBeTransient then transient :> RRBVector<_> else transient.Persistent() :> RRBVector<_>
+        result, state
 
     let mapFoldBack folder (vec : RRBVector<'T>) initState =
-        if isEmpty vec then vec else
+        if isEmpty vec then vec, initState else
         let resultShouldBeTransient = vec |> isTransient
         let mutable transient =
             if resultShouldBeTransient
@@ -1355,7 +1375,8 @@ module RRBVector =
             let item',state' = folder item state
             transient <- transient.Push item' :?> RRBTransientVector<'T>
             state <- state'
-        if resultShouldBeTransient then transient :> RRBVector<_> else transient.Persistent() :> RRBVector<_>
+        let result = if resultShouldBeTransient then transient :> RRBVector<_> else transient.Persistent() :> RRBVector<_>
+        result |> rev, state
 
     let inline max (vec : RRBVector<'T>) = vec |> Seq.max
     let inline maxBy f (vec : RRBVector<'T>) = vec |> Seq.maxBy f
@@ -1425,25 +1446,6 @@ module RRBVector =
         for i = 1 to count do
             transient <- transient.Push value :?> RRBTransientVector<'T>
         transient.Persistent() :> RRBVector<'T>
-
-    let rev (vec : RRBVector<'T>) =
-        if isEmpty vec then vec else
-        if vec |> isTransient then
-            // Reverse by swapping in-place. TODO: Benchmark and see if this is faster than creating a new copy
-            let lastIdx = vec.Length - 1
-            let mid = vec.Length >>> 1
-            for i = 0 to mid - 1 do
-                let j = lastIdx - i
-                let oldL = vec.[i]
-                let oldR = vec.[j]
-                vec.Update i oldR |> ignore
-                vec.Update j oldL |> ignore
-            vec
-        else
-            let mutable transient = RRBTransientVector<'T>.MkEmpty()
-            for item in vec.RevIterItems() do
-                transient <- transient.Push item :?> RRBTransientVector<'T>
-            transient.Persistent() :> RRBVector<'T>
 
     // TODO: Make a variant for when f is of type 'a -> 'a, which does a scan in-place for transients
     let inline scan f initState (vec : RRBVector<'T>) = vec |> Seq.scan f initState |> ofSeq

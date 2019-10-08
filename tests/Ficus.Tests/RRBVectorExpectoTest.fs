@@ -2708,6 +2708,112 @@ let mkTestSuite name startingVec =
         Expect.equal (actual |> RRBVector.toArray) expected <| sprintf "Result of filteri test in %A suite was incorrect" name
 
     mkTest "find" (if RRBVector.length startingVec = 0 then id,id else RRBVector.find (fun n -> n = pos) >> RRBVector.singleton, Array.find (fun n -> n = pos) >> Array.singleton)
+    mkTest "findBack" (if RRBVector.length startingVec = 0 then id,id else RRBVector.findBack (fun n -> n = pos) >> RRBVector.singleton, Array.findBack (fun n -> n = pos) >> Array.singleton)
+    mkTest "findIndex" (if RRBVector.length startingVec = 0 then id,id else RRBVector.findIndex (fun n -> n = pos) >> RRBVector.singleton, Array.findIndex (fun n -> n = pos) >> Array.singleton)
+    mkTest "findIndexBack" (if RRBVector.length startingVec = 0 then id,id else RRBVector.findIndexBack (fun n -> n = pos) >> RRBVector.singleton, Array.findIndexBack (fun n -> n = pos) >> Array.singleton)
+    mkTest "fold (-)" (RRBVector.fold (-) 0 >> RRBVector.singleton, Array.fold (-) 0 >> Array.singleton)
+    mkTest "fold2 (-)" (let f n a b = n + a - (2 * b) in (fun vec -> RRBVector.fold2 f 0 vec (RRBVector.map ((+) 5) vec)) >> RRBVector.singleton, (fun arr -> Array.fold2 f 0 arr (Array.map ((+) 5) arr)) >> Array.singleton)
+    mkTest "foldBack (-)" (RRBVector.foldBack 0 (-) >> RRBVector.singleton, (fun arr -> Array.foldBack (-) arr 0) >> Array.singleton)
+    mkTest "foldBack2 (-)" (let f a b n = n + a - (2 * b) in (fun vec -> RRBVector.foldBack2 0 f vec (RRBVector.map ((+) 5) vec)) >> RRBVector.singleton, (fun arr -> Array.foldBack2 f arr (Array.map ((+) 5) arr) 0) >> Array.singleton)
+    mkTest "forall (-)" (let pred n = n < 53 in (fun vec -> if RRBVector.forall pred vec then RRBVector.singleton 1 else RRBVector.singleton 0), ((fun arr -> if Array.forall pred arr then Array.singleton 1 else Array.singleton 0)))
+    mkTest "forall2 (-)" (let pred a b = a < 53 || b % 3 = 0 in (fun vec -> if RRBVector.forall2 pred vec vec then RRBVector.singleton 1 else RRBVector.singleton 0), ((fun arr -> if Array.forall2 pred arr arr then Array.singleton 1 else Array.singleton 0)))
+    mkTest "groupBy" (let f n = n % 10 in RRBVector.groupBy f >> RRBVector.map (snd >> Array.ofSeq), Array.groupBy f >> Array.map snd)
+    mkTest "head" (if RRBVector.length startingVec = 0 then id,id else RRBVector.head >> RRBVector.singleton, Array.head >> Array.singleton)
+    mkTest "indexed" (RRBVector.indexed, Array.indexed)
+
+    testCase "init" <| fun _ ->
+        let len = startingVec.Length
+        let f n = n * 2 + 1
+        let expected = Array.init len f
+        let result = RRBVector.init len f
+        RRBVectorProps.checkProperties result <| sprintf "Result of %s test in %A suite" "init" name
+        Expect.equal result.Length (expected |> Array.length) <| sprintf "Result had wrong length; should be %d but was %d" (expected |> Array.length) result.Length
+        Expect.equal (result |> RRBVector.toArray) expected <| sprintf "Result of %s test in %A suite was incorrect" "init" name
+
+    testCase "isEmpty" <| fun _ ->
+        let len = startingVec.Length
+        if len = 0 then
+            Expect.isTrue (RRBVector.isEmpty startingVec) "Vector with 0 length should be considered empty"
+        else
+            Expect.isFalse (RRBVector.isEmpty startingVec) "Vector with non-0 length should not be considered empty"
+
+    testCase "item via vec.[idx] syntax" <| fun _ ->
+        let len = startingVec.Length
+        let vec = startingVec
+        let arr = vec |> RRBVector.toArray
+        Expect.equal vec.Length (arr.Length) <| sprintf "Result had wrong length; should be %d but was %d" (arr.Length) vec.Length
+        for i = 0 to len - 1 do
+            Expect.equal vec.[i] arr.[i] <| sprintf "Result didn't match at index %d; should be %d but was %d" i arr.[i] vec.[i]
+
+    testCase "iter" <| fun _ ->
+        let len = startingVec.Length
+        let arr = startingVec |> RRBVector.toArray
+        let mutable vecResult = List.empty
+        let mutable arrResult = List.empty
+        let f n = n * 2 + 1
+        let arrF n = arrResult <- f n :: arrResult
+        let vecF n = vecResult <- f n :: vecResult
+        arr |> Array.iter arrF
+        startingVec |> RRBVector.iter vecF
+        Expect.equal vecResult arrResult <| sprintf "Result of %s test in %A suite was incorrect" "iter" name
+
+    testCase "iter2" <| fun _ ->
+        let arr = startingVec |> RRBVector.toArray
+        let mutable vecResult = List.empty
+        let mutable arrResult = List.empty
+        let f a b = a * 2 + b
+        let arrF a b = arrResult <- f a b :: arrResult
+        let vecF a b = vecResult <- f a b :: vecResult
+        (arr,arr) ||> Array.iter2 arrF
+        (startingVec,startingVec) ||> RRBVector.iter2 vecF
+        Expect.equal vecResult arrResult <| sprintf "Result of %s test in %A suite was incorrect" "iter2" name
+
+    testCase "iteri" <| fun _ ->
+        let len = startingVec.Length
+        let arr = startingVec |> RRBVector.toArray
+        let vecResult = Array.zeroCreate len
+        let arrResult = Array.zeroCreate len
+        let f (a : int[]) i n = a.[i] <- n * 2 + i
+        arr |> Array.iteri (f arrResult)
+        startingVec |> RRBVector.iteri (f vecResult)
+        Expect.equal vecResult.Length arrResult.Length <| sprintf "Result had wrong length; should be %d but was %d" arrResult.Length vecResult.Length
+        Expect.equal vecResult arrResult <| sprintf "Result of %s test in %A suite was incorrect" "iteri" name
+
+    testCase "iteri2" <| fun _ ->
+        let len = startingVec.Length
+        let arr = startingVec |> RRBVector.toArray
+        let vecResult = Array.zeroCreate len
+        let arrResult = Array.zeroCreate len
+        let f (arr : int[]) i a b = arr.[i] <- a * 3 + b * 2 + i
+        (arr,arr) ||> Array.iteri2 (f arrResult)
+        (startingVec,startingVec) ||> RRBVector.iteri2 (f vecResult)
+        Expect.equal vecResult.Length arrResult.Length <| sprintf "Result had wrong length; should be %d but was %d" arrResult.Length vecResult.Length
+        Expect.equal vecResult arrResult <| sprintf "Result of %s test in %A suite was incorrect" "iteri2" name
+
+    mkTest "last" (if RRBVector.length startingVec = 0 then id,id else RRBVector.last >> RRBVector.singleton, Array.last >> Array.singleton)
+    mkTest "length" (RRBVector.length >> RRBVector.singleton, Array.length >> Array.singleton)
+    mkTest "map" (let f n = n * 2 in RRBVector.map f, Array.map f)
+    mkTest "map2" (let f a b = a * 2 + b in (fun vec -> RRBVector.map2 f vec vec), (fun arr -> Array.map2 f arr arr))
+    mkTest "map3" (let f a b c = a * 3 + b * 2 + c in (fun vec -> RRBVector.map3 f vec vec vec), (fun arr -> Array.map3 f arr arr arr))
+    mkTest "mapi" (let f i n = n * 2 + i in RRBVector.mapi f, Array.mapi f)
+    mkTest "mapi2" (let f i a b = a * 3 + b * 2 + i in (fun vec -> RRBVector.mapi2 f vec vec), (fun arr -> Array.mapi2 f arr arr))
+
+    mkTest "mapFold" (let f state n = (let newState = state + n * 2 in newState, newState) in RRBVector.mapFold f 0 >> fst, Array.mapFold f 0 >> fst)
+    mkTest "mapFoldBack" (let f n state = (let newState = state + n * 2 in newState, newState) in (fun vec -> RRBVector.mapFoldBack f vec 0) >> fst, (fun arr -> Array.mapFoldBack f arr 0) >> fst)
+
+    mkTest "max" (if RRBVector.length startingVec = 0 then id,id else RRBVector.max >> RRBVector.singleton, Array.max >> Array.singleton)
+    mkTest "maxBy" (let f n = abs n + (n % 10) in if RRBVector.length startingVec = 0 then id,id else RRBVector.maxBy f >> RRBVector.singleton, Array.maxBy f >> Array.singleton)
+    mkTest "min" (if RRBVector.length startingVec = 0 then id,id else RRBVector.min >> RRBVector.singleton, Array.min >> Array.singleton)
+    mkTest "minBy" (let f n = abs n + (n % 10) in if RRBVector.length startingVec = 0 then id,id else RRBVector.minBy f >> RRBVector.singleton, Array.minBy f >> Array.singleton)
+    mkTest "pairwise" (RRBVector.pairwise, Array.pairwise)
+    mkTest "partition 1" (let pred n = n % 17 = 0 in RRBVector.partition pred >> fst, Array.partition pred >> fst)
+    mkTest "partition 2" (let pred n = n % 17 = 0 in RRBVector.partition pred >> snd, Array.partition pred >> snd)
+    mkTest "permute forward" (let len = startingVec.Length in if len = 0 then id,id else let f i = (i + 5) % (len) in RRBVector.permute f, Array.permute f)
+    mkTest "permute backward" (let len = startingVec.Length in if len = 0 then id,id else let f i = (i - 1 + len) % (len) in RRBVector.permute f, Array.permute f)
+    mkTest "pick" (if RRBVector.length startingVec = 0 then id,id else RRBVector.pick (fun n -> if n = pos then Some n else None) >> RRBVector.singleton, Array.pick (fun n -> if n = pos then Some n else None) >> Array.singleton)
+    mkTest "reduce (-)" (if RRBVector.length startingVec = 0 then id,id else RRBVector.reduce (-) >> RRBVector.singleton, Array.reduce (-) >> Array.singleton)
+    mkTest "reduceBack (-)" (if RRBVector.length startingVec = 0 then id,id else RRBVector.reduceBack (-) >> RRBVector.singleton, Array.reduceBack (-) >> Array.singleton)
+
     mkTest "take" (RRBVector.take pos, Array.take pos)
     mkTest "truncate" (RRBVector.truncate (Literals.blockSize + 3), Array.truncate (Literals.blockSize + 3))
     mkTest "truncate more" (RRBVector.truncate (Literals.blockSize * Literals.blockSize + 3), Array.truncate (Literals.blockSize * Literals.blockSize + 3))
@@ -2740,48 +2846,6 @@ let mkTestSuite name startingVec =
         ] else [])
 
 (* Still to write:
-
-    let find f (vec : RRBVector<'T>) = vec |> Seq.find f
-    let findBack f (vec : RRBVector<'T>) = vec.RevIterItems() |> Seq.find f
-    let findIndex f (vec : RRBVector<'T>) = vec |> Seq.findIndex f
-    let findIndexBack f (vec : RRBVector<'T>) = vec.RevIterItems() |> Seq.findIndex f
-    let fold folder (initState : 'State) (vec : RRBVector<'T>) = vec |> Seq.fold folder initState
-    let fold2 folder (initState : 'State) (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) = (vec1, vec2) ||> Seq.fold2 folder initState
-    let foldBack (initState : 'State) folder (vec : RRBVector<'T>) = vec.RevIterItems() |> Seq.fold (fun a b -> folder b a) initState
-    let foldBack2 (initState : 'State) folder (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) = (vec1.RevIterItems(), vec2.RevIterItems()) ||> Seq.fold2 (fun a b c -> folder b c a) initState
-    let forall f (vec : RRBVector<'T>) = vec |> Seq.forall f
-    let forall2 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) = (vec1, vec2) ||> Seq.forall2 f
-
-    let groupBy f (vec : RRBVector<'T>) =
-    let head (vec : RRBVector<'T>) =
-    let indexed (vec : RRBVector<'T>) =
-    let init size f = Seq.init size f |> ofSeq
-    let isEmpty (vec : RRBVector<'T>) = vec.IsEmpty()
-    let item idx (vec : RRBVector<'T>) = vec.[idx]
-    let iter f (vec : RRBVector<'T>) = vec |> Seq.iter f
-    let iter2 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) = (vec1, vec2) ||> Seq.iter2 f
-    let iteri f (vec : RRBVector<'T>) = vec |> Seq.iteri f
-    let iteri2 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) = (vec1, vec2) ||> Seq.iteri2 f
-    let last (vec : RRBVector<'T>) =
-    let length (vec : RRBVector<'T>) = vec.Length
-    let map f (vec : RRBVector<'T>) =
-    let map2 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) =
-    let map3 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) (vec3 : RRBVector<'T3>) =
-    let mapi f (vec : RRBVector<'T>) =
-    let mapi2 f (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) =
-    let mapFold folder initState (vec : RRBVector<'T>) =
-    let mapFoldBack folder (vec : RRBVector<'T>) initState =
-    let max (vec : RRBVector<'T>) = vec |> Seq.max
-    let maxBy f (vec : RRBVector<'T>) = vec |> Seq.maxBy f
-    let min (vec : RRBVector<'T>) = vec |> Seq.min
-    let minBy f (vec : RRBVector<'T>) = vec |> Seq.minBy f
-
-    let pairwise (vec : RRBVector<'T>) =
-    let partition pred (vec : RRBVector<'T>) =
-    let permute f (vec : RRBVector<'T>) = // TODO: Implement a better version once we have transient RRBVectors, so we don't have to build an intermediate array
-    let pick f (vec : RRBVector<'T>) = vec |> Seq.pick f
-    let reduce f (vec : RRBVector<'T>) = vec |> Seq.reduce f
-    let reduceBack f (vec : RRBVector<'T>) = let f' = flip f in vec.RevIterItems() |> Seq.reduce f'
 
     let replicate count value =
     let rev (vec : RRBVector<'T>) =
