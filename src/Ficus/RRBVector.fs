@@ -1520,7 +1520,7 @@ module RRBVector =
     let inline tryFind f (vec : RRBVector<'T>) = vec |> Seq.tryFind f
     let inline tryFindBack f (vec : RRBVector<'T>) = vec.RevIterItems() |> Seq.tryFindBack f
     let inline tryFindIndex f (vec : RRBVector<'T>) = vec |> Seq.tryFindIndex f
-    let inline tryFindIndexBack f (vec : RRBVector<'T>) = vec.RevIterItems() |> Seq.tryFindIndexBack f
+    let inline tryFindIndexBack f (vec : RRBVector<'T>) = vec.RevIterItems() |> Seq.tryFindIndexBack f |> Option.map (fun idx -> vec.Length - 1 - idx)
     let tryHead (vec : RRBVector<'T>) = if vec.Length = 0 then None else Some vec.[0]
     let inline tryItem idx (vec : RRBVector<'T>) =
         let idx = if idx < 0 then idx + vec.Length else idx

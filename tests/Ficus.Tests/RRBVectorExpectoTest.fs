@@ -2571,7 +2571,7 @@ T26
   ]
 
 
-let mkTestSuite name startingVec =
+let mkTestSuite name (startingVec : RRBVector<int>) =
   let runTest testName vecF arrF =
     // No need to test startingVec any more; we know it's good by now
     // RRBVectorProps.checkProperties startingVec <| sprintf "Starting vector in %s test in %A suite" testName name
@@ -2581,6 +2581,11 @@ let mkTestSuite name startingVec =
     RRBVectorProps.checkProperties result <| sprintf "Result of %s test in %A suite" testName name
     Expect.equal result.Length (expected |> Array.length) <| sprintf "Result had wrong length; should be %d but was %d" (expected |> Array.length) result.Length
     Expect.equal (result |> RRBVector.toArray) expected <| sprintf "Result of %s test in %A suite was incorrect" testName name
+    let tvec = (startingVec :?> RRBPersistentVector<_>).Transient()
+    let result2 = (tvec :> RRBVector<_>) |> vecF
+    RRBVectorProps.checkProperties result2 <| sprintf "Result of transient %s test in %A suite" testName name
+    Expect.equal result2.Length (expected |> Array.length) <| sprintf "Result of transient had wrong length; should be %d but was %d" (expected |> Array.length) result2.Length
+    Expect.equal (result2 |> RRBVector.toArray) expected <| sprintf "Result of transient %s test in %A suite was incorrect" testName name
 
   let mkTest testName (vecF,arrF) =
     testCase (sprintf "%s: %s" name testName) <| fun _ -> runTest testName vecF arrF
@@ -2848,16 +2853,39 @@ let mkTestSuite name startingVec =
     mkTest "sortByDescending" (let f n = -n in RRBVector.sortByDescending f, Array.sortByDescending f)
     mkTest "splitAt 1" (RRBVector.splitAt pos >> fst, Array.splitAt pos >> fst)
     mkTest "splitAt 2" (RRBVector.splitAt pos >> snd, Array.splitAt pos >> snd)
-
+    mkTest "splitInto 1" (RRBVector.splitInto 2 >> RRBVector.toArray >> (fun arr -> if arr.Length > 0 then arr.[0] else RRBVector.empty), Array.splitInto 2 >> (fun arr -> if arr.Length > 0 then arr.[0] else Array.empty))
+    mkTest "splitInto 2" (RRBVector.splitInto 2 >> RRBVector.toArray >> (fun arr -> if arr.Length > 1 then arr.[1] else RRBVector.empty), Array.splitInto 2 >> (fun arr -> if arr.Length > 1 then arr.[1] else Array.empty))
+    // sum and sumBy tests would result in an overflow on the three-level vectors, so we limit the length of those tests
+    mkTest "sum" (if RRBVector.length startingVec > 10000 then id,id else RRBVector.sum >> RRBVector.singleton, Array.sum >> Array.singleton)
+    mkTest "sumBy" (if RRBVector.length startingVec > 10000 then id,id else RRBVector.sumBy abs >> RRBVector.singleton, Array.sumBy abs >> Array.singleton)
+    mkTest "tail" (if RRBVector.length startingVec = 0 then id,id else RRBVector.tail, Array.tail)
     mkTest "take" (RRBVector.take pos, Array.take pos)
+    mkTest "takeWhile" (RRBVector.takeWhile ((<) 155), Array.takeWhile ((<) 155))
     mkTest "truncate" (RRBVector.truncate (Literals.blockSize + 3), Array.truncate (Literals.blockSize + 3))
     mkTest "truncate more" (RRBVector.truncate (Literals.blockSize * Literals.blockSize + 3), Array.truncate (Literals.blockSize * Literals.blockSize + 3))
-    mkTest "map id" (RRBVector.map id, Array.map id)
-    mkTest "map (*) 2" (let f x = x * 2 in RRBVector.map f, Array.map f)
+    mkTest "tryFind" (RRBVector.tryFind (fun n -> n = pos) >> RRBVector.singleton, Array.tryFind (fun n -> n = pos) >> Array.singleton)
+    mkTest "tryFindBack" (RRBVector.tryFindBack (fun n -> n = pos) >> RRBVector.singleton, Array.tryFindBack (fun n -> n = pos) >> Array.singleton)
+    mkTest "tryFindIndex" (RRBVector.tryFindIndex (fun n -> n = pos) >> RRBVector.singleton, Array.tryFindIndex (fun n -> n = pos) >> Array.singleton)
+    mkTest "tryFindIndexBack" (RRBVector.tryFindIndexBack (fun n -> n = pos) >> RRBVector.singleton, Array.tryFindIndexBack (fun n -> n = pos) >> Array.singleton)
+    mkTest "tryHead" (RRBVector.tryHead >> RRBVector.singleton, Array.tryHead >> Array.singleton)
+    mkTest "tryItem" (RRBVector.tryItem pos >> RRBVector.singleton, Array.tryItem pos >> Array.singleton)
+    mkTest "tryLast" (RRBVector.tryLast >> RRBVector.singleton, Array.tryLast >> Array.singleton)
+    mkTest "tryPick" (RRBVector.tryPick (fun n -> if n % 117 = 0 || n % 53 = 0 then Some n else None) >> RRBVector.singleton, Array.tryPick (fun n -> if n % 117 = 0 || n % 53 = 0 then Some n else None) >> Array.singleton)
+    mkTest "unfold" (let nextFib len (a,b,cnt) = if cnt >= len then None else Some (a, (b,a+b,cnt+1)) in (fun vec -> let len = vec.Length in RRBVector.unfold (nextFib len) (0,1,0)), (fun arr -> let len = arr.Length in Array.unfold (nextFib len) (0,1,0)))
+    mkTest "unzip 1" (RRBVector.map (fun n -> n, n + 3) >> RRBVector.unzip >> fst, Array.map (fun n -> n, n + 3) >> Array.unzip >> fst)
+    mkTest "unzip 2" (RRBVector.map (fun n -> n, n + 3) >> RRBVector.unzip >> fst, Array.map (fun n -> n, n + 3) >> Array.unzip >> fst)
+    mkTest "unzip3 1" (RRBVector.map (fun n -> n, n + 3, n - 12) >> RRBVector.unzip3 >> (fun (a,b,c) -> a), Array.map (fun n -> n, n + 3, n - 12) >> Array.unzip3 >> (fun (a,b,c) -> a))
+    mkTest "unzip3 2" (RRBVector.map (fun n -> n, n + 3, n - 12) >> RRBVector.unzip3 >> (fun (a,b,c) -> b), Array.map (fun n -> n, n + 3, n - 12) >> Array.unzip3 >> (fun (a,b,c) -> b))
+    mkTest "unzip3 3" (RRBVector.map (fun n -> n, n + 3, n - 12) >> RRBVector.unzip3 >> (fun (a,b,c) -> c), Array.map (fun n -> n, n + 3, n - 12) >> Array.unzip3 >> (fun (a,b,c) -> c))
+    mkTest "where" (let f = (fun n -> n % 3 = 0) in RRBVector.where f, Array.where f)
+    mkTest "windowedSeq small" (RRBVector.windowedSeq 5 >> Seq.map RRBVector.toArray >> RRBVector.ofSeq, Array.windowed 5)
+    mkTest "windowedSeq medium" (RRBVector.windowedSeq (Literals.blockSize - 1) >> Seq.map RRBVector.toArray >> RRBVector.ofSeq, Array.windowed (Literals.blockSize - 1))
+    mkTest "windowedSeq large" (RRBVector.windowedSeq (Literals.blockSize * 3 + 5) >> Seq.map RRBVector.toArray >> RRBVector.ofSeq, Array.windowed (Literals.blockSize * 3 + 5))
     mkTest "windowed small" (RRBVector.windowed 5 >> RRBVector.map RRBVector.toArray, Array.windowed 5)
     mkTest "windowed medium" (RRBVector.windowed (Literals.blockSize - 1) >> RRBVector.map RRBVector.toArray, Array.windowed (Literals.blockSize - 1))
     mkTest "windowed large" (RRBVector.windowed (Literals.blockSize * 3 + 5) >> RRBVector.map RRBVector.toArray, Array.windowed (Literals.blockSize * 3 + 5))
-    // TODO: More tests like these
+    mkTest "zip" ((fun vec -> let vec2 = vec |> RRBVector.map (fun n -> n * 2 + 1) in RRBVector.zip vec vec2), (fun arr -> let arr2 = arr |> Array.map (fun n -> n * 2 + 1) in Array.zip arr arr2))
+    mkTest "zip3" ((fun vec -> let vec2 = vec |> RRBVector.map (fun n -> n * 2 + 1) in let vec3 = vec |> RRBVector.map (fun n -> n * 3 - 7) in RRBVector.zip3 vec vec2 vec3), (fun arr -> let arr2 = arr |> Array.map (fun n -> n * 2 + 1) in let arr3 = arr |> Array.map (fun n -> n * 3 - 7) in Array.zip3 arr arr2 arr3))
     // testProp "Command tests from constructed vector" <| fun _ -> (Command.toProperty (RRBVectorMoreCommands.specFromData startingVec))
   ] @ if startingVec |> RRBVector.isEmpty then [
         testCase "peek empty" <| fun _ ->
@@ -2876,36 +2904,6 @@ let mkTestSuite name startingVec =
                 Expect.equal e.Message "Index must not be past the end of the vector" "RRBVector.pop on empty vector threw wrong exception")
 
         ] else [])
-
-(* Still to write:
-
-    let splitInto splitCount (vec : RRBVector<'T>) =
-    let sum (vec : RRBVector<'T>) = vec |> Seq.sum
-    let sumBy f (vec : RRBVector<'T>) = vec |> Seq.sumBy f
-    let tail (vec : RRBVector<'T>) = vec.Remove 0
-    let take n (vec : RRBVector<'T>) =
-    let takeWhile pred (vec : RRBVector<'T>) =  // TODO: Try a version with vec.IterItems() and a counter, and see if that runs faster. Also update skipWhile if it does.
-    let truncate n (vec : RRBVector<'T>) = vec.Take n
-    let tryFind f (vec : RRBVector<'T>) = vec |> Seq.tryFind f
-    let tryFindBack f (vec : RRBVector<'T>) = vec.RevIterItems() |> Seq.tryFindBack f
-    let tryFindIndex f (vec : RRBVector<'T>) = vec |> Seq.tryFindIndex f
-    let tryFindIndexBack f (vec : RRBVector<'T>) = vec.RevIterItems() |> Seq.tryFindIndexBack f
-    let tryHead (vec : RRBVector<'T>) = if vec.Length = 0 then None else Some vec.[0]
-    let tryItem idx (vec : RRBVector<'T>) =
-    let tryLast (vec : RRBVector<'T>) =
-    let tryPick f (vec : RRBVector<'T>) = vec |> Seq.tryPick f
-    let unfold f initState = Seq.unfold f initState |> ofSeq
-
-    let unzip (vec : RRBVector<'T1 * 'T2>) =
-    let unzip3 (vec : RRBVector<'T1 * 'T2 * 'T3>) =
-    let where pred (vec : RRBVector<'T>) = filter pred vec
-
-    let windowedSeq windowSize (vec : RRBVector<'T>) =
-    let windowed windowSize (vec : RRBVector<'T>) = // Already done
-    let zip (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) =
-    let zip3 (vec1 : RRBVector<'T1>) (vec2 : RRBVector<'T2>) (vec3 : RRBVector<'T3>) =
-
-*)
 
 let startingVecForTransientResidueTests =
     let mutable current = { 0..(Literals.blockSize * Literals.blockSize + Literals.blockSize) } |> RRBVector.ofSeq
