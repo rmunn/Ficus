@@ -2814,14 +2814,46 @@ let mkTestSuite name startingVec =
     mkTest "reduce (-)" (if RRBVector.length startingVec = 0 then id,id else RRBVector.reduce (-) >> RRBVector.singleton, Array.reduce (-) >> Array.singleton)
     mkTest "reduceBack (-)" (if RRBVector.length startingVec = 0 then id,id else RRBVector.reduceBack (-) >> RRBVector.singleton, Array.reduceBack (-) >> Array.singleton)
 
+    testCase "replicate" <| fun _ ->
+        let len = startingVec.Length
+        let expected = Array.replicate len 5
+        let result = RRBVector.replicate len 5
+        RRBVectorProps.checkProperties result <| sprintf "Result of %s test in %A suite" "replicate" name
+        Expect.equal result.Length len <| sprintf "Result had wrong length; should be %d but was %d" len result.Length
+        Expect.equal (result |> RRBVector.toArray) expected <| sprintf "Result of %s test in %A suite was incorrect" "replicate" name
+        // Double-check that all slots in the vector get referenes to the *same* item
+        let arr = [|0|]
+        let result2 = RRBVector.replicate len arr
+        Expect.isTrue (result2 |> RRBVector.forall (fun a -> a = [|0|])) "Initial vector should be filled with zeroes"
+        arr.[0] <- 5
+        Expect.isTrue (result2 |> RRBVector.forall (fun a -> a = [|5|])) "After setting the array content to 5, vector should be filled with fives"
+
+    mkTest "rev" (RRBVector.rev, Array.rev)
+    mkTest "scan" (RRBVector.scan (+) 0, Array.scan (+) 0)
+    mkTest "scanBack" ((fun vec -> RRBVector.scanBack (+) vec 0), (fun arr -> Array.scanBack (+) arr 0))
+
+    testCase "singleton" <| fun _ ->
+        let len = startingVec.Length
+        let result = RRBVector.singleton len
+        RRBVectorProps.checkProperties result <| sprintf "Result of %s test in %A suite" "singleton" name
+        Expect.equal result.Length 1 <| sprintf "Result had wrong length; should be 1 but was %d" result.Length
+        Expect.equal result.[0] len "Result singleton had wrong value"
+
+    mkTest "skip" (RRBVector.skip pos, Array.skip pos)
+    mkTest "skipWhile" (RRBVector.skipWhile ((>) 155), Array.skipWhile ((>) 155))
+    mkTest "sort" (RRBVector.sort, Array.sort)
+    mkTest "sortBy" (let f n = -n in RRBVector.sortBy f, Array.sortBy f)
+    mkTest "sortWith" (let f a b = (abs a - abs b) in RRBVector.sortWith f, Array.sortWith f)
+    mkTest "sortDescending" (RRBVector.sortDescending, Array.sortDescending)
+    mkTest "sortByDescending" (let f n = -n in RRBVector.sortByDescending f, Array.sortByDescending f)
+    mkTest "splitAt 1" (RRBVector.splitAt pos >> fst, Array.splitAt pos >> fst)
+    mkTest "splitAt 2" (RRBVector.splitAt pos >> snd, Array.splitAt pos >> snd)
+
     mkTest "take" (RRBVector.take pos, Array.take pos)
     mkTest "truncate" (RRBVector.truncate (Literals.blockSize + 3), Array.truncate (Literals.blockSize + 3))
     mkTest "truncate more" (RRBVector.truncate (Literals.blockSize * Literals.blockSize + 3), Array.truncate (Literals.blockSize * Literals.blockSize + 3))
-    mkTest "skip" (RRBVector.skip pos, Array.skip pos)
     mkTest "map id" (RRBVector.map id, Array.map id)
     mkTest "map (*) 2" (let f x = x * 2 in RRBVector.map f, Array.map f)
-    mkTest "scan (+)" (RRBVector.scan (+) 0, Array.scan (+) 0)
-    mkTest "scanBack (+)" (RRBVector.scanBack 0 (+), (fun arr -> Array.scanBack (+) arr 0))  // TODO: RRBVector.scanBack API needs to swap parameters
     mkTest "windowed small" (RRBVector.windowed 5 >> RRBVector.map RRBVector.toArray, Array.windowed 5)
     mkTest "windowed medium" (RRBVector.windowed (Literals.blockSize - 1) >> RRBVector.map RRBVector.toArray, Array.windowed (Literals.blockSize - 1))
     mkTest "windowed large" (RRBVector.windowed (Literals.blockSize * 3 + 5) >> RRBVector.map RRBVector.toArray, Array.windowed (Literals.blockSize * 3 + 5))
@@ -2847,20 +2879,6 @@ let mkTestSuite name startingVec =
 
 (* Still to write:
 
-    let replicate count value =
-    let rev (vec : RRBVector<'T>) =
-    let scan f initState (vec : RRBVector<'T>) = vec |> Seq.scan f initState |> ofSeq
-    let scanBack initState f (vec : RRBVector<'T>) =
-    let singleton (item : 'T) = RRBPersistentVector<'T>(1, Literals.blockSizeShift, emptyNode, [|item|], 0) :> RRBVector<'T>
-
-    let skip count (vec : RRBVector<'T>) = vec.Skip count
-    let skipWhile pred (vec : RRBVector<'T>) = // TODO: Test this
-    let sort (vec : RRBVector<'T>) =
-    let sortBy f (vec : RRBVector<'T>) =
-    let sortWith f (vec : RRBVector<'T>) =
-    let sortDescending (vec : RRBVector<'T>) =
-    let sortByDescending f (vec : RRBVector<'T>) =
-    let splitAt idx (vec : RRBVector<'T>) = vec.Split idx
     let splitInto splitCount (vec : RRBVector<'T>) =
     let sum (vec : RRBVector<'T>) = vec |> Seq.sum
     let sumBy f (vec : RRBVector<'T>) = vec |> Seq.sumBy f
