@@ -2572,7 +2572,7 @@ T26
 
 
 let mkTestSuite name (startingVec : RRBVector<int>) =
-  let runTest testName vecF arrF =
+  let runTest alsoTransient testName vecF arrF =
     // No need to test startingVec any more; we know it's good by now
     // RRBVectorProps.checkProperties startingVec <| sprintf "Starting vector in %s test in %A suite" testName name
     let arr = startingVec |> RRBVector.toArray
@@ -2581,14 +2581,18 @@ let mkTestSuite name (startingVec : RRBVector<int>) =
     RRBVectorProps.checkProperties result <| sprintf "Result of %s test in %A suite" testName name
     Expect.equal result.Length (expected |> Array.length) <| sprintf "Result had wrong length; should be %d but was %d" (expected |> Array.length) result.Length
     Expect.equal (result |> RRBVector.toArray) expected <| sprintf "Result of %s test in %A suite was incorrect" testName name
-    let tvec = (startingVec :?> RRBPersistentVector<_>).Transient()
-    let result2 = (tvec :> RRBVector<_>) |> vecF
-    RRBVectorProps.checkProperties result2 <| sprintf "Result of transient %s test in %A suite" testName name
-    Expect.equal result2.Length (expected |> Array.length) <| sprintf "Result of transient had wrong length; should be %d but was %d" (expected |> Array.length) result2.Length
-    Expect.equal (result2 |> RRBVector.toArray) expected <| sprintf "Result of transient %s test in %A suite was incorrect" testName name
+    if alsoTransient then
+        let tvec = (startingVec :?> RRBPersistentVector<_>).Transient()
+        let result2 = (tvec :> RRBVector<_>) |> vecF
+        RRBVectorProps.checkProperties result2 <| sprintf "Result of transient %s test in %A suite" testName name
+        Expect.equal result2.Length (expected |> Array.length) <| sprintf "Result of transient had wrong length; should be %d but was %d" (expected |> Array.length) result2.Length
+        Expect.equal (result2 |> RRBVector.toArray) expected <| sprintf "Result of transient %s test in %A suite was incorrect" testName name
 
   let mkTest testName (vecF,arrF) =
-    testCase (sprintf "%s: %s" name testName) <| fun _ -> runTest testName vecF arrF
+    testCase (sprintf "%s: %s" name testName) <| fun _ -> runTest true testName vecF arrF
+
+  let mkTestNoTransients testName (vecF,arrF) =
+    testCase (sprintf "%s: %s" name testName) <| fun _ -> runTest false testName vecF arrF
 
   let pos = if RRBVector.length startingVec = 0 then 0 else (Literals.blockSize + 3) % (RRBVector.length startingVec)
 
@@ -2606,7 +2610,7 @@ let mkTestSuite name (startingVec : RRBVector<int>) =
     mkTest "mergeR sapling" ((fun vec -> RRBVector.append vec (RRBVectorGen.treeReprStrToVec "M T28")), (fun arr -> Array.append arr [| 0 .. Literals.blockSize + 27 |]))
     mkTest "mergeL small non-sapling" (RRBVector.append (RRBVectorGen.treeReprStrToVec "M M T28"), Array.append [| 0 .. Literals.blockSize * 2 + 27 |])
     mkTest "mergeR small non-sapling" ((fun vec -> RRBVector.append vec (RRBVectorGen.treeReprStrToVec "M M T28")), (fun arr -> Array.append arr [| 0 .. Literals.blockSize * 2 + 27 |]))
-    mkTest "merge with self" ((fun vec -> RRBVector.append vec vec), (fun arr -> Array.append arr arr))
+    mkTestNoTransients "merge with self" ((fun vec -> RRBVector.append vec vec), (fun arr -> Array.append arr arr))
     mkTest "splitL" (RRBVector.split pos >> fst, Array.splitAt pos >> fst)
     mkTest "splitR" (RRBVector.split pos >> snd, Array.splitAt pos >> snd)
     mkTest "remove" (if RRBVector.length startingVec = 0 then id,id else RRBVector.remove pos, Array.copyAndRemoveAt pos)
@@ -2878,12 +2882,13 @@ let mkTestSuite name (startingVec : RRBVector<int>) =
     mkTest "unzip3 2" (RRBVector.map (fun n -> n, n + 3, n - 12) >> RRBVector.unzip3 >> (fun (a,b,c) -> b), Array.map (fun n -> n, n + 3, n - 12) >> Array.unzip3 >> (fun (a,b,c) -> b))
     mkTest "unzip3 3" (RRBVector.map (fun n -> n, n + 3, n - 12) >> RRBVector.unzip3 >> (fun (a,b,c) -> c), Array.map (fun n -> n, n + 3, n - 12) >> Array.unzip3 >> (fun (a,b,c) -> c))
     mkTest "where" (let f = (fun n -> n % 3 = 0) in RRBVector.where f, Array.where f)
-    mkTest "windowedSeq small" (RRBVector.windowedSeq 5 >> Seq.map RRBVector.toArray >> RRBVector.ofSeq, Array.windowed 5)
-    mkTest "windowedSeq medium" (RRBVector.windowedSeq (Literals.blockSize - 1) >> Seq.map RRBVector.toArray >> RRBVector.ofSeq, Array.windowed (Literals.blockSize - 1))
-    mkTest "windowedSeq large" (RRBVector.windowedSeq (Literals.blockSize * 3 + 5) >> Seq.map RRBVector.toArray >> RRBVector.ofSeq, Array.windowed (Literals.blockSize * 3 + 5))
-    mkTest "windowed small" (RRBVector.windowed 5 >> RRBVector.map RRBVector.toArray, Array.windowed 5)
-    mkTest "windowed medium" (RRBVector.windowed (Literals.blockSize - 1) >> RRBVector.map RRBVector.toArray, Array.windowed (Literals.blockSize - 1))
-    mkTest "windowed large" (RRBVector.windowed (Literals.blockSize * 3 + 5) >> RRBVector.map RRBVector.toArray, Array.windowed (Literals.blockSize * 3 + 5))
+    // TODO: Re-enable transient tests for windowed/windowedSeq and decide what to do if a windowed operation is requested on a transient
+    mkTestNoTransients "windowedSeq small" (RRBVector.windowedSeq 5 >> Seq.map RRBVector.toArray >> RRBVector.ofSeq, Array.windowed 5)
+    mkTestNoTransients "windowedSeq medium" (RRBVector.windowedSeq (Literals.blockSize - 1) >> Seq.map RRBVector.toArray >> RRBVector.ofSeq, Array.windowed (Literals.blockSize - 1))
+    mkTestNoTransients "windowedSeq large" (RRBVector.windowedSeq (Literals.blockSize * 3 + 5) >> Seq.map RRBVector.toArray >> RRBVector.ofSeq, Array.windowed (Literals.blockSize * 3 + 5))
+    mkTestNoTransients "windowed small" (RRBVector.windowed 5 >> RRBVector.map RRBVector.toArray, Array.windowed 5)
+    mkTestNoTransients "windowed medium" (RRBVector.windowed (Literals.blockSize - 1) >> RRBVector.map RRBVector.toArray, Array.windowed (Literals.blockSize - 1))
+    mkTestNoTransients "windowed large" (RRBVector.windowed (Literals.blockSize * 3 + 5) >> RRBVector.map RRBVector.toArray, Array.windowed (Literals.blockSize * 3 + 5))
     mkTest "zip" ((fun vec -> let vec2 = vec |> RRBVector.map (fun n -> n * 2 + 1) in RRBVector.zip vec vec2), (fun arr -> let arr2 = arr |> Array.map (fun n -> n * 2 + 1) in Array.zip arr arr2))
     mkTest "zip3" ((fun vec -> let vec2 = vec |> RRBVector.map (fun n -> n * 2 + 1) in let vec3 = vec |> RRBVector.map (fun n -> n * 3 - 7) in RRBVector.zip3 vec vec2 vec3), (fun arr -> let arr2 = arr |> Array.map (fun n -> n * 2 + 1) in let arr3 = arr |> Array.map (fun n -> n * 3 - 7) in Array.zip3 arr arr2 arr3))
     // testProp "Command tests from constructed vector" <| fun _ -> (Command.toProperty (RRBVectorMoreCommands.specFromData startingVec))
