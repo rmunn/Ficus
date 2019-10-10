@@ -1348,34 +1348,32 @@ module RRBVector =
             Seq.mapi2 f vec1 vec2 |> ofSeq
             // TODO: Ditto re: benchmark for Seq.map
 
-    let mapFold folder initState (vec : RRBVector<'T>) =
-        if isEmpty vec then vec, initState else
+    let mapFold (folder : 'State -> 'T -> 'Result * 'State) (initState : 'State) (vec : RRBVector<'T>) =
         let resultShouldBeTransient = vec |> isTransient
         let mutable transient =
             if resultShouldBeTransient
-            then RRBTransientVector<'T>.MkEmptyWithToken((vec :?> RRBTransientVector<'T>).Owner)
-            else RRBTransientVector<'T>.MkEmpty()
+            then RRBTransientVector<'Result>.MkEmptyWithToken((vec :?> RRBTransientVector<'T>).Owner)
+            else RRBTransientVector<'Result>.MkEmpty()
         let mutable state = initState
         for item in vec do
             let item',state' = folder state item
             transient.Push item' |> ignore
             state <- state'
-        let result = if resultShouldBeTransient then transient :> RRBVector<_> else transient.Persistent() :> RRBVector<_>
+        let result = if resultShouldBeTransient then transient :> RRBVector<'Result> else transient.Persistent() :> RRBVector<'Result>
         result, state
 
-    let mapFoldBack folder (vec : RRBVector<'T>) initState =
-        if isEmpty vec then vec, initState else
+    let mapFoldBack (folder : 'T -> 'State -> 'Result * 'State) (vec : RRBVector<'T>) (initState : 'State) =
         let resultShouldBeTransient = vec |> isTransient
         let mutable transient =
             if resultShouldBeTransient
-            then RRBTransientVector<'T>.MkEmptyWithToken((vec :?> RRBTransientVector<'T>).Owner)
-            else RRBTransientVector<'T>.MkEmpty()
+            then RRBTransientVector<'Result>.MkEmptyWithToken((vec :?> RRBTransientVector<'T>).Owner)
+            else RRBTransientVector<'Result>.MkEmpty()
         let mutable state = initState
         for item in vec.RevIterItems() do
             let item',state' = folder item state
-            transient <- transient.Push item' :?> RRBTransientVector<'T>
+            transient.Push item' |> ignore
             state <- state'
-        let result = if resultShouldBeTransient then transient :> RRBVector<_> else transient.Persistent() :> RRBVector<_>
+        let result = if resultShouldBeTransient then transient :> RRBVector<'Result> else transient.Persistent() :> RRBVector<'Result>
         result |> rev, state
 
     let inline max (vec : RRBVector<'T>) = vec |> Seq.max
