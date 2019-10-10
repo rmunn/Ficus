@@ -974,7 +974,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
         this.ThrowIfNotValid()
         this.EnsureValidIndex idx
         if idx >= this.TailOffset then
-            tail.[idx - this.TailOffset]
+            this.Tail.[idx - this.TailOffset]
         else
             this.Root.GetTreeItem this.Shift idx
 
