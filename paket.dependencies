@@ -19,6 +19,7 @@ nuget FParsec
 group Build
     source https://www.nuget.org/api/v2
     source https://api.nuget.org/v3/index.json
+    storage: none
     nuget Fake.IO.FileSystem
     nuget Fake.Core.Target
     nuget Fake.Core.ReleaseNotes
