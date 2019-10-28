@@ -2670,6 +2670,7 @@ let mkTestSuite name (startingVec : RRBVector<int>) =
     mkTest "distinct" (RRBVector.distinct, Array.distinct)
     mkTest "distinctBy" (let f =  (fun n -> n % 10) in RRBVector.distinctBy f, Array.distinctBy f)
 
+    // TODO: Move this to a different test list; it doesn't make sense to run this test on a dozen input vectors. Just 3 or 4 (length 0, 1, 2, and 1056) are enough.
     testCase "exactlyOne" <| fun () ->
         let vec = startingVec
         if vec.Length = 1 then
@@ -2716,6 +2717,8 @@ let mkTestSuite name (startingVec : RRBVector<int>) =
         Expect.equal actual.Length (expected |> Array.length) <| sprintf "Result had wrong length; should be %d but was %d" (expected |> Array.length) actual.Length
         Expect.equal (actual |> RRBVector.toArray) expected <| sprintf "Result of filteri test in %A suite was incorrect" name
 
+    mkTest "exists" (if RRBVector.length startingVec = 0 then id,id else (fun v -> if RRBVector.exists (fun n -> n = pos) v then v else RRBVector.empty), (fun a -> if Array.exists (fun n -> n = pos) a then a else Array.empty))
+    mkTest "exists2" (if RRBVector.length startingVec = 0 then id,id else (fun v -> if RRBVector.exists2 (fun x y -> x = pos) v v then v else RRBVector.empty), (fun a -> if Array.exists2 (fun x y -> x = pos) a a then a else Array.empty))
     mkTest "find" (if RRBVector.length startingVec = 0 then id,id else RRBVector.find (fun n -> n = pos) >> RRBVector.singleton, Array.find (fun n -> n = pos) >> Array.singleton)
     mkTest "findBack" (if RRBVector.length startingVec = 0 then id,id else RRBVector.findBack (fun n -> n = pos) >> RRBVector.singleton, Array.findBack (fun n -> n = pos) >> Array.singleton)
     mkTest "findIndex" (if RRBVector.length startingVec = 0 then id,id else RRBVector.findIndex (fun n -> n = pos) >> RRBVector.singleton, Array.findIndex (fun n -> n = pos) >> Array.singleton)
