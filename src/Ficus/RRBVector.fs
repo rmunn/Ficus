@@ -1,5 +1,3 @@
-// Look for TOCHECK to find places where I'm unsure of the correct logic
-
 /// Relaxed Radix Balanced Vector
 ///
 /// Original concept: Phil Bagwell and Tiark Rompf
@@ -255,12 +253,6 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
             newLeft, newRight
         else
             let rootL, rootR = this.Root.SplitTree nullOwner this.Shift idx
-            // TOCHECK: Uncomment the below lines and see if they're also correct
-            // let rootSizeL = rootL.TreeSize this.Shift
-            // let rootSizeR = rootR.TreeSize this.Shift
-            // let newTailNodeL, newRootL = (rootL :?> RRBFullNode<'T>).PopLastLeaf nullOwner this.Shift
-            // let newLeft = RRBPersistentVector<'T>(rootSizeL, this.Shift, newRootL, newTailNodeL.Items, rootSizeL - newTailNodeL.NodeSize).AdjustTree()
-            // let newRight = RRBPersistentVector<'T>(rootSizeR + this.Tail.Length, this.Shift, rootR, this.Tail, rootSizeR).AdjustTree()
             let newTailNodeL, newRootL = (rootL :?> RRBFullNode<'T>).PopLastLeaf nullOwner this.Shift
             // Have to adjust the tree for both newLeft AND newRight in this one, since either one could have become a tall, thin tree during the split
             let newLeft = RRBPersistentVector<'T>(idx, this.Shift, newRootL, newTailNodeL.Items, idx - newTailNodeL.NodeSize).AdjustTree()
