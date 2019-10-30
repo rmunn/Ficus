@@ -112,10 +112,10 @@ let genLeavesForMultipleRelaxedNodes =
 
 let mkFullTwig children = RRBNode<int>.MkFullNode nullOwner children
 let mkExpandedFullTwig children = RRBExpandedFullNode<int>(nullOwner, children) :> RRBNode<int>
-let mkRelaxedTwig children = RRBNode<int>.MkNode nullOwner Literals.blockSizeShift children
+let mkRelaxedTwig children = RRBNode<int>.MkNode nullOwner Literals.shiftSize children
 let mkExpandedRelaxedTwig children =
-    let sizeTable = RRBNode<int>.CreateSizeTable Literals.blockSizeShift children
-    if isSizeTableFullAtShift Literals.blockSizeShift sizeTable sizeTable.Length
+    let sizeTable = RRBNode<int>.CreateSizeTable Literals.shiftSize children
+    if isSizeTableFullAtShift Literals.shiftSize sizeTable sizeTable.Length
     then RRBExpandedFullNode<int>(nullOwner, children) :> RRBNode<int>
     else RRBExpandedRelaxedNode<int>(nullOwner, children, sizeTable) :> RRBNode<int>
 
@@ -139,12 +139,12 @@ let genShortNode = Gen.oneof [ genFullNode (Literals.blockSize - 1); genExpanded
 let genSmallFullTree =
     genLeavesForMultipleFullNodes
     |> Gen.map (fun leafChunks -> leafChunks |> Array.truncate Literals.blockSize |> Array.map mkFullTwig)
-    |> Gen.map (fun nodes -> if nodes.Length = 1 then Array.exactlyOne nodes else mkFullNode (2 * Literals.blockSizeShift) nodes)
+    |> Gen.map (fun nodes -> if nodes.Length = 1 then Array.exactlyOne nodes else mkFullNode (2 * Literals.shiftSize) nodes)
 
 let genSmallRelaxedTree =
     genLeavesForMultipleRelaxedNodes
     |> Gen.map (fun leafChunks -> leafChunks |> Array.truncate Literals.blockSize |> Array.map mkRelaxedTwig)
-    |> Gen.map (fun nodes -> if nodes.Length = 1 then Array.exactlyOne nodes else mkRelaxedNode (2 * Literals.blockSizeShift) nodes)
+    |> Gen.map (fun nodes -> if nodes.Length = 1 then Array.exactlyOne nodes else mkRelaxedNode (2 * Literals.shiftSize) nodes)
 
 let toTransient (root : RRBNode<'T>) =
     let newToken = mkOwnerToken()
@@ -192,7 +192,7 @@ let genTwigForLargeTrees counter =
         let! isFull = Gen.frequency [ 1, Gen.constant true; 3, Gen.constant false ]
         let! leafCount = if isFull then Gen.constant Literals.blockSize else Gen.choose(Literals.blockSize / 2, Literals.blockSize)
         let! leaves = genLeavesForLargeTrees leafCount counter
-        return RRBNode<int>.MkNode nullOwner Literals.blockSizeShift leaves
+        return RRBNode<int>.MkNode nullOwner Literals.shiftSize leaves
     }
 
 let genBranchForLargeTrees counter =
@@ -200,7 +200,7 @@ let genBranchForLargeTrees counter =
         let! isFull = Gen.frequency [ 1, Gen.constant true; 3, Gen.constant false ]
         let! twigCount = if isFull then Gen.constant Literals.blockSize else Gen.choose(Literals.blockSize / 4, Literals.blockSize)
         let! twigs = Gen.listOfLength twigCount (genTwigForLargeTrees counter)
-        return RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 2) (twigs |> Array.ofList)
+        return RRBNode<int>.MkNode nullOwner (Literals.shiftSize * 2) (twigs |> Array.ofList)
     }
 
 let genLimbForLargeTrees counter =
@@ -208,7 +208,7 @@ let genLimbForLargeTrees counter =
         let! isFull = Gen.frequency [ 1, Gen.constant true; 3, Gen.constant false ]
         let! branchCount = if isFull then Gen.constant Literals.blockSize else Gen.choose(Literals.blockSize / 8 |> max 1, Literals.blockSize)
         let! branches = Gen.listOfLength branchCount (genBranchForLargeTrees counter)
-        return RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 3) (branches |> Array.ofList)
+        return RRBNode<int>.MkNode nullOwner (Literals.shiftSize * 3) (branches |> Array.ofList)
     }
 
 let genTrunkForLargeTrees counter =
@@ -216,7 +216,7 @@ let genTrunkForLargeTrees counter =
         let! isFull = Gen.frequency [ 1, Gen.constant true; 3, Gen.constant false ]
         let! limbCount = if isFull then Gen.constant Literals.blockSize else Gen.choose(Literals.blockSize / 16 |> max 1, Literals.blockSize)
         let! limbs = Gen.listOfLength limbCount (genLimbForLargeTrees counter)
-        return RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 4) (limbs |> Array.ofList)
+        return RRBNode<int>.MkNode nullOwner (Literals.shiftSize * 4) (limbs |> Array.ofList)
     }
 
 let genMediumPersistentTree =
@@ -239,19 +239,19 @@ let genMediumPersistentTree =
             let twigMax = s - 32
             gen {
                 let! n = Gen.choose(1, twigMax)
-                return! Gen.listOfLength n (genTwigForLargeTrees counter) |> Gen.map (Array.ofList >> RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 2))
+                return! Gen.listOfLength n (genTwigForLargeTrees counter) |> Gen.map (Array.ofList >> RRBNode<int>.MkNode nullOwner (Literals.shiftSize * 2))
             }
         elif s <= 96 then
             let branchMax = s - 64
             gen {
                 let! n = Gen.choose(1, branchMax)
-                return! Gen.listOfLength n (genBranchForLargeTrees counter) |> Gen.map (Array.ofList >> RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 3))
+                return! Gen.listOfLength n (genBranchForLargeTrees counter) |> Gen.map (Array.ofList >> RRBNode<int>.MkNode nullOwner (Literals.shiftSize * 3))
             }
         else
             let limbMax = s - 96
             gen {
                 let! n = Gen.choose(1, limbMax)
-                return! Gen.listOfLength n (genLimbForLargeTrees counter) |> Gen.map (Array.ofList >> RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 4))
+                return! Gen.listOfLength n (genLimbForLargeTrees counter) |> Gen.map (Array.ofList >> RRBNode<int>.MkNode nullOwner (Literals.shiftSize * 4))
             }
     )
 
@@ -276,25 +276,25 @@ let genLargePersistentTree =
             let twigMax = (s - 8) * 2
             gen {
                 let! n = Gen.choose(1, twigMax)
-                return! Gen.listOfLength n (genTwigForLargeTrees counter) |> Gen.map (Array.ofList >> RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 2))
+                return! Gen.listOfLength n (genTwigForLargeTrees counter) |> Gen.map (Array.ofList >> RRBNode<int>.MkNode nullOwner (Literals.shiftSize * 2))
             }
         elif s <= 56 then
             let branchMax = s - 24
             gen {
                 let! n = Gen.choose(1, branchMax)
-                return! Gen.listOfLength n (genBranchForLargeTrees counter) |> Gen.map (Array.ofList >> RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 3))
+                return! Gen.listOfLength n (genBranchForLargeTrees counter) |> Gen.map (Array.ofList >> RRBNode<int>.MkNode nullOwner (Literals.shiftSize * 3))
             }
         elif s <= 88 then
             let limbMax = s - 56
             gen {
                 let! n = Gen.choose(1, limbMax)
-                return! Gen.listOfLength n (genLimbForLargeTrees counter) |> Gen.map (Array.ofList >> RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 4))
+                return! Gen.listOfLength n (genLimbForLargeTrees counter) |> Gen.map (Array.ofList >> RRBNode<int>.MkNode nullOwner (Literals.shiftSize * 4))
             }
         else
             let trunkMax = s - 88
             gen {
                 let! n = Gen.choose(1, trunkMax)
-                return! Gen.listOfLength n (genTrunkForLargeTrees counter) |> Gen.map (Array.ofList >> RRBNode<int>.MkNode nullOwner (Literals.blockSizeShift * 5))
+                return! Gen.listOfLength n (genTrunkForLargeTrees counter) |> Gen.map (Array.ofList >> RRBNode<int>.MkNode nullOwner (Literals.shiftSize * 5))
             }
     )
 
@@ -402,18 +402,18 @@ let mkAppendTests (leafSizes, newLeafSize, expectedResult, namePart) =
     |> List.map (fun fname ->
         let test = fun _ ->
             let node = mkManualNode leafSizes :?> RRBFullNode<int>
-            checkNodeProperties Literals.blockSizeShift node "Starting node"
+            checkNodeProperties Literals.shiftSize node "Starting node"
             let newChild = mkLeaf counter newLeafSize
             let result =
                 if fname = "AppendChild" then
-                    node.AppendChild nullOwner Literals.blockSizeShift newChild
+                    node.AppendChild nullOwner Literals.shiftSize newChild
                 elif fname = "AppendChildS" then
-                    node.AppendChildS nullOwner Literals.blockSizeShift newChild newLeafSize
+                    node.AppendChildS nullOwner Literals.shiftSize newChild newLeafSize
                 else
                     failwith <| sprintf "Unknown method name %s in test creation - fix unit tests" fname
-            checkNodeProperties Literals.blockSizeShift result "Result"
+            checkNodeProperties Literals.shiftSize result "Result"
             Expect.equal (result.NodeSize) (node.NodeSize + 1) "Appending any leaf to a node should increase its node size by 1"
-            Expect.equal (result.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + newLeafSize) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
+            Expect.equal (result.TreeSize Literals.shiftSize) (node.TreeSize Literals.shiftSize + newLeafSize) "Appending any leaf to a node should increase its tree size by the leaf's NodeSize"
             Expect.isTrue (isWhat result) (sprintf "Appending any leaf to a %s node should result in a %s node" nodeDesc isWhatStr)
         let name = sprintf "%s on a %s %s node with a %s leaf" fname nodeDesc namePart leafDesc
         testCase name test
@@ -427,17 +427,17 @@ let appendTests =
 let appendPropertyTests =
   testList "Append property tests" [
     testProp "AppendChild on a generated node" <| fun (IsolatedShortNode node) ->
-        checkNodeProperties Literals.blockSizeShift node "Starting node"
+        checkNodeProperties Literals.shiftSize node "Starting node"
         let newChild = mkSimpleLeaf (M-2)
-        let result = node.AppendChild nullOwner Literals.blockSizeShift newChild
-        checkNodeProperties Literals.blockSizeShift result "Result"
+        let result = node.AppendChild nullOwner Literals.shiftSize newChild
+        checkNodeProperties Literals.shiftSize result "Result"
         result.NodeSize = node.NodeSize + 1
 
     testProp "AppendChildS on a generated node" <| fun (IsolatedShortNode node) ->
-        checkNodeProperties Literals.blockSizeShift node "Starting node"
+        checkNodeProperties Literals.shiftSize node "Starting node"
         let newChild = mkSimpleLeaf (M-2)
-        let result = node.AppendChildS nullOwner Literals.blockSizeShift newChild (M-2)
-        checkNodeProperties Literals.blockSizeShift result "Result"
+        let result = node.AppendChildS nullOwner Literals.shiftSize newChild (M-2)
+        checkNodeProperties Literals.shiftSize result "Result"
         result.NodeSize = node.NodeSize + 1
   ]
 
@@ -499,18 +499,18 @@ let mkInsertTests (leafSizes, insertPos, newLeafSize, expectedResult, namePart) 
     |> List.map (fun fname ->
         let test = fun _ ->
             let node = mkManualNode leafSizes :?> RRBFullNode<int>
-            checkNodeProperties Literals.blockSizeShift node "Starting node"
+            checkNodeProperties Literals.shiftSize node "Starting node"
             let newChild = mkSimpleLeaf newLeafSize
             let result =
                 if fname = "InsertChild" then
-                    node.InsertChild nullOwner Literals.blockSizeShift insertPos newChild
+                    node.InsertChild nullOwner Literals.shiftSize insertPos newChild
                 elif fname = "InsertChildS" then
-                    node.InsertChildS nullOwner Literals.blockSizeShift insertPos newChild newLeafSize
+                    node.InsertChildS nullOwner Literals.shiftSize insertPos newChild newLeafSize
                 else
                     failwith <| sprintf "Unknown method name %s in test creation - fix unit tests" fname
-            checkNodeProperties Literals.blockSizeShift result "Result"
+            checkNodeProperties Literals.shiftSize result "Result"
             Expect.equal (result.NodeSize) (node.NodeSize + 1) "Inserting any leaf into a node should increase its node size by 1"
-            Expect.equal (result.TreeSize Literals.blockSizeShift) (node.TreeSize Literals.blockSizeShift + newLeafSize) "Inserting any leaf into a node should increase its tree size by the leaf's NodeSize"
+            Expect.equal (result.TreeSize Literals.shiftSize) (node.TreeSize Literals.shiftSize + newLeafSize) "Inserting any leaf into a node should increase its tree size by the leaf's NodeSize"
             Expect.isTrue (isWhat result) (sprintf "Inserting a %s leaf into a %s node at position %d should result in a %s node" leafDesc namePart insertPos isWhatStr)
         let name = sprintf "%s on a %s node with a %s leaf inserted at %d" fname namePart leafDesc insertPos
         testCase name test
@@ -525,18 +525,18 @@ let insertPropertyTests =
   testList "Insert property tests" [
     testProp "InsertChild on a generated node" <| fun (IsolatedShortNode node) (NonNegativeInt idx) ->
         let idx = idx % (node.NodeSize + 1)
-        checkNodeProperties Literals.blockSizeShift node "Starting node"
+        checkNodeProperties Literals.shiftSize node "Starting node"
         let newChild = mkSimpleLeaf (M-2)
-        let result = node.InsertChild nullOwner Literals.blockSizeShift idx newChild
-        checkNodeProperties Literals.blockSizeShift result "Result"
+        let result = node.InsertChild nullOwner Literals.shiftSize idx newChild
+        checkNodeProperties Literals.shiftSize result "Result"
         result.NodeSize = node.NodeSize + 1
 
     testProp "InsertChildS on a generated node" <| fun (IsolatedShortNode node) (NonNegativeInt idx) ->
         let idx = idx % (node.NodeSize + 1)
-        checkNodeProperties Literals.blockSizeShift node "Starting node"
+        checkNodeProperties Literals.shiftSize node "Starting node"
         let newChild = mkSimpleLeaf (M-2)
-        let result = node.InsertChildS nullOwner Literals.blockSizeShift idx newChild (M-2)
-        checkNodeProperties Literals.blockSizeShift result "Result"
+        let result = node.InsertChildS nullOwner Literals.shiftSize idx newChild (M-2)
+        checkNodeProperties Literals.shiftSize result "Result"
         result.NodeSize = node.NodeSize + 1
   ]
 
@@ -545,16 +545,16 @@ let removePropertyTests =
     testProp "RemoveChild on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (NonNegativeInt idx) ->
         node.NodeSize > 1 ==> lazy (
             let idx = idx % node.NodeSize
-            checkNodeProperties Literals.blockSizeShift node "Starting node"
-            let result = node.RemoveChild nullOwner Literals.blockSizeShift idx
-            checkNodeProperties Literals.blockSizeShift result "Result"
+            checkNodeProperties Literals.shiftSize node "Starting node"
+            let result = node.RemoveChild nullOwner Literals.shiftSize idx
+            checkNodeProperties Literals.shiftSize result "Result"
             result.NodeSize = node.NodeSize - 1)
 
     testProp "RemoveLastChild on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) ->
         node.NodeSize > 1 ==> lazy (
-            checkNodeProperties Literals.blockSizeShift node "Starting node"
-            let result = node.RemoveLastChild nullOwner Literals.blockSizeShift
-            checkNodeProperties Literals.blockSizeShift result "Result"
+            checkNodeProperties Literals.shiftSize node "Starting node"
+            let result = node.RemoveLastChild nullOwner Literals.shiftSize
+            checkNodeProperties Literals.shiftSize result "Result"
             result.NodeSize = node.NodeSize - 1)
   ]
 
@@ -564,49 +564,49 @@ let updatePropertyTests =
         let idx = idx % node.NodeSize
         let oldLeaf = node.Children.[idx]
         let newLeaf = mkSimpleLeaf (oldLeaf.NodeSize)
-        checkNodeProperties Literals.blockSizeShift node "Starting node"
-        let result = node.UpdateChild nullOwner Literals.blockSizeShift idx newLeaf
-        checkNodeProperties Literals.blockSizeShift result "Result"
-        result.NodeSize = node.NodeSize && result.TreeSize Literals.blockSizeShift = node.TreeSize Literals.blockSizeShift
+        checkNodeProperties Literals.shiftSize node "Starting node"
+        let result = node.UpdateChild nullOwner Literals.shiftSize idx newLeaf
+        checkNodeProperties Literals.shiftSize result "Result"
+        result.NodeSize = node.NodeSize && result.TreeSize Literals.shiftSize = node.TreeSize Literals.shiftSize
 
     testProp "UpdateChildSAbs on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (NonNegativeInt idx) (LeafNode newLeaf) ->
         let idx = idx % node.NodeSize
         let oldLeaf = node.Children.[idx]
         let sizeDiff = newLeaf.NodeSize - oldLeaf.NodeSize
-        checkNodeProperties Literals.blockSizeShift node "Starting node"
-        let result = node.UpdateChildSAbs nullOwner Literals.blockSizeShift idx newLeaf newLeaf.NodeSize
-        checkNodeProperties Literals.blockSizeShift result "Result"
-        result.NodeSize = node.NodeSize && result.TreeSize Literals.blockSizeShift = node.TreeSize Literals.blockSizeShift + sizeDiff
+        checkNodeProperties Literals.shiftSize node "Starting node"
+        let result = node.UpdateChildSAbs nullOwner Literals.shiftSize idx newLeaf newLeaf.NodeSize
+        checkNodeProperties Literals.shiftSize result "Result"
+        result.NodeSize = node.NodeSize && result.TreeSize Literals.shiftSize = node.TreeSize Literals.shiftSize + sizeDiff
 
     testProp "UpdateChildSRel on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (NonNegativeInt idx) (LeafNode newLeaf) ->
         let idx = idx % node.NodeSize
         let oldLeaf = node.Children.[idx]
         let sizeDiff = newLeaf.NodeSize - oldLeaf.NodeSize
-        checkNodeProperties Literals.blockSizeShift node "Starting node"
-        let result = node.UpdateChildSRel nullOwner Literals.blockSizeShift idx newLeaf sizeDiff
-        checkNodeProperties Literals.blockSizeShift result "Result"
-        result.NodeSize = node.NodeSize && result.TreeSize Literals.blockSizeShift = node.TreeSize Literals.blockSizeShift + sizeDiff
+        checkNodeProperties Literals.shiftSize node "Starting node"
+        let result = node.UpdateChildSRel nullOwner Literals.shiftSize idx newLeaf sizeDiff
+        checkNodeProperties Literals.shiftSize result "Result"
+        result.NodeSize = node.NodeSize && result.TreeSize Literals.shiftSize = node.TreeSize Literals.shiftSize + sizeDiff
   ]
 
 let keepPropertyTests =
   testList "KeepN(Left/Right) property tests" [
     testProp (*1913961525, 296651679*) "KeepNLeft on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (PositiveInt n) ->
         let n = n % (node.NodeSize + 1) |> max 1
-        checkNodeProperties Literals.blockSizeShift node "Starting node"
-        let result = node.KeepNLeft nullOwner Literals.blockSizeShift n
-        checkNodeProperties Literals.blockSizeShift result "Result"
+        checkNodeProperties Literals.shiftSize node "Starting node"
+        let result = node.KeepNLeft nullOwner Literals.shiftSize n
+        checkNodeProperties Literals.shiftSize result "Result"
         let keptLeaves = node.Children |> Array.truncate node.NodeSize |> Array.truncate n
         let totalKeptSize = keptLeaves |> Array.sumBy (fun leaf -> leaf.NodeSize)
-        result.NodeSize = n && result.TreeSize Literals.blockSizeShift = totalKeptSize
+        result.NodeSize = n && result.TreeSize Literals.shiftSize = totalKeptSize
 
     testProp (*1914116381, 296651679*) "KeepNRight on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (PositiveInt n) ->
         let n = n % (node.NodeSize + 1) |> max 1
-        checkNodeProperties Literals.blockSizeShift node "Starting node"
-        let result = node.KeepNRight nullOwner Literals.blockSizeShift n
-        checkNodeProperties Literals.blockSizeShift result "Result"
+        checkNodeProperties Literals.shiftSize node "Starting node"
+        let result = node.KeepNRight nullOwner Literals.shiftSize n
+        checkNodeProperties Literals.shiftSize result "Result"
         let keptLeaves = node.Children |> Array.truncate node.NodeSize |> Array.skip (node.NodeSize - n)
         let totalKeptSize = keptLeaves |> Array.sumBy (fun leaf -> leaf.NodeSize)
-        result.NodeSize = n && result.TreeSize Literals.blockSizeShift = totalKeptSize
+        result.NodeSize = n && result.TreeSize Literals.shiftSize = totalKeptSize
   ]
 
 let splitAndKeepPropertyTests =
@@ -615,49 +615,49 @@ let splitAndKeepPropertyTests =
         let n = n % (node.NodeSize + 1) |> max 1
         let origLeavesL, origLeavesR = node.Children |> Array.truncate node.NodeSize |> Array.splitAt n
         let totalKeptL = origLeavesL |> Array.sumBy (fun leaf -> leaf.NodeSize)
-        checkNodeProperties Literals.blockSizeShift node "Starting node"
-        let resultNode, resultLeavesR = node.SplitAndKeepNLeft nullOwner Literals.blockSizeShift n
-        checkNodeProperties Literals.blockSizeShift resultNode "Result"
+        checkNodeProperties Literals.shiftSize node "Starting node"
+        let resultNode, resultLeavesR = node.SplitAndKeepNLeft nullOwner Literals.shiftSize n
+        checkNodeProperties Literals.shiftSize resultNode "Result"
         Expect.equal resultNode.NodeSize n "Node after split should have N items"
         Expect.equal (Array.length resultLeavesR) (Array.length origLeavesR) "Array of leaves returned from split should have (size - N) items"
-        Expect.equal (resultNode.TreeSize Literals.blockSizeShift) totalKeptL "Node after split should have same tree size as total of remaining N items"
+        Expect.equal (resultNode.TreeSize Literals.shiftSize) totalKeptL "Node after split should have same tree size as total of remaining N items"
 
     testProp "SplitAndKeepNRight on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (PositiveInt n) ->
         let n = n % (node.NodeSize + 1) |> max 1
         let origLeavesL, origLeavesR = node.Children |> Array.truncate node.NodeSize |> Array.splitAt (node.NodeSize - n)
         let totalKeptR = origLeavesR |> Array.sumBy (fun leaf -> leaf.NodeSize)
-        checkNodeProperties Literals.blockSizeShift node "Starting node"
-        let resultLeavesL, resultNode = node.SplitAndKeepNRight nullOwner Literals.blockSizeShift n
-        checkNodeProperties Literals.blockSizeShift resultNode "Result"
+        checkNodeProperties Literals.shiftSize node "Starting node"
+        let resultLeavesL, resultNode = node.SplitAndKeepNRight nullOwner Literals.shiftSize n
+        checkNodeProperties Literals.shiftSize resultNode "Result"
         Expect.equal resultNode.NodeSize n "Node after split should have N items"
         Expect.equal (Array.length resultLeavesL) (Array.length origLeavesL) "Array of leaves returned from split should have (size - N) items"
-        Expect.equal (resultNode.TreeSize Literals.blockSizeShift) totalKeptR "Node after split should have same tree size as total of remaining N items"
+        Expect.equal (resultNode.TreeSize Literals.shiftSize) totalKeptR "Node after split should have same tree size as total of remaining N items"
 
     testProp "SplitAndKeepNLeftS on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (PositiveInt n) ->
         let n = n % (node.NodeSize + 1) |> max 1
         let origLeavesL, origLeavesR = node.Children |> Array.truncate node.NodeSize |> Array.splitAt n
         let totalKeptL = origLeavesL |> Array.sumBy (fun leaf -> leaf.NodeSize)
-        checkNodeProperties Literals.blockSizeShift node "Starting node"
-        let resultNode, (resultLeavesR, resultSizesR) = node.SplitAndKeepNLeftS nullOwner Literals.blockSizeShift n
+        checkNodeProperties Literals.shiftSize node "Starting node"
+        let resultNode, (resultLeavesR, resultSizesR) = node.SplitAndKeepNLeftS nullOwner Literals.shiftSize n
         let expectedSizesR = origLeavesR |> Seq.map (fun leaf -> leaf.NodeSize) |> Seq.scan (+) 0 |> Seq.tail |> Array.ofSeq
-        checkNodeProperties Literals.blockSizeShift resultNode "Result"
+        checkNodeProperties Literals.shiftSize resultNode "Result"
         Expect.equal resultNode.NodeSize n "Node after split should have N items"
         Expect.equal (Array.length resultLeavesR) (Array.length origLeavesR) "Array of leaves returned from split should have (size - N) items"
         Expect.equal resultSizesR expectedSizesR "Sizes returned from split should be cumulative sizes of leaves returned from split"
-        Expect.equal (resultNode.TreeSize Literals.blockSizeShift) totalKeptL "Node after split should have same tree size as total of remaining N items"
+        Expect.equal (resultNode.TreeSize Literals.shiftSize) totalKeptL "Node after split should have same tree size as total of remaining N items"
 
     testProp "SplitAndKeepNRightS on a generated node" <| fun (IsolatedNode node : IsolatedNode<int>) (PositiveInt n) ->
         let n = n % (node.NodeSize + 1) |> max 1
         let origLeavesL, origLeavesR = node.Children |> Array.truncate node.NodeSize |> Array.splitAt (node.NodeSize - n)
         let totalKeptR = origLeavesR |> Array.sumBy (fun leaf -> leaf.NodeSize)
-        checkNodeProperties Literals.blockSizeShift node "Starting node"
-        let (resultLeavesL, resultSizesL), resultNode = node.SplitAndKeepNRightS nullOwner Literals.blockSizeShift n
+        checkNodeProperties Literals.shiftSize node "Starting node"
+        let (resultLeavesL, resultSizesL), resultNode = node.SplitAndKeepNRightS nullOwner Literals.shiftSize n
         let expectedSizesL = origLeavesL |> Seq.map (fun leaf -> leaf.NodeSize) |> Seq.scan (+) 0 |> Seq.tail |> Array.ofSeq
-        checkNodeProperties Literals.blockSizeShift resultNode "Result"
+        checkNodeProperties Literals.shiftSize resultNode "Result"
         Expect.equal resultNode.NodeSize n "Node after split should have N items"
         Expect.equal (Array.length resultLeavesL) (Array.length origLeavesL) "Array of leaves returned from split should have (size - N) items"
         Expect.equal resultSizesL expectedSizesL "Sizes returned from split should be cumulative sizes of leaves returned from split"
-        Expect.equal (resultNode.TreeSize Literals.blockSizeShift) totalKeptR "Node after split should have same tree size as total of remaining N items"
+        Expect.equal (resultNode.TreeSize Literals.shiftSize) totalKeptR "Node after split should have same tree size as total of remaining N items"
   ]
 
 let appendAndPrependChildrenPropertyTests =
@@ -670,9 +670,9 @@ let appendAndPrependChildrenPropertyTests =
         let newLeafArrays = toAdd |> Array.map (fun leaf -> leaf.Items)
         let expectedLeafArrays = Array.append origLeafArrays newLeafArrays
 
-        checkNodeProperties Literals.blockSizeShift node "Starting node"
-        let result = node.AppendNChildren nullOwner Literals.blockSizeShift n (toAdd |> Seq.cast) true :?> RRBFullNode<int>
-        checkNodeProperties Literals.blockSizeShift result "Result"
+        checkNodeProperties Literals.shiftSize node "Starting node"
+        let result = node.AppendNChildren nullOwner Literals.shiftSize n (toAdd |> Seq.cast) true :?> RRBFullNode<int>
+        checkNodeProperties Literals.shiftSize result "Result"
         Expect.equal result.NodeSize (node.NodeSize + n) "Node after append should have N more items"
         let actualLeafArrays = result.Children |> Array.truncate result.NodeSize |> Array.map (fun leaf -> (leaf :?> RRBLeafNode<int>).Items)
         Expect.equal actualLeafArrays expectedLeafArrays "Leaves should have been placed in the correct locations"
@@ -686,9 +686,9 @@ let appendAndPrependChildrenPropertyTests =
         let newLeafArrays = toAdd |> Array.map (fun leaf -> leaf.Items)
         let expectedLeafArrays = Array.append origLeafArrays newLeafArrays
 
-        checkNodeProperties Literals.blockSizeShift node "Starting node"
-        let result = node.AppendNChildrenS nullOwner Literals.blockSizeShift n (toAdd |> Seq.cast) sizes true :?> RRBFullNode<int>
-        checkNodeProperties Literals.blockSizeShift result "Result"
+        checkNodeProperties Literals.shiftSize node "Starting node"
+        let result = node.AppendNChildrenS nullOwner Literals.shiftSize n (toAdd |> Seq.cast) sizes true :?> RRBFullNode<int>
+        checkNodeProperties Literals.shiftSize result "Result"
         Expect.equal result.NodeSize (node.NodeSize + n) "Node after prepend should have N more items"
         let actualLeafArrays = result.Children |> Array.truncate result.NodeSize |> Array.map (fun leaf -> (leaf :?> RRBLeafNode<int>).Items)
         Expect.equal actualLeafArrays expectedLeafArrays "Leaves should have been placed in the correct locations"
@@ -701,9 +701,9 @@ let appendAndPrependChildrenPropertyTests =
         let newLeafArrays = toAdd |> Array.map (fun leaf -> leaf.Items)
         let expectedLeafArrays = Array.append newLeafArrays origLeafArrays
 
-        checkNodeProperties Literals.blockSizeShift node "Starting node"
-        let result = node.PrependNChildren nullOwner Literals.blockSizeShift n (toAdd |> Seq.cast) :?> RRBFullNode<int>
-        checkNodeProperties Literals.blockSizeShift result "Result"
+        checkNodeProperties Literals.shiftSize node "Starting node"
+        let result = node.PrependNChildren nullOwner Literals.shiftSize n (toAdd |> Seq.cast) :?> RRBFullNode<int>
+        checkNodeProperties Literals.shiftSize result "Result"
         Expect.equal result.NodeSize (node.NodeSize + n) "Node after prepend should have N more items"
         let actualLeafArrays = result.Children |> Array.truncate result.NodeSize |> Array.map (fun leaf -> (leaf :?> RRBLeafNode<int>).Items)
         Expect.equal actualLeafArrays expectedLeafArrays "Leaves should have been placed in the correct locations"
@@ -717,9 +717,9 @@ let appendAndPrependChildrenPropertyTests =
         let newLeafArrays = toAdd |> Array.map (fun leaf -> leaf.Items)
         let expectedLeafArrays = Array.append newLeafArrays origLeafArrays
 
-        checkNodeProperties Literals.blockSizeShift node "Starting node"
-        let result = node.PrependNChildrenS nullOwner Literals.blockSizeShift n (toAdd |> Seq.cast) sizes :?> RRBFullNode<int>
-        checkNodeProperties Literals.blockSizeShift result "Result"
+        checkNodeProperties Literals.shiftSize node "Starting node"
+        let result = node.PrependNChildrenS nullOwner Literals.shiftSize n (toAdd |> Seq.cast) sizes :?> RRBFullNode<int>
+        checkNodeProperties Literals.shiftSize result "Result"
         Expect.equal result.NodeSize (node.NodeSize + n) "Node after prepend should have N more items"
         let actualLeafArrays = result.Children |> Array.truncate result.NodeSize |> Array.map (fun leaf -> (leaf :?> RRBLeafNode<int>).Items)
         Expect.equal actualLeafArrays expectedLeafArrays "Leaves should have been placed in the correct locations"
@@ -729,12 +729,12 @@ let twigItems (node : RRBNode<'T>) =
     (node :?> RRBFullNode<'T>).Children |> Seq.truncate node.NodeSize |> Seq.cast<RRBLeafNode<'T>> |> Seq.collect (fun leaf -> leaf.Items)
 
 let rec nodeItems shift (node : RRBNode<'T>) =
-    if shift <= Literals.blockSizeShift then twigItems node else
-    (node :?> RRBFullNode<'T>).Children |> Seq.truncate node.NodeSize |> Seq.cast<RRBFullNode<'T>> |> Seq.collect (nodeItems (shift - Literals.blockSizeShift))
+    if shift <= Literals.shiftSize then twigItems node else
+    (node :?> RRBFullNode<'T>).Children |> Seq.truncate node.NodeSize |> Seq.cast<RRBFullNode<'T>> |> Seq.collect (nodeItems (shift - Literals.shiftSize))
 
 let doRebalance2Test shift (nodeL : RRBNode<'T>) (nodeR : RRBNode<'T>) =
-    let slotCountL = if shift <= Literals.blockSizeShift then nodeL.TwigSlotCount else nodeL.SlotCount
-    let slotCountR = if shift <= Literals.blockSizeShift then nodeR.TwigSlotCount else nodeR.SlotCount
+    let slotCountL = if shift <= Literals.shiftSize then nodeL.TwigSlotCount else nodeL.SlotCount
+    let slotCountR = if shift <= Literals.shiftSize then nodeR.TwigSlotCount else nodeR.SlotCount
     let totalSize = nodeL.NodeSize + nodeR.NodeSize
     let minSize = (slotCountL + slotCountR - 1) / Literals.blockSize + 1
     let needsRebalancing = totalSize - minSize > Literals.radixSearchErrorMax
@@ -768,7 +768,7 @@ let findMergeCandidatesExhaustive (sizeSeq : #seq<int>) len =
 let rebalanceTestsWIP =
   testList "WIP: Rebalance tests" [
     testProp "Try this" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
-        doRebalance2Test Literals.blockSizeShift nodeL nodeR
+        doRebalance2Test Literals.shiftSize nodeL nodeR
 
     testProp "findMergeCandidates with two passes either finds a better match than with one pass, or finds the same match if there isn't a better one" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
         let sizesL = nodeL.ChildrenSeq |> Seq.map (fun n -> n.NodeSize)
@@ -814,16 +814,16 @@ let rebalanceTestsWIP =
         Expect.equal (idx2, len2, reduction) (23, 9, 2) "Two-pass solution reduces by 2 but does half the work"
 
     testProp "NeedsRebalancing function uses correct formula" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
-        let shift = Literals.blockSizeShift
-        let slotCountL = if shift <= Literals.blockSizeShift then nodeL.TwigSlotCount else nodeL.SlotCount
-        let slotCountR = if shift <= Literals.blockSizeShift then nodeR.TwigSlotCount else nodeR.SlotCount
+        let shift = Literals.shiftSize
+        let slotCountL = if shift <= Literals.shiftSize then nodeL.TwigSlotCount else nodeL.SlotCount
+        let slotCountR = if shift <= Literals.shiftSize then nodeR.TwigSlotCount else nodeR.SlotCount
         let totalSize = nodeL.NodeSize + nodeR.NodeSize
         let minSize = (slotCountL + slotCountR - 1) / Literals.blockSize + 1
         let needsRebalancing = totalSize - minSize > Literals.radixSearchErrorMax
         Expect.equal (nodeL.NeedsRebalance2 shift nodeR) needsRebalancing <| sprintf "NeedsRebalancing was wrong for left %A and right %A" nodeL nodeR
 
     testProp "Concat test" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
-        let shift = Literals.blockSizeShift
+        let shift = Literals.shiftSize
         // Need to do this before the concatenation, because after the concatenation the original nodeL may be invalid if it was an expanded node
         let expected = Seq.append (nodeItems shift nodeL) (nodeItems shift nodeR) |> Array.ofSeq
         let newL, newR = nodeL.ConcatNodes nullOwner shift nodeR
@@ -842,7 +842,7 @@ let rebalanceTestsWIP =
             checkNodeProperties shift nodeR' "Newly-concatenated right node"
 
     testProp "Concat-with-leaf test" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (LeafNode leaf : LeafNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
-        let shift = Literals.blockSizeShift
+        let shift = Literals.shiftSize
         // Need to do this before the concatenation, because after the concatenation the original nodeL may be invalid if it was an expanded node
         let expected = Seq.concat [nodeItems shift nodeL; leaf.Items |> Seq.ofArray; nodeItems shift nodeR] |> Array.ofSeq
         if nodeL.HasRoomToMergeTheTail shift leaf nodeR then
@@ -864,7 +864,7 @@ let rebalanceTestsWIP =
 
 let doIndividualMergeTestLeftTwigRightTwoNodeTree L R1 R2 =
     let counter = mkCounter()
-    let shift = Literals.blockSizeShift
+    let shift = Literals.shiftSize
     let nodeL =   L |> Array.map (mkLeaf counter >> fun node -> node :> RRBNode<int>) |> RRBNode<int>.MkNode nullOwner shift
     let nodeR1 = R1 |> Array.map (mkLeaf counter >> fun node -> node :> RRBNode<int>) |> RRBNode<int>.MkNode nullOwner shift
     let nodeR2 = R2 |> Array.map (mkLeaf counter >> fun node -> node :> RRBNode<int>) |> RRBNode<int>.MkNode nullOwner shift
@@ -890,7 +890,7 @@ let doIndividualMergeTestLeftTwigRightTwoNodeTree L R1 R2 =
 let splitTreeTests =
   testList "Split tests" [
     testProp (*871740682, 296591768*) "Keep" <| fun (IsolatedNode root : IsolatedNode<int>) (NonNegativeInt idx) ->
-        let shift = Literals.blockSizeShift
+        let shift = Literals.shiftSize
         let keep = (idx % root.TreeSize shift) + 1 |> min (root.TreeSize shift - 1)
         checkNodeProperties shift root "Original node"
         let expected = nodeItems shift root |> Seq.truncate keep |> Array.ofSeq
@@ -899,7 +899,7 @@ let splitTreeTests =
         Expect.equal (nodeItems shift newRoot |> Array.ofSeq) expected "Items after keep are still the same"
 
     testProp "Skip" <| fun (IsolatedNode root : IsolatedNode<int>) (NonNegativeInt idx) ->
-        let shift = Literals.blockSizeShift
+        let shift = Literals.shiftSize
         let skip = (idx % root.TreeSize shift) + 1 |> min (root.TreeSize shift - 1)
         checkNodeProperties shift root "Original node"
         let expected = nodeItems shift root |> Seq.skip skip |> Array.ofSeq
@@ -908,7 +908,7 @@ let splitTreeTests =
         Expect.equal (nodeItems shift newRoot |> Array.ofSeq) expected "Items after skip are still the same"
 
     testProp "Split" <| fun (IsolatedNode root : IsolatedNode<int>) (NonNegativeInt idx) ->
-        let shift = Literals.blockSizeShift
+        let shift = Literals.shiftSize
         let idx = (idx % root.TreeSize shift) + 1 |> min (root.TreeSize shift - 1)
         checkNodeProperties shift root "Original node"
         let expectedArr = nodeItems shift root |> Array.ofSeq
@@ -924,7 +924,7 @@ let splitTreeTests =
 let mergeTreeTestsWIP =
   testList "WIP: Merge tests" [
     testProp "Merging twigs" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
-        let shift = Literals.blockSizeShift
+        let shift = Literals.shiftSize
         let expected = Seq.concat [nodeItems shift nodeL; nodeItems shift nodeR] |> Array.ofSeq
         let newL, newR = nodeL.MergeTree nullOwner shift None shift nodeR false
         match newR with
@@ -945,8 +945,8 @@ let mergeTreeTestsWIP =
             checkNodeProperties shift nodeR' "Newly merged right node"
 
     testProp (*7886235, 296578399*) "Merging left twig with right tree" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (RootNode nodeR : RootNode<int>) ->
-        let shiftL = Literals.blockSizeShift
-        let shiftR = Literals.blockSizeShift * (height nodeR)
+        let shiftL = Literals.shiftSize
+        let shiftR = Literals.shiftSize * (height nodeR)
         checkNodeProperties shiftL nodeL "Original left node"
         checkNodeProperties shiftR nodeR "Original right node"
         let expected = Seq.concat [nodeItems shiftL nodeL; nodeItems shiftR nodeR] |> Array.ofSeq
@@ -967,8 +967,8 @@ let mergeTreeTestsWIP =
             checkNodeProperties newShift nodeR' "Newly merged right node"
 
     testProp (*17045485, 296578399*) "Merging left tree with right twig" <| fun (RootNode nodeL : RootNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
-        let shiftL = Literals.blockSizeShift * (height nodeL)
-        let shiftR = Literals.blockSizeShift
+        let shiftL = Literals.shiftSize * (height nodeL)
+        let shiftR = Literals.shiftSize
         checkNodeProperties shiftL nodeL "Original left node"
         checkNodeProperties shiftR nodeR "Original right node"
         let expected = Seq.concat [nodeItems shiftL nodeL; nodeItems shiftR nodeR] |> Array.ofSeq
@@ -989,8 +989,8 @@ let mergeTreeTestsWIP =
             checkNodeProperties newShift nodeR' "Newly merged right node"
 
     testProp "Merging left tree with right tree" <| fun (RootNode nodeL : RootNode<int>) (RootNode nodeR : RootNode<int>) ->
-        let shiftL = Literals.blockSizeShift * (height nodeL)
-        let shiftR = Literals.blockSizeShift * (height nodeR)
+        let shiftL = Literals.shiftSize * (height nodeL)
+        let shiftR = Literals.shiftSize * (height nodeR)
         checkNodeProperties shiftL nodeL "Original left node"
         checkNodeProperties shiftR nodeR "Original right node"
         let expected = Seq.concat [nodeItems shiftL nodeL; nodeItems shiftR nodeR] |> Array.ofSeq
@@ -1031,8 +1031,8 @@ let mergeTreeTestsWIP =
 let largeMergeTreeTestsWIP =
   testList "WIP: Large tree-merge tests" [
     testProp (*3644257, 296578399*) "Merging left twig with right large tree" <| fun (IsolatedNode nodeL : IsolatedNode<int>) (LargeRootNode nodeR : LargeRootNode<int>) ->
-        let shiftL = Literals.blockSizeShift
-        let shiftR = Literals.blockSizeShift * (height nodeR)
+        let shiftL = Literals.shiftSize
+        let shiftR = Literals.shiftSize * (height nodeR)
         checkNodeProperties shiftL nodeL "Original left node"
         checkNodeProperties shiftR nodeR "Original right node"
         let expected = Seq.concat [nodeItems shiftL nodeL; nodeItems shiftR nodeR] |> Array.ofSeq
@@ -1053,8 +1053,8 @@ let largeMergeTreeTestsWIP =
             checkNodeProperties newShift nodeR' "Newly merged right node"
 
     testProp (*3643640, 296578399*) "Merging left large tree with right twig" <| fun (LargeRootNode nodeL : LargeRootNode<int>) (IsolatedNode nodeR : IsolatedNode<int>) ->
-        let shiftL = Literals.blockSizeShift * (height nodeL)
-        let shiftR = Literals.blockSizeShift
+        let shiftL = Literals.shiftSize * (height nodeL)
+        let shiftR = Literals.shiftSize
         checkNodeProperties shiftL nodeL "Original left node"
         checkNodeProperties shiftR nodeR "Original right node"
         let expected = Seq.concat [nodeItems shiftL nodeL; nodeItems shiftR nodeR] |> Array.ofSeq
@@ -1075,8 +1075,8 @@ let largeMergeTreeTestsWIP =
             checkNodeProperties newShift nodeR' "Newly merged right node"
 
     testProp "Merging left large tree with right large tree" <| fun (LargeRootNode nodeL : LargeRootNode<int>) (LargeRootNode nodeR : LargeRootNode<int>) ->
-        let shiftL = Literals.blockSizeShift * (height nodeL)
-        let shiftR = Literals.blockSizeShift * (height nodeR)
+        let shiftL = Literals.shiftSize * (height nodeL)
+        let shiftR = Literals.shiftSize * (height nodeR)
         checkNodeProperties shiftL nodeL "Original left node"
         checkNodeProperties shiftR nodeR "Original right node"
         let expected = Seq.concat [nodeItems shiftL nodeL; nodeItems shiftR nodeR] |> Array.ofSeq
@@ -1102,14 +1102,14 @@ let manualTests =
   testList "Tests of node methods that aren't covered by random testing" [
     testProp "ToRelaxedNodeIfNeeded never changes an already-full node" <| fun (IsolatedNode node : IsolatedNode<int>) ->
         node |> isFull ==> fun () ->
-            let maybeRelaxed = (node :?> RRBFullNode<_>).ToRelaxedNodeIfNeeded Literals.blockSizeShift
+            let maybeRelaxed = (node :?> RRBFullNode<_>).ToRelaxedNodeIfNeeded Literals.shiftSize
             maybeRelaxed |> isFull
 
     testCase "ToRelaxedNodeIfNeeded will change a full node that has lost an item from a non-final child" <| fun _ ->
         let vec = RRBVectorGen.treeReprStrToVec "M M M T1" :?> Ficus.RRBVector.RRBPersistentVector<_>
         let root = vec.Root :?> RRBFullNode<_>
         let root' = root.RemovedItem nullOwner vec.Shift false (Literals.blockSize + 5) :?> RRBFullNode<_>
-        let maybeRelaxed = root'.ToRelaxedNodeIfNeeded Literals.blockSizeShift
+        let maybeRelaxed = root'.ToRelaxedNodeIfNeeded Literals.shiftSize
         Expect.isTrue (maybeRelaxed |> isRelaxed) "Node should have changed to be relaxed"
 
     testCase "ToRelaxedNodeIfNeeded will NOT change a full node that has lost an item from its final child" <| fun _ ->
@@ -1117,12 +1117,12 @@ let manualTests =
         let root = vec.Root :?> RRBFullNode<_>
         let root' = root.RemovedItem nullOwner vec.Shift false (Literals.blockSize * 2 + 5) :?> RRBFullNode<_>
         // Note that vec.Remove would have adjusted this tree to promote a new leaf, so we use root.RemovedItem instead
-        let maybeRelaxed = root'.ToRelaxedNodeIfNeeded Literals.blockSizeShift
+        let maybeRelaxed = root'.ToRelaxedNodeIfNeeded Literals.shiftSize
         Expect.isTrue (maybeRelaxed |> isFull) "Node should still be full"
 
     testProp "ToFullNodeIfNeeded never changes an already-relaxed node" <| fun (IsolatedNode node : IsolatedNode<int>) ->
         node |> isRelaxed ==> fun () ->
-            let maybeFull = (node :?> RRBRelaxedNode<_>).ToFullNodeIfNeeded Literals.blockSizeShift
+            let maybeFull = (node :?> RRBRelaxedNode<_>).ToFullNodeIfNeeded Literals.shiftSize
             maybeFull |> isRelaxed
 
     // Still TODO: InsertChild on a full node, inserting a full child (let's do a leaf)

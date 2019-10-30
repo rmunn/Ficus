@@ -38,13 +38,13 @@ type Fullness = CompletelyFull | FullEnough | NotFull   // Used in node properti
 // Properties start here
 
 // Note that when I check the shift, I use <= 0, because in unit testing, we really might run into
-// some deformed trees where the shift isn't a proper multiple of Literals.blockSizeShift. If we
+// some deformed trees where the shift isn't a proper multiple of Literals.shiftSize. If we
 // run into one of those, I don't want to loop forever because we skipped from 1 to -1 and never hit 0.
 
 let nodeProperties = [
     "All twigs should be at height 1", fun (shift : int) (root : RRBNode<'T>) ->
         let rec check shift (node : RRBNode<'T>) =
-            if shift <= Literals.blockSizeShift then
+            if shift <= Literals.shiftSize then
                 not (isEmpty node) && isTwig node
             else
                 not (isEmpty node) && isNotTwig node && children node |> Seq.forall (fun n -> check (down shift) (n :?> RRBFullNode<'T>))
@@ -149,13 +149,13 @@ let nodeProperties = [
             nodeValid && children node |> Seq.forall (check (down shift))
         check shift root
 
-    "The shift of a vector should always be a multiple of Literals.blockSizeShift", fun (shift : int) (root : RRBNode<'T>) ->
-        shift % Literals.blockSizeShift = 0
+    "The shift of a vector should always be a multiple of Literals.shiftSize", fun (shift : int) (root : RRBNode<'T>) ->
+        shift % Literals.shiftSize = 0
 
-    "The shift of a vector should always be the height from the root to the leaves, multiplied by Literals.blockSizeShift", fun (shift : int) (root : RRBNode<'T>) ->
+    "The shift of a vector should always be the height from the root to the leaves, multiplied by Literals.shiftSize", fun (shift : int) (root : RRBNode<'T>) ->
         let rec height acc (node : RRBNode<'T>) =
             if isLeaf node then acc else (node :?> RRBFullNode<'T>).FirstChild |> height (acc+1)
-        (height 0 root) * Literals.blockSizeShift = shift
+        (height 0 root) * Literals.shiftSize = shift
 
     "ExpandedNodes (and ExpandedRRBNodes) should not appear in a tree whose root is not an expanded node variant", fun (shift : int) (root : RRBNode<'T>) ->
         let isExpanded (child : RRBNode<'T>) = (child :? RRBExpandedFullNode<'T>) || (child :? RRBExpandedRelaxedNode<'T>)
@@ -222,13 +222,13 @@ let vectorPropertiesPersistent = [
     // "The rightmost leaf node of the vector should always be full if its parent is full", fun (vec : RRBPersistentVector<'T>) -> // A true vector property because only by calling vector methods can it be achieved
     //     if vec.TailOffset = 0 then true else
     //     let rec getRightTwig shift (node : RRBFullNode<'T>) =
-    //         if shift <= Literals.blockSizeShift then node
+    //         if shift <= Literals.shiftSize then node
     //         else (node.LastChild :?> RRBFullNode<'T>) |> getRightTwig (RRBMath.down shift)
     //     let twig = getRightTwig vec.Shift (vec.Root :?> RRBFullNode<'T>)
     //     if isFull twig then twig.LastChild.NodeSize = Literals.blockSize else true
 
-    "If the vector shift is > Literals.blockSizeShift, then the root node's length should be at least 2", fun (vec : RRBPersistentVector<'T>) -> // A true vector property because only by calling vector methods can it be achieved
-        if vec.Shift > Literals.blockSizeShift then vec.Root.NodeSize >= 2 else true
+    "If the vector shift is > Literals.shiftSize, then the root node's length should be at least 2", fun (vec : RRBPersistentVector<'T>) -> // A true vector property because only by calling vector methods can it be achieved
+        if vec.Shift > Literals.shiftSize then vec.Root.NodeSize >= 2 else true
 
     "The tail offset should equal (vector length - tail length) at all times, even when the vector is empty", fun (vec : RRBPersistentVector<'T>) ->
         let tailLen = vec.Tail.Length
@@ -243,11 +243,11 @@ let vectorPropertiesPersistent = [
     "If tail offset = 0, the vector length should be blockSize or less", fun (vec : RRBPersistentVector<'T>) ->
         if vec.TailOffset > 0 then true else vec.Length <= Literals.blockSize
 
-    "The shift of a vector should always be a multiple of Literals.blockSizeShift", fun (vec : RRBPersistentVector<'T>) ->
-        vec.Shift % Literals.blockSizeShift = 0
+    "The shift of a vector should always be a multiple of Literals.shiftSize", fun (vec : RRBPersistentVector<'T>) ->
+        vec.Shift % Literals.shiftSize = 0
 
-    "The shift of a vector should always be the height from the root to the leaves, multiplied by Literals.blockSizeShift", fun (vec : RRBPersistentVector<'T>) ->
-        vec.Shift = (height vec.Root) * Literals.blockSizeShift
+    "The shift of a vector should always be the height from the root to the leaves, multiplied by Literals.shiftSize", fun (vec : RRBPersistentVector<'T>) ->
+        vec.Shift = (height vec.Root) * Literals.shiftSize
 
     "If a tree is Persistent, its root should NOT be an Expanded node variant", fun (vec : RRBPersistentVector<'T>) ->
         let isExpanded (node : RRBNode<'T>) = (node :? RRBExpandedFullNode<'T>) || (node :? RRBExpandedRelaxedNode<'T>)
@@ -289,13 +289,13 @@ let vectorPropertiesTransient = [
     "The rightmost leaf node of the vector should always be full if its parent is full", fun (vec : RRBTransientVector<'T>) -> // A true vector property because only by calling vector methods can it be achieved
         if vec.TailOffset = 0 then true else
         let rec getRightTwig shift (node : RRBFullNode<'T>) =
-            if shift <= Literals.blockSizeShift then node
+            if shift <= Literals.shiftSize then node
             else (node.LastChild :?> RRBFullNode<'T>) |> getRightTwig (RRBMath.down shift)
         let twig = getRightTwig vec.Shift (vec.Root :?> RRBFullNode<'T>)
         if isFull twig then twig.LastChild.NodeSize = Literals.blockSize else true
 
-    "If the vector shift is > Literals.blockSizeShift, then the root node's length should be at least 2", fun (vec : RRBTransientVector<'T>) -> // A true vector property because only by calling vector methods can it be achieved
-        if vec.Shift > Literals.blockSizeShift then vec.Root.NodeSize >= 2 else true
+    "If the vector shift is > Literals.shiftSize, then the root node's length should be at least 2", fun (vec : RRBTransientVector<'T>) -> // A true vector property because only by calling vector methods can it be achieved
+        if vec.Shift > Literals.shiftSize then vec.Root.NodeSize >= 2 else true
 
     "The tail offset should equal (vector length - tail length) at all times, even when the vector is empty", fun (vec : RRBTransientVector<'T>) ->
         let tailLen = vec.Length - vec.TailOffset
@@ -310,11 +310,11 @@ let vectorPropertiesTransient = [
     "If tail offset = 0, the vector length should be blockSize or less", fun (vec : RRBTransientVector<'T>) ->
         if vec.TailOffset > 0 then true else vec.Length <= Literals.blockSize
 
-    "The shift of a vector should always be a multiple of Literals.blockSizeShift", fun (vec : RRBTransientVector<'T>) ->
-        vec.Shift % Literals.blockSizeShift = 0
+    "The shift of a vector should always be a multiple of Literals.shiftSize", fun (vec : RRBTransientVector<'T>) ->
+        vec.Shift % Literals.shiftSize = 0
 
-    "The shift of a vector should always be the height from the root to the leaves, multiplied by Literals.blockSizeShift", fun (vec : RRBTransientVector<'T>) ->
-        vec.Shift = (height vec.Root) * Literals.blockSizeShift
+    "The shift of a vector should always be the height from the root to the leaves, multiplied by Literals.shiftSize", fun (vec : RRBTransientVector<'T>) ->
+        vec.Shift = (height vec.Root) * Literals.shiftSize
 
     "If a tree is Transient, its root should be an Expanded node variant", fun (vec : RRBTransientVector<'T>) ->
         let isExpanded (node : RRBNode<'T>) = (node :? RRBExpandedFullNode<'T>) || (node :? RRBExpandedRelaxedNode<'T>)

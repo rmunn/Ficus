@@ -4,7 +4,7 @@ open RRBArrayExtensions
 
 // Concepts:
 //
-// "Shift" - The height of any given node, multiplied by Literals.blockSizeShift.
+// "Shift" - The height of any given node, multiplied by Literals.shiftSize.
 //           Used to calculate indices and size tables efficiently.
 // "Node index" - An index within one node's array. Should be between 0 and node.Array.Length - 1.
 //                Sometimes called "local index".
@@ -16,7 +16,7 @@ open RRBArrayExtensions
 
 // Other terms:
 // Leaf - As you'd expect, the "tip" of the tree, where all the vector's contents are stored; shift = 0.
-// Twig - The tree level just above the leaf level; shift = Literals.blockSizeShift
+// Twig - The tree level just above the leaf level; shift = Literals.shiftSize
 // (Successively higher levels of the tree could called, in order after twig: branch, limb, trunk...
 // But we don't actually use those terms in the code, just "twig" and "leaf".)
 
@@ -27,8 +27,8 @@ module RRBMath =
         (treeIdx >>> shift) &&& Literals.blockIndexMask
 
     // Syntactic sugar for operations we'll use *all the time*: moving up and down the tree levels
-    let inline down shift = shift - Literals.blockSizeShift
-    let inline up shift = shift + Literals.blockSizeShift
+    let inline down shift = shift - Literals.shiftSize
+    let inline up shift = shift + Literals.shiftSize
 
     // This takes a `len` parameter that should be the size of the size table, so that it can handle expanded nodes
     let isSizeTableFullAtShift shift (sizeTbl : int[]) len =
@@ -155,17 +155,17 @@ type RRBNode<'T>(ownerToken : OwnerToken) =
     abstract member SplitTree : OwnerToken -> int -> int -> RRBNode<'T> * RRBNode<'T>
 
     member this.NeedsRebalance shift =
-        let slots = if shift > Literals.blockSizeShift then this.SlotCount else this.TwigSlotCount
-        slots <= ((this.NodeSize - Literals.eMaxPlusOne) <<< Literals.blockSizeShift)
+        let slots = if shift > Literals.shiftSize then this.SlotCount else this.TwigSlotCount
+        slots <= ((this.NodeSize - Literals.eMaxPlusOne) <<< Literals.shiftSize)
 
     member this.NeedsRebalance2 shift (right : RRBNode<'T>) =
-        let slots = if shift > Literals.blockSizeShift then this.SlotCount + right.SlotCount else this.TwigSlotCount + right.TwigSlotCount
-        slots <= ((this.NodeSize + right.NodeSize - Literals.eMaxPlusOne) <<< Literals.blockSizeShift)
+        let slots = if shift > Literals.shiftSize then this.SlotCount + right.SlotCount else this.TwigSlotCount + right.TwigSlotCount
+        slots <= ((this.NodeSize + right.NodeSize - Literals.eMaxPlusOne) <<< Literals.shiftSize)
 
     member this.NeedsRebalance2PlusLeaf shift (leafLen : int) (right : RRBNode<'T>) =
         let slots = this.TwigSlotCount + leafLen + right.TwigSlotCount
-        slots <= ((this.NodeSize + 1 + right.NodeSize - Literals.eMaxPlusOne) <<< Literals.blockSizeShift)
-        // TODO: Once unit testing is solid, remove the "shift" parameter since it should always be Literals.blockSizeShift
+        slots <= ((this.NodeSize + 1 + right.NodeSize - Literals.eMaxPlusOne) <<< Literals.shiftSize)
+        // TODO: Once unit testing is solid, remove the "shift" parameter since it should always be Literals.shiftSize
 
 
 and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerToken : OwnerToken, children : RRBNode<'T>[]) =
@@ -180,11 +180,11 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
 
     // Used in merging
     member this.LeftmostTwig shift =
-        if shift > Literals.blockSizeShift
+        if shift > Literals.shiftSize
         then (this.FirstChild :?> RRBFullNode<'T>).LeftmostTwig (down shift)
         else this
     member this.RightmostTwig shift =
-        if shift > Literals.blockSizeShift
+        if shift > Literals.shiftSize
         then (this.LastChild :?> RRBFullNode<'T>).RightmostTwig (down shift)
         else this
 
@@ -197,7 +197,7 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
     override this.SlotCount = this.Children |> Array.sumBy (fun child -> child.NodeSize)
     override this.TwigSlotCount =
         // Just as with TreeSize, we can skip calculating all but the rightmost node
-        ((this.NodeSize - 1) <<< Literals.blockSizeShift) + this.LastChild.NodeSize
+        ((this.NodeSize - 1) <<< Literals.shiftSize) + this.LastChild.NodeSize
 
     override this.SetNodeSize _ = ()  // No-op; only used in expanded nodes
 
@@ -218,7 +218,7 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
         RRBExpandedFullNode<'T>(owner, node'.Children) :> RRBNode<'T>
 
     override this.ShrinkRightSpine owner shift =
-        if shift <= Literals.blockSizeShift || this.NodeSize = 0 then
+        if shift <= Literals.shiftSize || this.NodeSize = 0 then
             this.Shrink owner
         else
             let child' = (this.LastChild :?> RRBFullNode<'T>).ShrinkRightSpine owner (down shift)
@@ -230,7 +230,7 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
                 node'
 
     member this.ExpandRightSpine owner shift =
-        if shift <= Literals.blockSizeShift || this.NodeSize = 0 then
+        if shift <= Literals.shiftSize || this.NodeSize = 0 then
             this.Expand owner
         else
             let child' = (this.LastChild :?> RRBFullNode<'T>).ExpandRightSpine owner (down shift)
@@ -242,7 +242,7 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
                 node'
 
     member this.ReplaceLastLeaf owner shift (newLeaf : RRBLeafNode<'T>) sizeDiff =
-        if shift <= Literals.blockSizeShift then
+        if shift <= Literals.shiftSize then
             this.UpdateChildSRel owner shift (this.NodeSize - 1) newLeaf sizeDiff
         else
             let lastChild' = (this.LastChild :?> RRBFullNode<'T>).ReplaceLastLeaf owner (down shift) newLeaf sizeDiff
@@ -268,12 +268,12 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
     abstract member SafeChildrenArr : RRBNode<'T>[]
     default this.SafeChildrenArr = this.Children
     member this.LeavesSeq shift =
-        if shift <= Literals.blockSizeShift then
+        if shift <= Literals.shiftSize then
             this.ChildrenSeq |> Seq.cast<RRBLeafNode<'T>>
         else
             this.ChildrenSeq |> Seq.collect (fun child -> (child :?> RRBFullNode<'T>).LeavesSeq (down shift))
     member this.RevLeavesSeq shift =
-        if shift <= Literals.blockSizeShift then
+        if shift <= Literals.shiftSize then
             this.ChildrenSeq |> Seq.rev |> Seq.cast<RRBLeafNode<'T>>
         else
             this.ChildrenSeq |> Seq.rev |> Seq.collect (fun child -> (child :?> RRBFullNode<'T>).RevLeavesSeq (down shift))
@@ -507,7 +507,7 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
             if shift >= endShift
             then node
             else let shift' = (up shift) in loop shift' (RRBNode<'T>.MkNode owner shift' [|node|])
-        loop Literals.blockSizeShift (RRBNode<'T>.MkNode owner Literals.blockSizeShift [|leaf|])
+        loop Literals.shiftSize (RRBNode<'T>.MkNode owner Literals.shiftSize [|leaf|])
 
     member this.NewPathR<'T> owner endShift (leaf : RRBLeafNode<'T>) =
         // NOTE that this *does* expand nodes, but only if we are an expanded node ourselves (i.e., it calls MaybeExpand)
@@ -515,10 +515,10 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
             if shift >= endShift
             then node.MaybeExpand owner shift
             else let shift' = (up shift) in loop shift' (this.NewParent owner shift' [|node.MaybeExpand owner shift|] :?> RRBFullNode<'T>)
-        loop Literals.blockSizeShift (this.NewParent owner Literals.blockSizeShift [|leaf|] :?> RRBFullNode<'T>)
+        loop Literals.shiftSize (this.NewParent owner Literals.shiftSize [|leaf|] :?> RRBFullNode<'T>)
 
     member this.TryAppendLeaf owner shift (newLeaf : RRBLeafNode<'T>) leafLen =
-        if shift <= Literals.blockSizeShift then
+        if shift <= Literals.shiftSize then
             if this.NodeSize >= Literals.blockSize then None else this.AppendChildS owner shift newLeaf leafLen |> Some
         else
             match (this.LastChild :?> RRBFullNode<'T>).TryAppendLeaf owner (down shift) newLeaf leafLen with
@@ -541,7 +541,7 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
             newParent, up shift
 
     member this.TryPrependLeaf owner shift (newLeaf : RRBLeafNode<'T>) leafLen =
-        if shift <= Literals.blockSizeShift then
+        if shift <= Literals.shiftSize then
             if this.NodeSize >= Literals.blockSize then None else this.InsertChildS owner shift 0 newLeaf leafLen |> Some
         else
             match (this.FirstChild :?> RRBFullNode<'T>).TryPrependLeaf owner (down shift) newLeaf leafLen with
@@ -786,7 +786,7 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
         RRBNode<'T>.MkNodeKnownSize owner shift children sizes
 
     member this.RemoveLastLeaf owner shift =
-        if shift <= Literals.blockSizeShift then
+        if shift <= Literals.shiftSize then
             // Children are leaves
             let leaf = this.LastChild :?> RRBLeafNode<'T>
             let newNode = this.RemoveLastChild owner shift // Popping the last entry from a FullNode can't ever turn it into an RRBNode.
@@ -881,7 +881,7 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
         nodesSeq
 
     member this.ApplyRebalancePlan owner shift sizes (mergeStart, mergeLen, sizeReduction) childrenEnum =
-        if shift > Literals.blockSizeShift then
+        if shift > Literals.shiftSize then
             this.ApplyRebalancePlanImpl<RRBNode<'T>> sizes (mergeStart, mergeLen, sizeReduction) childrenEnum (fun (node : RRBNode<'T>) -> (node :?> RRBFullNode<'T>).SafeChildrenArr) (RRBNode<'T>.MkNode owner (down shift))
         else
             this.ApplyRebalancePlanImpl<'T> sizes (mergeStart, mergeLen, sizeReduction) childrenEnum (fun (leaf : RRBNode<'T>) -> (leaf :?> RRBLeafNode<'T>).Items) (RRBNode<'T>.MkLeaf owner)
@@ -939,7 +939,7 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
             | l, None when shouldKeepExpandedLeftNode -> l, None
             | l, None -> l.ShrinkRightSpine owner shift, None
             | l, Some r -> l.ShrinkRightSpine owner shift, Some r
-        if shift = Literals.blockSizeShift && rightShift = Literals.blockSizeShift then
+        if shift = Literals.shiftSize && rightShift = Literals.shiftSize then
             match tailOpt with
             | None -> this.ConcatNodes owner shift right
             | Some tail -> this.ConcatTwigsPlusLeaf owner shift tail right
@@ -1567,7 +1567,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         let node' = this.GetEditableNode owner :?> RRBExpandedFullNode<'T>
         let lastChild = this.LastChild
         let expandedLastChild =
-            if shift <= Literals.blockSizeShift then
+            if shift <= Literals.shiftSize then
                 lastChild.Expand owner
             else
                 (lastChild.Expand owner :?> RRBFullNode<'T>).MaybeExpand owner (down shift)
@@ -1898,7 +1898,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         let node' = this.GetEditableNode owner :?> RRBExpandedRelaxedNode<'T>
         let lastChild = this.LastChild
         let expandedLastChild =
-            if shift <= Literals.blockSizeShift then
+            if shift <= Literals.shiftSize then
                 lastChild.Expand owner
             else
                 (lastChild.Expand owner :?> RRBFullNode<'T>).MaybeExpand owner (down shift)

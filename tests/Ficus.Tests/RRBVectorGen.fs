@@ -15,7 +15,7 @@ let mkLeaf items = RRBNode<'T>.MkLeaf nullOwner items
 let mkNode<'T> level items =
     if level = 0
         then failwith "Don't call RRBVectorGen.mkNode at level 0" // Leaves have 'T children, whereas nodes have RRBNode<'T> children
-        else RRBNode<'T>.MkNode nullOwner (level * Literals.blockSizeShift) items
+        else RRBNode<'T>.MkNode nullOwner (level * Literals.shiftSize) items
 
 let mkEmptyNode<'T>() =
     RRBNode<'T>.MkFullNode nullOwner Array.empty
@@ -108,13 +108,13 @@ let mkSpecificTree treeRepr =
     // if height = 0 then
     //     // Empty root (tail-only tree) is represented as being of height 1 so that the root is never a leaf
     //     let tail = items |> mkArray tailSize
-    //     RRBPersistentVector(tailSize, Literals.blockSizeShift, mkEmptyNode(), tail, 0) :> RRBVector<_>
+    //     RRBPersistentVector(tailSize, Literals.shiftSize, mkEmptyNode(), tail, 0) :> RRBVector<_>
     // else
     let rootNode = mkSpecificRRBNode items height treeRepr.Root
     let tailItems = items |> mkArray tailSize
     let vecLen = peek items
     let tail = tailItems
-    RRBPersistentVector(vecLen, height * Literals.blockSizeShift, rootNode, tail, vecLen - tailSize) :> RRBVector<_>
+    RRBPersistentVector(vecLen, height * Literals.shiftSize, rootNode, tail, vecLen - tailSize) :> RRBVector<_>
 
 let treeReprStrToVec s =
     let treeRepr =
@@ -176,7 +176,7 @@ let vecToTreeReprStr (vec : RRBVector<'T>) =
         | _ -> failwith "Unknown vector type"
     let rootRepr =
         root
-        |> nodeToTreeReprStr<'T> (shift / Literals.blockSizeShift)
+        |> nodeToTreeReprStr<'T> (shift / Literals.shiftSize)
         |> fun s -> s.[1..s.Length-2] // Strip brackets from outermost list
     (sprintf "%s T%d" rootRepr tailLen).Trim()
 
@@ -222,11 +222,11 @@ let genTinyVec<'a> size =
 
 // Invariant that the append algorithm needs: rightmost leaf is full if its parent is full
 let rec getRightTwig shift (node : RRBFullNode<'T>) =
-    if shift <= Literals.blockSizeShift then node
+    if shift <= Literals.shiftSize then node
     else (node.LastChild :?> RRBFullNode<'T>) |> getRightTwig (RRBMath.down shift)
 
 let fleshOutRightmostLeafIfNecessary g level (root : RRBFullNode<'a>) = gen {
-    let twig = root |> getRightTwig (level * Literals.blockSizeShift)
+    let twig = root |> getRightTwig (level * Literals.shiftSize)
     let leaf = twig.LastChild
     let missingItemCount = Literals.blockSize - leaf.NodeSize
     if missingItemCount <= 0 || twig :? RRBRelaxedNode<'a> then
@@ -236,7 +236,7 @@ let fleshOutRightmostLeafIfNecessary g level (root : RRBFullNode<'a>) = gen {
             let! newItems = Gen.arrayOfLength missingItemCount g
             return (Array.append (leaf :?> RRBLeafNode<'a>).Items newItems) |> mkLeaf
         }
-        return (root.ReplaceLastLeaf nullOwner (level * Literals.blockSizeShift) (newLeaf :?> RRBLeafNode<'a>) missingItemCount) :?> RRBFullNode<'a>
+        return (root.ReplaceLastLeaf nullOwner (level * Literals.shiftSize) (newLeaf :?> RRBLeafNode<'a>) missingItemCount) :?> RRBFullNode<'a>
 }
 
 let genVec<'a> level childCount =
@@ -248,7 +248,7 @@ let genVec<'a> level childCount =
         let! root' = (root :?> RRBFullNode<'a>) |> fleshOutRightmostLeafIfNecessary g level
         let! tailSize = Gen.choose(1,Literals.blockSize)
         let! tail = Gen.arrayOfLength tailSize g
-        let shift = level * Literals.blockSizeShift
+        let shift = level * Literals.shiftSize
         let rootSize = root'.TreeSize shift
         let totalSize = rootSize + Array.length tail
         let vec = RRBPersistentVector<'a>(totalSize, shift, root', tail, rootSize) :> RRBVector<'a>

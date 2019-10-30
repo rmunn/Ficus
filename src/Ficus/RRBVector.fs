@@ -68,10 +68,10 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
 
     internal new (token : OwnerToken) =
         let root = RRBFullNode<'T>(token, Array.empty)
-        RRBPersistentVector<'T>(0, Literals.blockSizeShift, root, Array.empty, 0)
+        RRBPersistentVector<'T>(0, Literals.shiftSize, root, Array.empty, 0)
 
     new () =
-        RRBPersistentVector<'T>(0, Literals.blockSizeShift, emptyNode, Array.empty, 0)
+        RRBPersistentVector<'T>(0, Literals.shiftSize, emptyNode, Array.empty, 0)
 
     static member MkEmpty() = RRBPersistentVector<'T>()
     static member internal MkEmptyWithToken token = RRBPersistentVector<'T>(token)
@@ -90,13 +90,13 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
         (v :?> RRBPersistentVector<'T>).ShortenTree()
 
     member internal this.ShortenTree() =
-        if this.Shift <= Literals.blockSizeShift then this :> RRBVector<'T>
+        if this.Shift <= Literals.shiftSize then this :> RRBVector<'T>
         else
             if this.Root.NodeSize > 1 then this :> RRBVector<'T>
             elif this.Root.NodeSize = 1 then
                 RRBPersistentVector<'T>(this.Count, RRBMath.down this.Shift, (this.Root :?> RRBFullNode<'T>).FirstChild, this.Tail, this.TailOffset).ShortenTree()
             else // Empty root
-                RRBPersistentVector<'T>(this.Count, Literals.blockSizeShift, emptyNode, this.Tail, this.TailOffset) :> RRBVector<'T>
+                RRBPersistentVector<'T>(this.Count, Literals.shiftSize, emptyNode, this.Tail, this.TailOffset) :> RRBVector<'T>
 
     member internal this.ShiftNodesFromTailIfNeeded() =
         if this.TailOffset <= 0 || this.Root.NodeSize = 0 then
@@ -127,7 +127,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                     RRBPersistentVector<'T>(this.Count, this.Shift, newRoot, newTail, this.TailOffset + shiftCount) :> RRBVector<'T>
 
     // abstract member Empty : RRBVector<'T>  // Or maybe it should be unit -> RRBVector<'T>
-    override this.Empty() = RRBPersistentVector<'T>(0, Literals.blockSizeShift, emptyNode, Array.empty, 0) :> RRBVector<'T>
+    override this.Empty() = RRBPersistentVector<'T>(0, Literals.shiftSize, emptyNode, Array.empty, 0) :> RRBVector<'T>
 
     // abstract member IsEmpty : unit -> bool
     override this.IsEmpty() = this.Count = 0
@@ -223,11 +223,11 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
             this.Empty()
         elif idx = this.TailOffset then
             // Splitting exactly at the tail means we'll have an empty root
-            RRBPersistentVector<'T>(this.Tail.Length, Literals.blockSizeShift, RRBNode<'T>.MkFullNode nullOwner Array.empty, this.Tail, 0) :> RRBVector<'T>
+            RRBPersistentVector<'T>(this.Tail.Length, Literals.shiftSize, RRBNode<'T>.MkFullNode nullOwner Array.empty, this.Tail, 0) :> RRBVector<'T>
         elif idx > this.TailOffset then
             // Splitting the tail in two
             let newTail = this.Tail |> Array.skip (idx - this.TailOffset)
-            RRBPersistentVector<'T>(newTail.Length, Literals.blockSizeShift, RRBNode<'T>.MkFullNode nullOwner Array.empty, newTail, 0) :> RRBVector<'T>
+            RRBPersistentVector<'T>(newTail.Length, Literals.shiftSize, RRBNode<'T>.MkFullNode nullOwner Array.empty, newTail, 0) :> RRBVector<'T>
         else
             let newRoot = this.Root.SkipNTreeItems nullOwner this.Shift idx
             RRBPersistentVector<'T>(this.Count - idx, this.Shift, newRoot, this.Tail, this.TailOffset - idx).AdjustTree()
@@ -243,13 +243,13 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
             // Splitting exactly at the tail means we have to promote a new tail
             let newTailNode, newRoot = (this.Root :?> RRBFullNode<'T>).PopLastLeaf nullOwner this.Shift
             let newLeft = RRBPersistentVector<'T>(idx, this.Shift, newRoot, newTailNode.Items, idx - newTailNode.NodeSize).AdjustTree()
-            let newRight = RRBPersistentVector<'T>(this.Tail.Length, Literals.blockSizeShift, RRBNode<'T>.MkFullNode nullOwner Array.empty, this.Tail, 0) :> RRBVector<'T>
+            let newRight = RRBPersistentVector<'T>(this.Tail.Length, Literals.shiftSize, RRBNode<'T>.MkFullNode nullOwner Array.empty, this.Tail, 0) :> RRBVector<'T>
             newLeft, newRight
         elif idx > this.TailOffset then
             // Splitting the tail in two
             let tailL, tailR = this.Tail |> Array.splitAt (idx - this.TailOffset)
             let newLeft = RRBPersistentVector<'T>(idx, this.Shift, this.Root, tailL, this.TailOffset) :> RRBVector<'T>
-            let newRight = RRBPersistentVector<'T>(tailR.Length, Literals.blockSizeShift, RRBNode<'T>.MkFullNode nullOwner Array.empty, tailR, 0) :> RRBVector<'T>
+            let newRight = RRBPersistentVector<'T>(tailR.Length, Literals.shiftSize, RRBNode<'T>.MkFullNode nullOwner Array.empty, tailR, 0) :> RRBVector<'T>
             newLeft, newRight
         else
             let rootL, rootR = this.Root.SplitTree nullOwner this.Shift idx
@@ -292,7 +292,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                         // Can't use AppendLeaf in an empty root, so we create the first twig by hand
                         // FIXME: Yes, we can actually. So this if-else isn't actually necessary! I think. TODO: Test this.
                         let newRoot = RRBNode<'T>.MkFullNode nullOwner [|newLeaf|]
-                        RRBPersistentVector<'T>(newLen, Literals.blockSizeShift, newRoot, newTail, Literals.blockSize) :> RRBVector<'T>
+                        RRBPersistentVector<'T>(newLen, Literals.shiftSize, newRoot, newTail, Literals.blockSize) :> RRBVector<'T>
                     else
                         let newRoot, newShift = (this.Root :?> RRBFullNode<'T>).AppendLeaf nullOwner this.Shift newLeaf
                         // The new leaf that was pushed down cannot have been short, so here we don't need to adjust the tree to maintain the invariant.
@@ -308,7 +308,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
                 // One scenario I can think of is a left tree of [M*M-1] TM, while the right tree is [M] T5 or something. TODO: Work that out more precisely.
                 let tailNode = RRBNode<'T>.MkLeaf nullOwner this.Tail :?> RRBLeafNode<'T>
                 // Can the tail be merged into the two twig nodes? Now's the time to find out, while we can still push it down to form a new root
-                let tailCanFit = ((this.Root :?> RRBFullNode<'T>).RightmostTwig this.Shift).HasRoomToMergeTheTail Literals.blockSizeShift tailNode ((right.Root :?> RRBFullNode<'T>).LeftmostTwig right.Shift)
+                let tailCanFit = ((this.Root :?> RRBFullNode<'T>).RightmostTwig this.Shift).HasRoomToMergeTheTail Literals.shiftSize tailNode ((right.Root :?> RRBFullNode<'T>).LeftmostTwig right.Shift)
                 let mergedShift, mergedTree =
                     if tailCanFit
                     then max this.Shift right.Shift, (this.Root :?> RRBFullNode<'T>).MergeTree nullOwner this.Shift (Some tailNode) right.Shift (right.Root :?> RRBFullNode<'T>) false
@@ -418,7 +418,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
     // new() = RRBTransientVector(0, 5, emptyNode, Array.empty, 0)
     internal new (token : OwnerToken) =
         let root = RRBExpandedFullNode<'T>(token, Array.zeroCreate Literals.blockSize, 0)
-        RRBTransientVector<'T>(0, Literals.blockSizeShift, root, Array.zeroCreate Literals.blockSize, 0)
+        RRBTransientVector<'T>(0, Literals.shiftSize, root, Array.zeroCreate Literals.blockSize, 0)
 
     new () =
         RRBTransientVector<'T>(mkOwnerToken())
@@ -445,7 +445,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
         (v :?> RRBTransientVector<'T>).ShortenTree()
 
     member internal this.ShortenTree() =
-        if this.Shift <= Literals.blockSizeShift then this :> RRBVector<'T>
+        if this.Shift <= Literals.shiftSize then this :> RRBVector<'T>
         else
             if this.Root.NodeSize > 1 then this :> RRBVector<'T>
             elif this.Root.NodeSize = 1 then
@@ -453,7 +453,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                 this.Root <- (this.Root :?> RRBFullNode<'T>).FirstChild
                 this.ShortenTree()
             else // Empty root but shift was too large
-                this.Shift <- Literals.blockSizeShift
+                this.Shift <- Literals.shiftSize
                 this :> RRBVector<'T>
 
     member internal this.ShiftNodesFromTailIfNeeded() =
@@ -500,7 +500,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
     override this.Empty() =
         this.ThrowIfNotValid()
         this.Count <- 0
-        this.Shift <- Literals.blockSizeShift
+        this.Shift <- Literals.shiftSize
         let root = this.Root :?> RRBFullNode<'T>
         root.SetNodeSize 0
         Array.fill root.Children 0 Literals.blockSize null
@@ -656,7 +656,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             this.Root.SetNodeSize 0
             Array.fill (this.Root :?> RRBFullNode<'T>).Children 0 Literals.blockSize null
             this.Count <- this.Count - idx
-            this.Shift <- Literals.blockSizeShift
+            this.Shift <- Literals.shiftSize
             this.TailOffset <- 0
             this :> RRBVector<'T>
         elif idx > this.TailOffset then
@@ -666,7 +666,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
             let tailLen = this.Count - this.TailOffset
             let tailIdx = idx - this.TailOffset
             this.Count <- this.Count - idx
-            this.Shift <- Literals.blockSizeShift
+            this.Shift <- Literals.shiftSize
             // Shift remaining items down, then zero out the slots that have become empty
             for i = tailIdx to tailLen - 1 do
                 this.Tail.[i - tailIdx] <- this.Tail.[i]
@@ -697,7 +697,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
         elif idx = 0 then
             let right = RRBTransientVector<'T>(this.Count, this.Shift, this.Root, this.Tail, this.TailOffset)
             this.Count <- 0
-            this.Shift <- Literals.blockSizeShift
+            this.Shift <- Literals.shiftSize
             this.Root <- RRBExpandedFullNode<'T>(this.Owner, Array.zeroCreate Literals.blockSize, 0)
             this.Tail <- Array.zeroCreate Literals.blockSize
             this.TailOffset <- 0
@@ -835,7 +835,7 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                     then RRBNode<'T>.MkLeaf this.Owner (this.Tail |> Array.truncate tailLen) :?> RRBLeafNode<'T>
                     else RRBNode<'T>.MkLeaf this.Owner this.Tail :?> RRBLeafNode<'T>
                 // Can the tail be merged into the two twig nodes? Now's the time to find out, while we can still push it down to form a new root
-                let tailCanFit = ((this.Root :?> RRBFullNode<'T>).RightmostTwig this.Shift).HasRoomToMergeTheTail Literals.blockSizeShift tailNode ((right.Root :?> RRBFullNode<'T>).LeftmostTwig right.Shift)
+                let tailCanFit = ((this.Root :?> RRBFullNode<'T>).RightmostTwig this.Shift).HasRoomToMergeTheTail Literals.shiftSize tailNode ((right.Root :?> RRBFullNode<'T>).LeftmostTwig right.Shift)
                 let newRoot, newShift =
                     let mergedTree =
                         if tailCanFit
@@ -1018,10 +1018,10 @@ module RRBVector =
     let ofArray (a : 'T[]) =
         if a.Length <= Literals.blockSize then
             let tail = Array.copy a
-            RRBPersistentVector<'T>(a.Length, Literals.blockSizeShift, emptyNode, tail, 0) :> RRBVector<'T>
+            RRBPersistentVector<'T>(a.Length, Literals.shiftSize, emptyNode, tail, 0) :> RRBVector<'T>
         elif a.Length <= Literals.blockSize * 2 then
             let leaf, tail = a |> Array.splitAt Literals.blockSize
-            RRBPersistentVector<'T>(a.Length, Literals.blockSizeShift, [|RRBNode<'T>.MkLeaf nullOwner leaf|] |> RRBNode<'T>.MkFullNode nullOwner, tail, Literals.blockSize) :> RRBVector<'T>
+            RRBPersistentVector<'T>(a.Length, Literals.shiftSize, [|RRBNode<'T>.MkLeaf nullOwner leaf|] |> RRBNode<'T>.MkFullNode nullOwner, tail, Literals.blockSize) :> RRBVector<'T>
             // TODO: Perhaps this should be a static member of RRBVector, called FromArray? Might be nice to have this in the C# API
         else
             a |> ofSeq
@@ -1443,7 +1443,7 @@ module RRBVector =
         let f' = flip f
         vec.RevIterItems() |> Seq.scan f' initState |> ofSeq |> rev
 
-    let singleton (item : 'T) = RRBPersistentVector<'T>(1, Literals.blockSizeShift, emptyNode, [|item|], 0) :> RRBVector<'T>
+    let singleton (item : 'T) = RRBPersistentVector<'T>(1, Literals.shiftSize, emptyNode, [|item|], 0) :> RRBVector<'T>
 
     let inline skip count (vec : RRBVector<'T>) = vec.Skip count
     let skipWhile pred (vec : RRBVector<'T>) = // TODO: Test this
@@ -1575,10 +1575,10 @@ module RRBVector =
                 while count < windowSize && itemEnumerator.MoveNext() do
                     tail.[count] <- itemEnumerator.Current
                     count <- count + 1
-                yield RRBPersistentVector<'T>(windowSize, Literals.blockSizeShift, emptyNode, tail, 0) :> RRBVector<'T>
+                yield RRBPersistentVector<'T>(windowSize, Literals.shiftSize, emptyNode, tail, 0) :> RRBVector<'T>
                 while itemEnumerator.MoveNext() do
                     tail <- tail |> Array.popFirstAndPush itemEnumerator.Current
-                    yield RRBPersistentVector<'T>(windowSize, Literals.blockSizeShift, emptyNode, tail, 0) :> RRBVector<'T>
+                    yield RRBPersistentVector<'T>(windowSize, Literals.shiftSize, emptyNode, tail, 0) :> RRBVector<'T>
             }
         else
             seq {

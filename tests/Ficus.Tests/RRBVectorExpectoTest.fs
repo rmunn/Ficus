@@ -728,7 +728,7 @@ let regressionTests =
         RRBVectorProps.checkProperties pvec "Persistent vector"
 
     testCase "Really big joined vector has right properties" <| fun _ ->
-        let bigNum = 1 <<< (Literals.blockSizeShift * 3)
+        let bigNum = 1 <<< (Literals.shiftSize * 3)
         let vL = seq {0..bigNum+2} |> RRBVector.ofSeq
         let vR = RRBVectorGen.treeReprStrToVec "M M-1 M*M-5 M-1*2 M T4"
         RRBVectorProps.checkProperties vL "vL"
@@ -1017,7 +1017,7 @@ let regressionTests =
         let joined = RRBVector.append a b :?> RRBPersistentVector<int>
         RRBVectorProps.checkProperties joined "Joined"
         Expect.equal joined.Length (a.Length + b.Length) "Wrong length for joined vector"
-        Expect.equal joined.Shift (bShift + Literals.blockSizeShift) "Joined vector should have pushed up a new root"
+        Expect.equal joined.Shift (bShift + Literals.shiftSize) "Joined vector should have pushed up a new root"
         Expect.equal joined.Root.NodeSize 2 "Joined vector should have pushed up a new root of size 2"
         Expect.equal joined.TailOffset (joined.Length - 1) "Joined vector should have just one item in its tail"
 
@@ -1033,7 +1033,7 @@ let regressionTests =
         let vec' = vec.Remove (Literals.blockSize + 1) :?> RRBPersistentVector<int>
         RRBVectorProps.checkProperties vec' "Vector after removal from last leaf"
         Expect.equal vec'.Tail.Length Literals.blockSize "Vector adjustment should have promoted new leaf"
-        Expect.equal vec'.Shift Literals.blockSizeShift "Vector adjustment should have left tree with height 1"
+        Expect.equal vec'.Shift Literals.shiftSize "Vector adjustment should have left tree with height 1"
         Expect.equal vec'.Root.NodeSize 1 "Vector adjustment should have left tree with single-node root"
 
     testCase "Inserting into last leaf can still maintain invariant when height is not affected" <| fun _ ->
@@ -1049,7 +1049,7 @@ let regressionTests =
         RRBVectorProps.checkProperties vec "Original vector"
         RRBVectorProps.checkProperties vec' "Vector after insertion"
 
-    testCase "Pushing tail down in root+tail tree, when root size is equal to blockSizeShift, creates a correct tree" <| fun _ ->
+    testCase "Pushing tail down in root+tail tree, when root size is equal to shiftSize, creates a correct tree" <| fun _ ->
         // This was a particularly subtle bug, since it only triggered in very specific cases.
         let vec = RRBVectorGen.treeReprStrToVec "5 TM"
         let step1 = vec |> RRBVector.insert (vec.Length - 2) -512
@@ -1112,7 +1112,7 @@ let mergeTests =
         let fullLeaf = [|1..Literals.blockSize|] |> RRBNode<int>.MkLeaf nullOwner
         let fullLeafMinusOne = [|1..Literals.blockSize-1|] |> RRBNode<int>.MkLeaf nullOwner
         let vR_root = RRBRelaxedNode<int>(ref null, [|fullLeaf; fullLeaf; fullLeafMinusOne|], [|Literals.blockSize; Literals.blockSize*2; Literals.blockSize*3-1|])
-        let vR = RRBPersistentVector<int>(Literals.blockSize * 3 + 1, Literals.blockSizeShift, vR_root, [|1;2|], Literals.blockSize * 3 - 1) :> RRBVector<int>
+        let vR = RRBPersistentVector<int>(Literals.blockSize * 3 + 1, Literals.shiftSize, vR_root, [|1;2|], Literals.blockSize * 3 - 1) :> RRBVector<int>
         RRBVectorProps.checkProperties vL "Left half of merge"
         // vR does not pass property checks, because we have a property that verifies that no could-have-been-full RRBRelaxedNodes are created.
         // So we disable the property checks for vR for this test only, because we *do* want its root to be an RRBRelaxedNode.
@@ -1823,45 +1823,45 @@ let splitJoinTests =
     testCase "remove can shorten trees even when it doesn't rebalance" <| fun _ ->
         let vec = RRBVectorGen.treeReprStrToVec "[M/2 M/2+1] T1" :?> RRBPersistentVector<int>
         // RRBVectorProps.checkProperties vec "Original vector"  // Original vector is *not* compliant with the "vectors shouldn't be too tall" property
-        Expect.equal vec.Shift (Literals.blockSizeShift * 2) "Original vector should have height of 2"
+        Expect.equal vec.Shift (Literals.shiftSize * 2) "Original vector should have height of 2"
         let vec' = vec |> RRBVector.remove 0 :?> RRBPersistentVector<int>
         RRBVectorProps.checkProperties vec' "Vector after one item removed at idx 0"
-        Expect.equal vec'.Shift Literals.blockSizeShift "After removal, vector should have height of 1"
+        Expect.equal vec'.Shift Literals.shiftSize "After removal, vector should have height of 1"
         Expect.equal vec'.Root.NodeSize 2 "Removal should not rebalance this tree"
 
     testCase "pop will slide nodes into tail if it needs to" <| fun _ ->
         let vec = RRBVectorGen.treeReprStrToVec "[M*M-1 M-1] [M] T1" :?> RRBPersistentVector<int>
         RRBVectorProps.checkProperties vec "Original vector"
-        Expect.equal vec.Shift (Literals.blockSizeShift * 2) "Original vector should have height of 2"
+        Expect.equal vec.Shift (Literals.shiftSize * 2) "Original vector should have height of 2"
         let vec' = vec |> RRBVector.pop :?> RRBPersistentVector<int>
         RRBVectorProps.checkProperties vec' "Vector after one item popped"
         Expect.equal vec'.Tail.Length (Literals.blockSize - 1) "After pop, 1 item should have been slid back into the vector"
-        Expect.equal vec'.Shift (Literals.blockSizeShift) "After pop, vector should have height of 1"
+        Expect.equal vec'.Shift (Literals.shiftSize) "After pop, vector should have height of 1"
 
     testCase "remove can rebalance trees when they become too unbalanced" <| fun _ ->
         let vec = RRBVectorGen.treeReprStrToVec "M/4 M/4+1 M/4+1 M/4 T1" :?> RRBPersistentVector<int>
         RRBVectorProps.checkProperties vec "Original vector"
-        Expect.equal vec.Shift (Literals.blockSizeShift) "Original vector should have height of 1"
+        Expect.equal vec.Shift (Literals.shiftSize) "Original vector should have height of 1"
         let vec' = vec |> RRBVector.remove 0 :?> RRBPersistentVector<int>
         RRBVectorProps.checkProperties vec' "Vector after one item removed at idx 0"
-        Expect.equal vec'.Shift Literals.blockSizeShift "After first removal, vector should have height of 1"
+        Expect.equal vec'.Shift Literals.shiftSize "After first removal, vector should have height of 1"
         Expect.equal vec'.Root.NodeSize 4 "First removal should not rebalance this tree"
         let vec'' = vec' |> RRBVector.remove 0 :?> RRBPersistentVector<int>
         RRBVectorProps.checkProperties vec'' "Vector after second item removed at idx 0"
-        Expect.equal vec''.Shift Literals.blockSizeShift "After second removal, vector should have height of 1"
+        Expect.equal vec''.Shift Literals.shiftSize "After second removal, vector should have height of 1"
         Expect.isLessThan vec''.Root.NodeSize 4 "Second removal should rebalance this tree"
 
     testCase "removeWithoutRebalance can remove without rebalancing trees that the normal remove would have rebalanced" <| fun _ ->
         let vec = RRBVectorGen.treeReprStrToVec "M/4 M/4+1 M/4+1 M/4 T1" :?> RRBPersistentVector<int>
         RRBVectorProps.checkProperties vec "Original vector"
-        Expect.equal vec.Shift (Literals.blockSizeShift) "Original vector should have height of 1"
+        Expect.equal vec.Shift (Literals.shiftSize) "Original vector should have height of 1"
         let vec' = vec.RemoveWithoutRebalance 0 :?> RRBPersistentVector<int>
         RRBVectorProps.checkProperties vec' "Vector after one item removed at idx 0"
-        Expect.equal vec'.Shift Literals.blockSizeShift "After first removal, vector should have height of 1"
+        Expect.equal vec'.Shift Literals.shiftSize "After first removal, vector should have height of 1"
         Expect.equal vec'.Root.NodeSize 4 "First removal should not rebalance this tree"
         let vec'' = vec'.RemoveWithoutRebalance 0 :?> RRBPersistentVector<int>
         RRBVectorProps.checkProperties vec'' "Vector after second item removed at idx 0"
-        Expect.equal vec''.Shift Literals.blockSizeShift "After second removal, vector should have height of 1"
+        Expect.equal vec''.Shift Literals.shiftSize "After second removal, vector should have height of 1"
         Expect.equal vec''.Root.NodeSize 4 "Second removal should not rebalance this tree"
 
     testCase "manual test for split + remove idx 0 of left + join" <| fun _ ->
@@ -2298,14 +2298,14 @@ let longRunningTests =
     // big join, test 1 passed in 00:03:27.6860000
     // NOTE: This one is important as it exercises a rarely-tested case in HasRoomToMergeTheTail. Promote it to a regression test
     testCase "big join, test 1" <| fun _ ->
-        let bigNum = 5 <<< (Literals.blockSizeShift * 3)
+        let bigNum = 5 <<< (Literals.shiftSize * 3)
         let v1 = seq {0..bigNum+6} |> RRBVector.ofSeq  // Top level has 5 completely full FullNodes, tail has 7 items
         let v2 = RRBVectorGen.treeReprStrToVec "[M 2 M/2*M-6 M-1 M-2 M-1 M/2-1] [M*M-6 M-1 M-3 M M M-3 M] [M-2 M-3 M-2 M-2 M-1 M-2*M-6 M] TM"
         doJoinTest v1 v2
 
     // big join, test 2 passed in 00:00:40.3750000
     testCase "big join, test 2" <| fun _ ->
-        let bigNum = 1 <<< (Literals.blockSizeShift * 3)
+        let bigNum = 1 <<< (Literals.shiftSize * 3)
         let v1 = RRBVectorGen.treeReprStrToVec "M M-1 M*M-5 M-1*2 M T4"
         let v2 = seq {0..bigNum+2} |> RRBVector.ofSeq
         doJoinTest v1 v2
