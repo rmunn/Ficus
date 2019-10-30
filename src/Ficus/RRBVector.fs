@@ -837,21 +837,20 @@ and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tai
                 // Can the tail be merged into the two twig nodes? Now's the time to find out, while we can still push it down to form a new root
                 let tailCanFit = ((this.Root :?> RRBFullNode<'T>).RightmostTwig this.Shift).HasRoomToMergeTheTail Literals.shiftSize tailNode ((right.Root :?> RRBFullNode<'T>).LeftmostTwig right.Shift)
                 let newRoot, newShift =
-                    let mergedTree =
+                    let mergedShift, mergedTree =
                         if tailCanFit
-                        then (this.Root :?> RRBFullNode<'T>).MergeTree this.Owner this.Shift (Some tailNode) right.Shift (right.Root :?> RRBFullNode<'T>) true
+                        then max this.Shift right.Shift, (this.Root :?> RRBFullNode<'T>).MergeTree this.Owner this.Shift (Some tailNode) right.Shift (right.Root :?> RRBFullNode<'T>) true
                         else
                             let tmpRoot, tmpShift = (this.Root :?> RRBFullNode<'T>).AppendLeaf this.Owner this.Shift tailNode
-                            (tmpRoot :?> RRBFullNode<'T>).MergeTree this.Owner tmpShift None right.Shift (right.Root :?> RRBFullNode<'T>) true
+                            max tmpShift right.Shift, (tmpRoot :?> RRBFullNode<'T>).MergeTree this.Owner tmpShift None right.Shift (right.Root :?> RRBFullNode<'T>) true
                     match mergedTree with
                     | newRoot, None ->
-                        newRoot, (max this.Shift right.Shift)
+                        newRoot, mergedShift
                     | newLeft, Some newRight ->
-                        let oldShift = max this.Shift right.Shift
                         // NOTE: Here we really do want newRight to be the instance on which we call NewParent.
                         // We've already shrunk newLeft's inside MergeTree, so newLeft is no longer an expanded node by now.
-                        let newRoot = (newRight :?> RRBFullNode<'T>).NewParent this.Owner oldShift [|newLeft; newRight|]
-                        newRoot, (RRBMath.up oldShift)
+                        let newRoot = (newRight :?> RRBFullNode<'T>).NewParent this.Owner mergedShift [|newLeft; newRight|]
+                        newRoot, (RRBMath.up mergedShift)
                 this.TailOffset <- this.Count + right.TailOffset
                 this.Count <- newLen
                 this.Shift <- newShift

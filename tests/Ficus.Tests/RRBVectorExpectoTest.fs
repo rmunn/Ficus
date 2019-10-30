@@ -510,6 +510,19 @@ let regressionTests =
         let vR = reprR |> RRBVectorGen.looserTreeReprStrToVec
         doJoinTest vL vR
 
+    testCase "Split+concat regression test on transient vectors" <| fun _ ->
+        let vec = (RRBVectorGen.looserTreeReprStrToVec TestData.largeVector :?> RRBPersistentVector<_>).Transient()
+        let len = vec.Length
+        let arr = vec |> RRBVector.toArray
+        let chunkCount = (len / 100) |> max 3
+        let arrChunks = arr |> Array.chunkBySize chunkCount
+        let vecChunks = vec |> RRBVector.chunkBySize chunkCount
+        let expected = arrChunks |> Array.concat
+        let actualVec = vecChunks |> RRBVector.concat
+        Expect.equal actualVec.Length len "RRBVector.concat should have produced a vector with same length as original vector"
+        let actual = actualVec |> RRBVector.toArray
+        Expect.equal actual expected "RRBVector.concat did not produce the right results"
+
     testCase "Split+push+join regression test" <| fun _ ->
         let bigVecRepr = """
             [M M M M 30 M M M 29 M M M M M M M-1 M M 27 M M-1 M 30 M-1 29 M M M M M 30 M]
