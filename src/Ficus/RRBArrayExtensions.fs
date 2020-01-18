@@ -262,9 +262,10 @@ module Array =
             Array.blit a2 (idx - len1) resultR (idxInR + 1) (lenResultR - idxInR - 1)
             resultL, resultR
 
+    // Finds a run of numbers whose sum is >= N in a single pass through the array; usually finds a run of minimal length, though
+    // in some cases it can find a run that's just a little bit longer than the minimal possible run.
     // Basic algorithm found at https://stackoverflow.com/questions/13023188/smallest-subset-of-array-whose-sum-is-no-less-than-key
-    // TODO: Rename to smallestRunOfAtLeastN since the test is not actually "greater than" N, but it's ">= N"
-    let smallestRunGreaterThan (n : byte) (arr : byte[]) =
+    let smallestRunOfAtLeast (n : byte) (arr : byte[]) =
         let mutable acc = 0uy
         let mutable p = 0
         let mutable q = 0
