@@ -405,3 +405,30 @@ let arbTreeRepr =
     { new Arbitrary<TreeRepresentation>() with
         override x.Generator = Gen.sized genTreeReprOfLength
         override x.Shrinker t = shrinkTreeRepr t }
+
+// *** Arrays for testing the smallestRunOfAtLeast algorithm ***
+// Must be of length M or less, and each number in then is from 0..M-1, weighted towards 0
+// We want twice as likely to have 0 as 1, twice as likely to have 1 as 2, and so on
+// Because the numbers represent *empty slots* in a node, so a node with M children is a 0,
+// a node with M-1 children is a 1, etc.
+
+let genBools = Gen.listOfLength Literals.blockSize Arb.generate<bool>
+let genNumForRunTesting = gen {
+    let! bools = genBools
+    let trues = bools |> List.takeWhile id
+    return (List.length trues)
+    // This has a 1/2 chance of returning 0, a 1/4 of returning 1, a 1/8 chance of returning 2, and so on
+}
+
+let genListForRunTesting = Gen.sized (fun n ->
+    let boundedSize = n |> min Literals.blockSize |> max 2
+    gen {
+        let! size = Gen.frequency [
+                2, Gen.choose(1, boundedSize)
+                1, Gen.constant(boundedSize - 1)
+                1, Gen.constant(boundedSize)
+            ]
+        return! Gen.listOfLength size genNumForRunTesting
+    })
+
+let shrinkListForRunTesting (lst : int list) = Arb.shrink lst

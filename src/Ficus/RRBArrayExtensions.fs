@@ -287,11 +287,4 @@ module Array =
                     bestIdx <- p
             acc <- acc - arr.[p]
             p <- p + 1
-        // DEBUG: Use this if-else block when we're thoroughly testing the rebalance algorithm; delete it and uncomment the real implementation (below) when we're done.
-        if arr |> Seq.skip bestIdx |> Seq.truncate bestLen |> Seq.sum >= n then
-            bestIdx, bestLen
-        else
-            -1, 999999
-        // bestIdx, bestLen  // DEBUG: This is the "real" implementation, but the above is what we'll use
-    // TODO: Write a unit test or two for this implementation, and make sure that [0..9] is among the tests we use.
-    // Also, random tests that compare this implementation to a brute-force O(N^2) search and make sure that it finds something of minimal length. Bonus if it finds the leftmost possible solution.
+        bestIdx, bestLen

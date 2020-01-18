@@ -20,6 +20,7 @@ type VecPlusArrAndIdx = VecPlusArrAndIdx of vec:RRBVector<int> * arr:int[] * idx
 type NonEmptyVecPlusArrAndIdx = NonEmptyVecPlusArrAndIdx of vec:RRBVector<int> * arr:int[] * idx:int
 type VecAndIdx = VecAndIdx of vec:RRBVector<int> * idx:int
 type NonEmptyVecAndIdx = NonEmptyVecAndIdx of vec:RRBVector<int> * idx:int
+type ListForRunTesting = ListForRunTesting of int list
 
 // TODO: Determine if we can use Arb.from<PositiveInt> here, or Gen.nonEmptyListOf, or something
 let genArray = Gen.sized <| fun s -> gen {
@@ -94,6 +95,10 @@ type MyGenerators =
         { new Arbitrary<NonEmptyVecPlusArrAndIdx>() with
             override x.Generator = genNonEmptyVecPlusArrAndIdx
             override x.Shrinker t = shrinkNonEmptyVec t }
+    static member arbListForRunTesting() =
+        { new Arbitrary<ListForRunTesting>() with
+            override x.Generator = RRBVectorGen.genListForRunTesting |> Gen.map ListForRunTesting
+            override x.Shrinker (ListForRunTesting lst) = RRBVectorGen.shrinkListForRunTesting lst |> Seq.map ListForRunTesting }
     static member arbSizedRRBVec() =
         { new Arbitrary<RRBVector<'a>>() with
             override x.Generator = RRBVectorGen.sizedGenVec<'a>
@@ -2143,6 +2148,36 @@ let arrayTests =
         let expected = arr |> Array.copyAndInsertAt idx 512 |> Array.splitAt (((Array.length arr) >>> 1) + 1)
         let actual = arr |> Array.insertAndSplitEvenly idx 512
         Expect.equal actual expected "insertAndSplitEvenly did not produce the right results"
+
+    testCase "smallestRunOfAtLeast 32 in 0-9 array" <| fun _ ->
+        let arr = [|0uy..9uy|]
+        let expected = (5,5)  // 3+4+5+6+7+8 = 33, a run of 6 starting at idx 3... but 5+6+7+8+9 = 35, a run of 5 starting at idx 5
+        let actual = arr |> Array.smallestRunOfAtLeast 32uy
+        Expect.equal actual expected "smallestRunOfAtLeast did not produce the right results"
+
+    testProp "smallestRunOfAtLeast M in random array always finds the optimal solution" <| fun (ListForRunTesting lst) ->
+        // Test is only valid if there's at least one run to be found
+        lst |> List.sum >= Literals.blockSize ==> (fun _ ->
+            let findBestRun (arr : int[]) =  // Exhaustive O(N^2) search algorithm
+                let runSum (arr : int[]) idx len =
+                    let mutable sum = 0
+                    for i = idx to idx+len-1 do
+                        sum <- sum + arr.[i]
+                    sum
+                let mutable bestIdx = 0
+                let mutable bestLen = arr.Length
+                for i = 0 to arr.Length - 1 do
+                    for len = 1 to arr.Length - i do
+                        if len < bestLen && runSum arr i len >= Literals.blockSize then
+                            bestIdx <- i
+                            bestLen <- len
+                bestIdx, bestLen
+
+            let arr = lst |> List.toArray
+            let expected = arr |> findBestRun
+            let actual = arr |> Array.map byte |> Array.smallestRunOfAtLeast (byte Literals.blockSize)
+            Expect.equal actual expected "smallestRunOfAtLeast did not produce the best possible result"
+        )
   ]
 
 let apiTests =

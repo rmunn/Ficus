@@ -48,8 +48,7 @@ module RRBMath =
         let idx1, len1 = sizes |> Array.smallestRunOfAtLeast (byte Literals.blockSize)
         let idx2, len2 = sizes |> Array.smallestRunOfAtLeast (byte (Literals.blockSize <<< 1))
         // Drop two slots if we can do so in less than twice the work needed to drop a single slot
-        // if len2 < (len1 * 2) then  // TODO: Uncomment this one once we're done testing the rebalance algorithm
-        if len2 < (len1 * 2) && len2 < 1000 && idx2 >= 0 then  // DEBUG: While testing the rebalance algorithm, we need this because smallestRunOfAtLeast will return (-1, 999999) for "bad" runs
+        if len2 < (len1 * 2) then
             idx2, len2, 2
         else
             idx1, len1, 1
