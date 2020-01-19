@@ -215,8 +215,10 @@ module VecCommands =
                 let s = this.ToString()  // For efficiency since we use this in multiple sprintf calls
                 let vL' = cmdsL |> List.fold (fun vec cmd -> if cmd.Pre (RRBVector.toArray vec) then let result = cmd.RunActual vec in RRBVectorProps.checkProperties result (sprintf "After %s on left half of %s" (cmd.ToString()) s); result else vec) (vL :?> RRBTransientVector<_>)
                 let vR' = cmdsR |> List.fold (fun vec cmd -> if cmd.Pre (RRBVector.toArray vec) then let result = cmd.RunActual vec in RRBVectorProps.checkProperties result (sprintf "After %s on right half of %s" (cmd.ToString()) s); result else vec) (vR :?> RRBTransientVector<_>)
+                let reprL = RRBVectorGen.vecToTreeReprStr vL'
+                let reprR = RRBVectorGen.vecToTreeReprStr vR'
                 let result = vL'.Append vR' :?> RRBTransientVector<_>
-                RRBVectorProps.checkProperties result (sprintf "After appending at the end of %s" s)
+                RRBVectorProps.checkProperties result (sprintf "After appending %A to %A at the end of %s" reprL reprR s)
                 result
             override __.RunModel arr =
                 let idx' = (if idx < 0 then idx + arr.Length else idx) |> min arr.Length |> max 0
