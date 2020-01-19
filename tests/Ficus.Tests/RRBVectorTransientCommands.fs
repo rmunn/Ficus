@@ -207,22 +207,17 @@ module VecCommands =
 
     let genSlice = Gen.frequency [ 1, Gen.constant None; 7, Gen.choose (-100,100) |> Gen.map Some] |> Gen.two |> Gen.map slice
 
-    let logCmd (name : string) vec =
-        logger.warn (eventX "About to run {cmd} on {repr} = {vec}"
-            >> setField "cmd" (name)
-            >> setField "repr" (sprintf "%A" <| RRBVectorGen.vecToTreeReprStr vec)
-            >> setField "vec" (sprintf "%A" vec)
-            )
-
     let split (idx : int, cmdsL : Cmd list, cmdsR : Cmd list) =
         { new Cmd() with
-            override __.RunActual vec =
-                // if idx = -5 then logCmd "split at -5" vec
+            override this.RunActual vec =
                 let idx' = (if idx < 0 then idx + vec.Length else idx) |> min vec.Length |> max 0
                 let vL, vR = vec.Split idx'
-                let vL' = cmdsL |> List.fold (fun vec cmd -> if cmd.Pre (RRBVector.toArray vec) then cmd.RunActual vec else vec) (vL :?> RRBTransientVector<_>)
-                let vR' = cmdsR |> List.fold (fun vec cmd -> if cmd.Pre (RRBVector.toArray vec) then cmd.RunActual vec else vec) (vR :?> RRBTransientVector<_>)
-                vL'.Append vR' :?> RRBTransientVector<_>
+                let s = this.ToString()  // For efficiency since we use this in multiple sprintf calls
+                let vL' = cmdsL |> List.fold (fun vec cmd -> if cmd.Pre (RRBVector.toArray vec) then let result = cmd.RunActual vec in RRBVectorProps.checkProperties result (sprintf "After %s on left half of %s" (cmd.ToString()) s); result else vec) (vL :?> RRBTransientVector<_>)
+                let vR' = cmdsR |> List.fold (fun vec cmd -> if cmd.Pre (RRBVector.toArray vec) then let result = cmd.RunActual vec in RRBVectorProps.checkProperties result (sprintf "After %s on right half of %s" (cmd.ToString()) s); result else vec) (vR :?> RRBTransientVector<_>)
+                let result = vL'.Append vR' :?> RRBTransientVector<_>
+                RRBVectorProps.checkProperties result (sprintf "After appending at the end of %s" s)
+                result
             override __.RunModel arr =
                 let idx' = (if idx < 0 then idx + arr.Length else idx) |> min arr.Length |> max 0
                 let arrL, arrR = arr |> Array.splitAt idx'
@@ -296,7 +291,13 @@ let propFromCmdFrequencies (vec : RRBPersistentVector<int>) (lst : (int * Gen<Cm
     // let len = vec |> RRBVector.length
     let arr = vec |> RRBVector.toArray
     { new ICommandGenerator<RRBTransientVector<int>, int[]> with
-        member __.InitialActual = vec.Transient()
+        member __.InitialActual =
+            let t = vec.Transient()
+            // logger.warn (eventX "About to run test on {repr} = {vec}"
+            //     >> setField "repr" (sprintf "%A" <| RRBVectorGen.vecToTreeReprStr t)
+            //     >> setField "vec" (sprintf "%A" t)
+            //     )
+            t
         member __.InitialModel = arr
         member __.Next arr =
             // let len = arr.Length
