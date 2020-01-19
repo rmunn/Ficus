@@ -1411,7 +1411,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         let rLen = r.Length
         if rLen > 0 then
             let lastChild = r.[rLen - 1]
-            let shrunkLastChild = lastChild.Shrink owner
+            let shrunkLastChild = lastChild.ShrinkRightSpine owner (down shift)
             if not (isSameObj lastChild shrunkLastChild) then
                 r.[rLen - 1] <- shrunkLastChild
         let node' = this.KeepNLeft owner shift n
@@ -1446,7 +1446,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         let size = node'.NodeSize
         // Expanded nodes always have their rightmost child, and only that child, expanded
         let lastChild = node'.LastChild
-        let shrunkLastChild = lastChild.Shrink owner
+        let shrunkLastChild = lastChild.ShrinkRightSpine owner (down shift)
         if not (isSameObj lastChild shrunkLastChild) then
             node'.Children.[size - 1] <- shrunkLastChild
         let newSize = size + n
@@ -1477,7 +1477,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         let size = node'.NodeSize
         // Expanded nodes always have their rightmost child, and only that child, expanded
         let lastChild = node'.LastChild
-        let shrunkLastChild = lastChild.Shrink owner
+        let shrunkLastChild = lastChild.ShrinkRightSpine owner (down shift)
         if not (isSameObj lastChild shrunkLastChild) then
             node'.Children.[size - 1] <- shrunkLastChild
         let newSize = size + n
@@ -1806,7 +1806,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         let size = node'.NodeSize
         // Expanded nodes always have their rightmost child, and only that child, expanded
         let lastChild = node'.LastChild
-        let shrunkLastChild = lastChild.Shrink owner
+        let shrunkLastChild = lastChild.ShrinkRightSpine owner (down shift)
         if not (isSameObj lastChild shrunkLastChild) then
             node'.Children.[size - 1] <- shrunkLastChild
         let newSize = size + n
@@ -1833,7 +1833,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         let size = node'.NodeSize
         // Expanded nodes always have their rightmost child, and only that child, expanded
         let lastChild = node'.LastChild
-        let shrunkLastChild = lastChild.Shrink owner
+        let shrunkLastChild = lastChild.ShrinkRightSpine owner (down shift)
         if not (isSameObj lastChild shrunkLastChild) then
             node'.Children.[size - 1] <- shrunkLastChild
         let newSize = size + n
