@@ -77,13 +77,15 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     static member internal MkEmptyWithToken token = RRBPersistentVector<'T>(token)
 
     // TODO: Expose .Transient() and .Persistent() on RRBVector interface
-    member this.Transient() =
-        let newToken = mkOwnerToken()
-        let newRoot = (this.Root :?> RRBFullNode<'T>).ExpandRightSpine newToken this.Shift
+    member this.TransientWithToken(token : OwnerToken) =
+        let newRoot = (this.Root :?> RRBFullNode<'T>).ExpandRightSpine token this.Shift
         let tailLen = this.Count - this.TailOffset
         let newTail = Array.zeroCreate Literals.blockSize
         this.Tail.CopyTo(newTail, 0)
         RRBTransientVector<'T>(this.Count, this.Shift, newRoot, newTail, this.TailOffset)
+    member this.Transient() =
+        let newToken = mkOwnerToken()
+        this.TransientWithToken(newToken)
 
     member internal this.AdjustTree() =
         let v : RRBVector<'T> = this.ShiftNodesFromTailIfNeeded()
