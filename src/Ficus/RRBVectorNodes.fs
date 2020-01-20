@@ -107,6 +107,7 @@ type RRBNode<'T>(ownerToken : OwnerToken) =
     abstract member Shrink : OwnerToken -> RRBNode<'T>
     abstract member Expand : OwnerToken -> RRBNode<'T>
     abstract member ShrinkRightSpine : OwnerToken -> int -> RRBNode<'T>
+    abstract member ShrinkRightSpineOfChild : OwnerToken -> int -> RRBNode<'T>
 
     abstract member NodeSize : int          // How many children does this single node have?
     abstract member TreeSize : int -> int   // How many total items are found in this node's entire descendant tree?
@@ -215,6 +216,18 @@ and [<StructuredFormatDisplay("FullNode({StringRepr})")>] RRBFullNode<'T>(ownerT
     override this.Expand owner =
         let node' = this.GetEditableNode owner :?> RRBFullNode<'T>
         RRBExpandedFullNode<'T>(owner, node'.Children) :> RRBNode<'T>
+
+    override this.ShrinkRightSpineOfChild owner shift =
+        if shift <= Literals.shiftSize || this.NodeSize = 0 then
+            this :> RRBNode<'T>
+        else
+            let child' = (this.LastChild :?> RRBFullNode<'T>).ShrinkRightSpine owner (down shift)
+            if isSameObj child' this.LastChild then
+                this :> RRBNode<'T>
+            else
+                let node' = this.GetEditableNode owner
+                (node' :?> RRBFullNode<'T>).Children.[node'.NodeSize - 1] <- child'
+                node'
 
     override this.ShrinkRightSpine owner shift =
         if shift <= Literals.shiftSize || this.NodeSize = 0 then
@@ -822,15 +835,18 @@ What if nextTreeIdx = this.TreeSize shift? Can that happen? I think it can't, bu
         this.Rebalance2Plus1 owner shift None right
 
     member this.Rebalance2Plus1 (owner : OwnerToken) (shift : int) (middle : RRBLeafNode<'T> option) (right : RRBFullNode<'T>) =
+        // The left node, but not the right, needs to have its right spine shrunk before merging
+        // Note, though, that we do *not* want to shrink *this* node yet; that will be done in MkNodeForRebalance
+        let left = this.ShrinkRightSpineOfChild owner shift :?> RRBFullNode<'T> // bugfix
         let totalLength, childrenSeq =
             match middle with
-            | None -> this.NodeSize + right.NodeSize, Seq.append (this.Children |> Seq.truncate this.NodeSize) (right.Children |> Seq.truncate right.NodeSize)
-            | Some leaf -> this.NodeSize + 1 + right.NodeSize, seq {
-                yield! (this.Children  |> Seq.truncate this.NodeSize)
+            | None -> left.NodeSize + right.NodeSize, Seq.append (left.Children |> Seq.truncate left.NodeSize) (right.Children |> Seq.truncate right.NodeSize)
+            | Some leaf -> left.NodeSize + 1 + right.NodeSize, seq {
+                yield! (left.Children  |> Seq.truncate left.NodeSize)
                 yield leaf
                 yield! (right.Children |> Seq.truncate right.NodeSize)
             }
-        this.RebalanceImpl owner shift totalLength childrenSeq
+        left.RebalanceImpl owner shift totalLength childrenSeq
 
     member this.RebalanceImpl (owner : OwnerToken) (shift : int) (totalLength : int) (childrenSeq : RRBNode<'T> seq) =
         let sizes = childrenSeq |> Seq.map (fun node -> node.NodeSize)
@@ -1581,7 +1597,7 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
 
     override this.MkNodeForRebalance owner shift arr len =
         for i = 0 to len - 2 do
-            arr.[i] <- arr.[i].Shrink owner
+            arr.[i] <- arr.[i].ShrinkRightSpine owner (down shift)  // TODO: May no longer be needed now that we ShrinkRightSpineOfChild in Rebalance2
         if isSameObj arr this.Children && this.IsEditableBy owner then
             for i = len to this.NodeSize - 1 do
                 // NOTE: This loop can never run, but we keep it in anyway so it parallels MkNodeForRebalance in expanded relaxed nodes (where the for loop *can* run)
@@ -1914,7 +1930,7 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         // This is almost certainly needed as well (symmetry with ExpandedFullNode version)...
         // TODO: ... but let's comment it out and watch it fail to be sure
         for i = 0 to len - 2 do
-            arr.[i] <- arr.[i].Shrink owner
+            arr.[i] <- arr.[i].ShrinkRightSpine owner (down shift)  // TODO: May no longer be needed now that we ShrinkRightSpineOfChild in Rebalance2
         if isSameObj arr this.Children && this.IsEditableBy owner then
             for i = len to this.NodeSize - 1 do
                 arr.[i] <- null
@@ -1961,6 +1977,7 @@ and [<StructuredFormatDisplay("{StringRepr}")>] RRBLeafNode<'T>(ownerToken : Own
     override this.Shrink owner = this.GetEditableNode owner  // TODO: For efficiency, return "this" if owner is same as ours *even* if it's nullOwner
     override this.Expand owner = this.GetEditableNode owner
     override this.ShrinkRightSpine owner _shift = this.GetEditableNode owner
+    override this.ShrinkRightSpineOfChild owner _shift = this.GetEditableNode owner
 
     override this.GetEditableNode owner =
         if this.IsEditableBy owner
