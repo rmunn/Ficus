@@ -80,7 +80,6 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
     member this.Transient() =
         let newToken = mkOwnerToken()
         let newRoot = (this.Root :?> RRBFullNode<'T>).ExpandRightSpine newToken this.Shift
-        let tailLen = this.Count - this.TailOffset
         let newTail = Array.zeroCreate Literals.blockSize
         this.Tail.CopyTo(newTail, 0)
         RRBTransientVector<'T>(this.Count, this.Shift, newRoot, newTail, this.TailOffset)
