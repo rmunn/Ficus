@@ -1593,8 +1593,6 @@ and [<StructuredFormatDisplay("ExpandedFullNode({StringRepr})")>] RRBExpandedFul
         if this.IsEditableBy owner then this.Children else Array.zeroCreate length
 
     override this.MkNodeForRebalance owner shift arr len =
-        for i = 0 to len - 2 do
-            arr.[i] <- arr.[i].ShrinkRightSpine owner (down shift)  // TODO: May no longer be needed now that we ShrinkRightSpineOfChild in Rebalance2
         if isSameObj arr this.Children && this.IsEditableBy owner then
             for i = len to this.NodeSize - 1 do
                 // NOTE: This loop can never run, but we keep it in anyway so it parallels MkNodeForRebalance in expanded relaxed nodes (where the for loop *can* run)
@@ -1919,10 +1917,6 @@ and [<StructuredFormatDisplay("ExpandedRelaxedNode({StringRepr})")>] RRBExpanded
         if this.IsEditableBy owner then this.Children else Array.zeroCreate length
 
     override this.MkNodeForRebalance owner shift arr len =
-        // This is almost certainly needed as well (symmetry with ExpandedFullNode version)...
-        // TODO: ... but let's comment it out and watch it fail to be sure
-        for i = 0 to len - 2 do
-            arr.[i] <- arr.[i].ShrinkRightSpine owner (down shift)  // TODO: May no longer be needed now that we ShrinkRightSpineOfChild in Rebalance2
         if isSameObj arr this.Children && this.IsEditableBy owner then
             for i = len to this.NodeSize - 1 do
                 arr.[i] <- null
