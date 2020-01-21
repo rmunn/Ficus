@@ -228,7 +228,7 @@ let startSplitTesting (vec : RRBPersistentVector<int>) (cmds : (Cmd list)[]) =
     let origVec = vec
     let origArr = vec |> RRBVector.toArray
     let mutable arr = origArr |> Array.copy
-    let mutable tvec = vec.Transient()
+    let mutable tvec = vec.Transient() :?> RRBTransientVector<int>
     let eq, msg = (origArr = (tvec |> RRBVector.toArray)), "Initial transient didn't equal initial persistent"
     if not eq then failwith msg
     let parts = splitVec tvec
@@ -278,8 +278,8 @@ let startSplitTesting (vec : RRBPersistentVector<int>) (cmds : (Cmd list)[]) =
                 let joined =
                     if joinedT |> isTransient then
                         RRBVectorProps.checkProperties joinedT "Combined transient result of split test"
-                        (joinedT :?> RRBTransientVector<_>).Persistent()
-                    else joinedT :?> RRBPersistentVector<_>
+                        joinedT.Persistent()
+                    else joinedT
                 RRBVectorProps.checkProperties joined "Combined persistent result of split test"
                 match replyChannel with
                 | None -> failwithf "Split test had no reply channel to report results!"

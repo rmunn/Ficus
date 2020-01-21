@@ -280,7 +280,7 @@ let propFromCmds (vec : RRBPersistentVector<int>) (lst : Cmd list) =
     // let len = vec |> RRBVector.length
     let arr = vec |> RRBVector.toArray
     { new ICommandGenerator<RRBTransientVector<int>, int[]> with
-        member __.InitialActual = vec.Transient()
+        member __.InitialActual = vec.Transient() :?> RRBTransientVector<int>
         member __.InitialModel = arr
         member __.Next arr =
             // let len = arr.Length
@@ -294,7 +294,7 @@ let propFromCmdFrequencies (vec : RRBPersistentVector<int>) (lst : (int * Gen<Cm
     let arr = vec |> RRBVector.toArray
     { new ICommandGenerator<RRBTransientVector<int>, int[]> with
         member __.InitialActual =
-            let t = vec.Transient()
+            let t = vec.Transient() :?> RRBTransientVector<int>
             // logger.warn (eventX "About to run test on {repr} = {vec}"
             //     >> setField "repr" (sprintf "%A" <| RRBVectorGen.vecToTreeReprStr t)
             //     >> setField "vec" (sprintf "%A" t)
@@ -308,12 +308,12 @@ let propFromCmdFrequencies (vec : RRBPersistentVector<int>) (lst : (int * Gen<Cm
         }
 
 let doTestL (vec : RRBVector<int>) =
-    let vec = if vec |> isTransient then (vec :?> RRBTransientVector<_>).Persistent() else vec :?> RRBPersistentVector<_>
+    let vec = (if vec |> isTransient then vec.Persistent() else vec) :?> RRBPersistentVector<_>
     propFromCmds vec cmdsLarge |> Command.toProperty
 let doTestXL (vec : RRBVector<int>) =
-    let vec = if vec |> isTransient then (vec :?> RRBTransientVector<_>).Persistent() else vec :?> RRBPersistentVector<_>
+    let vec = (if vec |> isTransient then vec.Persistent() else vec) :?> RRBPersistentVector<_>
     propFromCmds vec cmdsExtraLarge |> Command.toProperty
 
 let doComplexTest (vec : RRBVector<int>) =
-    let vec = if vec |> isTransient then (vec :?> RRBTransientVector<_>).Persistent() else vec :?> RRBPersistentVector<_>
+    let vec = (if vec |> isTransient then vec.Persistent() else vec) :?> RRBPersistentVector<_>
     propFromCmdFrequencies vec cmdFrequenciesForComplexOperations |> Command.toProperty
