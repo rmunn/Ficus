@@ -1160,51 +1160,13 @@ let regressionTests =
             Expect.equal tree.Tail.Length (Literals.blockSize - 1) "Wrong tail length"
         | _ -> failwith "Unknown RRBVector subclass: this test needs to be taught about this variant"
 *)
-    testCase "Merging specific scenarios" <| fun _ ->
-        // A ends with [M*20] TM.
-        // B is [M M M M M 5] TM-3.
-        // Try it.
+    testCase "Merging tail into tree works correctly" <| fun _ ->
         let a = RRBVectorGen.treeReprStrToVec "[M*M] [M*M] [M*M] [M*20] TM"
         let b = RRBVectorGen.treeReprStrToVec "M M M M 5 TM-3"
         RRBVectorProps.checkProperties a "Original A"
-        // RRBVectorProps.checkProperties b "Original B"
-        // TODO: Write this test in such a way that original B *passes* properties, so that it's a fair test.
+        RRBVectorProps.checkProperties b "Original B"
         let joined = RRBVector.append a b
         RRBVectorProps.checkProperties joined "Joined"
-
-    testCase "Pairwise should not throw for 0 or 1-length vectors" <| fun _ ->
-        let empty = RRBVector.empty
-        let singleton = empty |> RRBVector.push 42
-        let pe = RRBVector.pairwise empty
-        let ps = RRBVector.pairwise singleton
-        Expect.equal (pe |> RRBVector.length) 0 "Pairwise with 0 input items should return empty vector"
-        Expect.equal (ps |> RRBVector.length) 0 "Pairwise with 1 input item should return empty vector"
-
-    testCase "Testing skipWhile" <| fun _ ->  // TODO: Move this to its appropriate place. And the pairwise test above
-        let vec = [|-5..5|] |> RRBVector.ofArray
-        RRBVectorProps.checkProperties vec "Original vector"
-        let vec' = vec |> RRBVector.skipWhile (fun x -> x <= 0)
-        RRBVectorProps.checkProperties vec' "Vector after skipWhile"
-        Expect.equal vec'.Length 5 "The skipWhile function should have returned 5 positive items"
-        let vec'' = vec |> RRBVector.skipWhile (fun x -> x < 10)
-        RRBVectorProps.checkProperties vec'' "Vector after skipWhile"
-        Expect.equal vec''.Length 0 "The second skipWhile invocation should have returned 0 items"
-        let vec''' = vec |> RRBVector.skipWhile (fun x -> x > 10)
-        RRBVectorProps.checkProperties vec''' "Vector after skipWhile"
-        Expect.equal vec'''.Length 11 "The third skipWhile invocation should have returned 11 items"
-
-    testCase "Testing takeWhile" <| fun _ ->  // TODO: Move this to its appropriate place. And the skipWhile test above
-        let vec = [|-5..5|] |> RRBVector.ofArray
-        RRBVectorProps.checkProperties vec "Original vector"
-        let vec' = vec |> RRBVector.takeWhile (fun x -> x < 0)
-        RRBVectorProps.checkProperties vec' "Vector after takeWhile"
-        Expect.equal vec'.Length 5 "The takeWhile function should have returned 5 negative items"
-        let vec'' = vec |> RRBVector.takeWhile (fun x -> x < 10)
-        RRBVectorProps.checkProperties vec'' "Vector after takeWhile"
-        Expect.equal vec''.Length 11 "The second takeWhile invocation should have returned 11 items"
-        let vec''' = vec |> RRBVector.takeWhile (fun x -> x > 10)
-        RRBVectorProps.checkProperties vec''' "Vector after takeWhile"
-        Expect.equal vec'''.Length 0 "The third takeWhile invocation should have returned 0 items"
 
     testCase "Merging short right tree will shift into tail as needed" <| fun _ ->
         let a = RRBVectorGen.treeReprStrToVec "M M T1"
@@ -1525,8 +1487,9 @@ let splitTransientTests =
 //  insert (7,11)],[push 46; remove 46; insert (54,28); insert (-81,62); insert (-44,1); push 66;
 //  insert (38,26); insert (2,6); insert (73,44); push 40; remove 47; remove 63])]
 
+    // Individual test cases that were once failures of the above properties
 
-    testCase "Figure out the name" <| fun _ ->
+    testCase "A push that pushes a new leaf onto a transient will shrink the previous right spine" <| fun _ ->
         let vec = RRBVectorGen.looserTreeReprStrToVec TestData.ridiculouslyLargeVector
         RRBVectorProps.checkProperties vec "Original persistent vector"
         let mutable t = vec.Transient() :> RRBVector<_>
@@ -1538,7 +1501,7 @@ let splitTransientTests =
         // After push 7, we're fine. THe eight push builds a new path to the root, and apparently fails to clean up the old path
         // so that we get "If a tree's root is an expanded Node variant, its right spine should contain expanded nodes but nothing else should"
 
-    testCase "Figure out the name 2" <| fun _ ->
+    testCase "A pop that promotes a singleton leaf in the right spine will expand the new right spine" <| fun _ ->
         let vec = RRBVectorGen.looserTreeReprStrToVec TestData.ridiculouslyLargeVector
         RRBVectorProps.checkProperties vec "Original persistent vector"
         let mutable t = vec.Transient() :> RRBVector<_>
@@ -1613,8 +1576,6 @@ let splitTransientTests =
             current <- current |> cmd.RunActual
             logVec (cmd.ToString()) current
             RRBVectorProps.checkProperties current <| sprintf "Vector after %s" (cmd.ToString())
-
-    // Individual test cases that were once failures of the above properties
 
     testCase "Removing one item from full-sized root of transient preserves tail" <| fun _ ->
         let arr = [| 1 .. Literals.blockSize + 6 |]
@@ -2322,6 +2283,40 @@ let apiTests =
         if a.Length > 0 then
             let a' = a.[idx..endIdx]
             Expect.vecEqualArr v' a' "Sliced vector should equal equivalent slice from array"
+
+    testCase "Pairwise should not throw for 0 or 1-length vectors" <| fun _ ->
+        let empty = RRBVector.empty
+        let singleton = empty |> RRBVector.push 42
+        let pe = RRBVector.pairwise empty
+        let ps = RRBVector.pairwise singleton
+        Expect.equal (pe |> RRBVector.length) 0 "Pairwise with 0 input items should return empty vector"
+        Expect.equal (ps |> RRBVector.length) 0 "Pairwise with 1 input item should return empty vector"
+
+    testCase "Testing skipWhile" <| fun _ ->
+        let vec = [|-5..5|] |> RRBVector.ofArray
+        RRBVectorProps.checkProperties vec "Original vector"
+        let vec' = vec |> RRBVector.skipWhile (fun x -> x <= 0)
+        RRBVectorProps.checkProperties vec' "Vector after skipWhile"
+        Expect.equal vec'.Length 5 "The skipWhile function should have returned 5 positive items"
+        let vec'' = vec |> RRBVector.skipWhile (fun x -> x < 10)
+        RRBVectorProps.checkProperties vec'' "Vector after skipWhile"
+        Expect.equal vec''.Length 0 "The second skipWhile invocation should have returned 0 items"
+        let vec''' = vec |> RRBVector.skipWhile (fun x -> x > 10)
+        RRBVectorProps.checkProperties vec''' "Vector after skipWhile"
+        Expect.equal vec'''.Length 11 "The third skipWhile invocation should have returned 11 items"
+
+    testCase "Testing takeWhile" <| fun _ ->
+        let vec = [|-5..5|] |> RRBVector.ofArray
+        RRBVectorProps.checkProperties vec "Original vector"
+        let vec' = vec |> RRBVector.takeWhile (fun x -> x < 0)
+        RRBVectorProps.checkProperties vec' "Vector after takeWhile"
+        Expect.equal vec'.Length 5 "The takeWhile function should have returned 5 negative items"
+        let vec'' = vec |> RRBVector.takeWhile (fun x -> x < 10)
+        RRBVectorProps.checkProperties vec'' "Vector after takeWhile"
+        Expect.equal vec''.Length 11 "The second takeWhile invocation should have returned 11 items"
+        let vec''' = vec |> RRBVector.takeWhile (fun x -> x > 10)
+        RRBVectorProps.checkProperties vec''' "Vector after takeWhile"
+        Expect.equal vec'''.Length 0 "The third takeWhile invocation should have returned 0 items"
   ]
 
 let nodeVecGenerationTests =
