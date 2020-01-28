@@ -1,0 +1,9 @@
+{
+    "conventions": {
+        "naming": {
+            "literalNames": {"enabled": false},
+            "memberNames": {"enabled": false},
+            "nonPublicValuesNames": {"enabled": false}
+        }
+    }
+}
