@@ -6,6 +6,10 @@
     <Optimize>true</Optimize>
     <Tailcalls>true</Tailcalls>
   </PropertyGroup>
+  <PropertyGroup>
+    <Title>Ficus</Title>
+    <Description>Fast, immutable collections based on tree structures</Description>
+  </PropertyGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Literals.fs" />
