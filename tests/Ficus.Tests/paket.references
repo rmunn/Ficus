@@ -6,3 +6,4 @@ dotnet-mono
 Microsoft.NET.Test.Sdk
 YoloDev.Expecto.TestSdk
 altcover
+Microsoft.NETFramework.ReferenceAssemblies
