@@ -266,40 +266,11 @@ let clean _ =
     ]
     |> Seq.iter Shell.rm
 
-let updateChangelog ctx =
-    let description, unreleasedChanges =
-        match changelog.Unreleased with
-        | None -> None, []
-        | Some u -> u.Description, u.Changes
-    let verStr = ctx |> getVersionNumber "RELEASE_VERSION"
-    let newVersion = SemVer.parse verStr
-    if changelog.Entries |> List.exists (fun entry -> entry.SemVer = newVersion) then
-        let entry = changelog.Entries |> List.find (fun entry -> entry.SemVer = newVersion)
-        Trace.traceErrorfn "Version %s already exists in %s, released on %A" verStr changelogFilename (if entry.Date.IsSome then entry.Date.Value.ToString("yyyy-MM-dd") else "(no date specified)")
-        failwith "Can't release with a duplicate version number"
-    if changelog.Entries |> List.exists (fun entry -> entry.SemVer > newVersion) then
-        let entry = changelog.Entries |> List.find (fun entry -> entry.SemVer > newVersion)
-        Trace.traceErrorfn "You're trying to release version %s, but a later version %s already exists, released on %A" verStr entry.SemVer.AsString (if entry.Date.IsSome then entry.Date.Value.ToString("yyyy-MM-dd") else "(no date specified)")
-        failwith "Can't release with a version number older than an existing release"
-    let versionTuple version = (version.Major, version.Minor, version.Patch)
-    let prereleaseEntries = changelog.Entries |> List.filter (fun entry -> entry.SemVer.PreRelease.IsSome && versionTuple entry.SemVer = versionTuple newVersion)
-    let prereleaseChanges = prereleaseEntries |> List.collect (fun entry -> entry.Changes |> List.filter (not << isEmptyChange))
-    let assemblyVersion, nugetVersion = Changelog.parseVersions newVersion.AsString
-    linkReferenceForLatestEntry <- mkLinkReference newVersion changelog
-    let newEntry = Changelog.ChangelogEntry.New(assemblyVersion.Value, nugetVersion.Value, Some System.DateTime.Today, description, unreleasedChanges @ prereleaseChanges, false)
-    let newChangelog = Changelog.Changelog.New(changelog.Header, changelog.Description, None, newEntry :: changelog.Entries)
-    latestEntry <- newEntry
-    newChangelog
-    |> Changelog.save changelogFilename
-    // Changelog.save doesn't write a final newline, so we add one when writing out the new link reference
-    sprintf "\n%s\n" linkReferenceForLatestEntry |> File.writeString true changelogFilename
-
 let dotnetRestore _ =
     [sln]
     |> Seq.map(fun dir -> fun () ->
         let args =
             [
-                sprintf "/p:PackageVersion=%s" latestEntry.NuGetVersion
             ] |> String.concat " "
         DotNet.restore(fun c ->
             { c with
@@ -310,6 +281,68 @@ let dotnetRestore _ =
             }) dir)
     |> Seq.iter(retryIfInCI 10)
 
+let updateChangelog ctx =
+    let description, unreleasedChanges =
+        match changelog.Unreleased with
+        | None -> None, []
+        | Some u -> u.Description, u.Changes
+    let verStr = ctx |> getVersionNumber "RELEASE_VERSION"
+    let newVersion = SemVer.parse verStr
+    changelog.Entries
+    |> List.tryFind (fun entry -> entry.SemVer = newVersion)
+    |> Option.iter (fun entry ->
+        Trace.traceErrorfn "Version %s already exists in %s, released on %s" verStr changelogFilename (if entry.Date.IsSome then entry.Date.Value.ToString("yyyy-MM-dd") else "(no date specified)")
+        failwith "Can't release with a duplicate version number"
+    )
+    changelog.Entries
+    |> List.tryFind (fun entry -> entry.SemVer > newVersion)
+    |> Option.iter (fun entry ->
+        Trace.traceErrorfn "You're trying to release version %s, but a later version %s already exists, released on %s" verStr entry.SemVer.AsString (if entry.Date.IsSome then entry.Date.Value.ToString("yyyy-MM-dd") else "(no date specified)")
+        failwith "Can't release with a version number older than an existing release"
+    )
+    let versionTuple version = (version.Major, version.Minor, version.Patch)
+    let prereleaseEntries = changelog.Entries |> List.filter (fun entry -> entry.SemVer.PreRelease.IsSome && versionTuple entry.SemVer = versionTuple newVersion)
+    let prereleaseChanges = prereleaseEntries |> List.collect (fun entry -> entry.Changes |> List.filter (not << isEmptyChange))
+    let assemblyVersion, nugetVersion = Changelog.parseVersions newVersion.AsString
+    linkReferenceForLatestEntry <- mkLinkReference newVersion changelog
+    let newEntry = Changelog.ChangelogEntry.New(assemblyVersion.Value, nugetVersion.Value, Some System.DateTime.Today, description, unreleasedChanges @ prereleaseChanges, false)
+    let newChangelog = Changelog.Changelog.New(changelog.Header, changelog.Description, None, newEntry :: changelog.Entries)
+    latestEntry <- newEntry
+    newChangelog
+    |> Changelog.save changelogFilename
+
+    // Now update the link references at the end of the file
+    linkReferenceForLatestEntry <- mkLinkReference newVersion changelog
+    let linkReferenceForUnreleased = sprintf "[Unreleased]: %s/compare/%s...%s" gitHubRepoUrl (tagFromVersionNumber newVersion.AsString) "HEAD"
+    let tailLines = File.read changelogFilename |> List.ofSeq |> List.rev
+
+    let isRef line = System.Text.RegularExpressions.Regex.IsMatch(line, @"^\[.+?\]:\s?[a-z]+://.*$")
+    let linkReferenceTargets =
+        tailLines
+        |> List.skipWhile String.isNullOrWhiteSpace
+        |> List.takeWhile isRef
+        |> List.rev  // Now most recent entry is at the head of the list
+
+    let newLinkReferenceTargets =
+        match linkReferenceTargets with
+        | [] ->
+            [linkReferenceForUnreleased; linkReferenceForLatestEntry]
+        | first :: rest when first |> String.startsWith "[Unreleased]:" ->
+            linkReferenceForUnreleased :: linkReferenceForLatestEntry :: rest
+        | first :: rest ->
+            linkReferenceForUnreleased :: linkReferenceForLatestEntry :: first :: rest
+
+    let blankLineCount = tailLines |> Seq.takeWhile String.isNullOrWhiteSpace |> Seq.length
+    let linkRefCount = linkReferenceTargets |> List.length
+    let skipCount = blankLineCount + linkRefCount
+    let updatedLines = List.rev (tailLines |> List.skip skipCount) @ newLinkReferenceTargets
+    File.write false changelogFilename updatedLines
+
+    // If build fails after this point but before a Git commit happens, undo our modifications
+    Target.activateBuildFailure "RevertChangelog"
+
+let revertChangelog _ =
+    Git.Reset.hard "" "HEAD" changelogFilename
 
 let dotnetBuild ctx =
     let args =
@@ -333,11 +366,11 @@ let dotnetTest debug ctx =
         |> String.concat "|"
     let args =
         [
-            yield "--no-build"
-            yield sprintf "/p:AltCover=%b" (not disableCodeCoverage)
-            yield sprintf "/p:AltCoverThreshold=%d" coverageThresholdPercent
-            yield sprintf "/p:AltCoverAssemblyExcludeFilter=%s" excludeCoverage
-            if debug then yield "--verbosity=n"
+            "--no-build"
+            sprintf "/p:AltCover=%b" (not disableCodeCoverage)
+            sprintf "/p:AltCoverThreshold=%d" coverageThresholdPercent
+            sprintf "/p:AltCoverAssemblyExcludeFilter=%s" excludeCoverage
+            sprintf "--verbosity=%c" (if debug then 'n' else 'm')
         ]
     DotNet.test(fun c ->
 
@@ -348,44 +381,6 @@ let dotnetTest debug ctx =
                 |> DotNet.Options.withAdditionalArgs args
             }) sln
 
-(*
--
--let dotnetTest ctx debug =
-+let dotnetTest ctx =
-     let excludeCoverage =
-         !! testsGlob
-         |> Seq.map IO.Path.GetFileNameWithoutExtension
-         |> String.concat "|"
-+    let args =
-+        [
-+            "--no-build"
-+            sprintf "/p:AltCover=%b" (not disableCodeCoverage)
-+            sprintf "/p:AltCoverThreshold=%d" coverageThresholdPercent
-+            sprintf "/p:AltCoverAssemblyExcludeFilter=%s" excludeCoverage
-+        ]
-     DotNet.test(fun c ->
--        let args =
--            [
--                yield "--no-build"
--                yield "/p:AltCover=true"
--                yield sprintf "/p:AltCoverThreshold=%d" coverageThresholdPercent
--                yield sprintf "/p:AltCoverAssemblyExcludeFilter=%s" excludeCoverage
--                if debug then yield "--verbosity=n"
--            ] |> String.concat " "
-+
-         { c with
-             Configuration = configuration (ctx.Context.AllExecutingTargets)
-             Common =
-                 c.Common
--                |> DotNet.Options.withCustomParams
--                    (Some(args))
-+                |> DotNet.Options.withAdditionalArgs args
-             }) sln
-
--Target.create "DotnetTest" <| fun ctx -> dotnetTest ctx false
--Target.create "DotnetTestDebug" <| fun ctx -> dotnetTest ctx true
-
-*)
 let generateCoverageReport _ =
     let coverageReports =
         !!"tests/**/coverage.*.xml"
@@ -584,14 +579,12 @@ let releaseDocs ctx =
 //-----------------------------------------------------------------------------
 
 Target.create "Clean" clean
-Target.create "UpdateChangelog" updateChangelog
 Target.create "DotnetRestore" dotnetRestore
+Target.create "UpdateChangelog" updateChangelog
+Target.create "RevertChangelog" revertChangelog  // Runs on build failure; do NOT put this in the dependency chain
 Target.create "DotnetBuild" dotnetBuild
 Target.create "DotnetTest" (dotnetTest false)
 Target.create "DotnetTestDebug" (dotnetTest true)
-// -Target.create "DotnetTest" <| fun ctx -> dotnetTest ctx false
-// -Target.create "DotnetTestDebug" <| fun ctx -> dotnetTest ctx true
-
 Target.create "GenerateCoverageReport" generateCoverageReport
 Target.create "WatchTests" watchTests
 Target.create "GenerateAssemblyInfo" generateAssemblyInfo
@@ -616,16 +609,17 @@ Target.create "ReleaseDocs" releaseDocs
 "Clean" ?=> "DotnetRestore"
 "Clean" ==> "DotnetPack"
 
-// Only call UpdateChangelog if Publish was in the call chain
-// Ensure UpdateChangelog is called before DotnetRestore
-"UpdateChangelog" ?=> "DotnetRestore"
-"UpdateChangelog" ==> "PublishToNuGet"
-
-// Only call AssemblyInfo if Publish was in the call chain
-// Ensure AssemblyInfo is called after DotnetRestore and before DotnetBuild
+// Only call GenerateAssemblyInfo if Publish was in the call chain
+// Ensure GenerateAssemblyInfo is called after DotnetRestore and before DotnetBuild
 "DotnetRestore" ?=> "GenerateAssemblyInfo"
 "GenerateAssemblyInfo" ?=> "DotnetBuild"
 "GenerateAssemblyInfo" ==> "PublishToNuGet"
+
+// Only call UpdateChangelog if Publish was in the call chain
+// Ensure UpdateChangelog is called after DotnetRestore and before GenerateAssemblyInfo
+"DotnetRestore" ?=> "UpdateChangelog"
+"UpdateChangelog" ?=> "GenerateAssemblyInfo"
+"UpdateChangelog" ==> "PublishToNuGet"
 
 "DotnetBuild" ==> "BuildDocs"
 "BuildDocs" ==> "ReleaseDocs"
@@ -646,10 +640,12 @@ Target.create "ReleaseDocs" releaseDocs
     ==> "GitHubRelease"
     ==> "Release"
 
-"DotnetTest" <=> "DotnetTestDebug"
-
 "DotnetRestore"
     ==> "WatchTests"
+
+// Debug-only targets for when we want to keep the current build
+Target.create "DotnetTestOnly" (dotnetTest false)
+Target.create "DotnetTestDebugOnly" (dotnetTest true)
 
 //-----------------------------------------------------------------------------
 // Target Start
