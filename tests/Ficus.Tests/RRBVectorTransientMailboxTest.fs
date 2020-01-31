@@ -79,11 +79,11 @@ let vecEqual (vec : RRBTransientVector<'a>) arr msg =
         result, msg
 *)
 
-let vecEqual (vec : RRBTransientVector<'a>) arr msg =
+let internal vecEqual (vec : RRBTransientVector<'a>) arr msg =
     RRBVectorProps.checkPropertiesSimple vec
     (RRBVector.toArray vec) = arr, msg
 
-let checkOrigVec (vec : RRBPersistentVector<'a>) (arr : 'a[]) =
+let internal checkOrigVec (vec : RRBPersistentVector<'a>) (arr : 'a[]) =
     if vec.Length <> arr.Length then
         failwithf "Original vector and its original array should be same length, but vector length was %d and array length was %d. Vec: %A and array: %A" vec.Length arr.Length vec arr
     let e = (vec |> RRBVector.toSeq).GetEnumerator()
@@ -94,20 +94,20 @@ let checkOrigVec (vec : RRBPersistentVector<'a>) (arr : 'a[]) =
         if e.Current <> arr.[i] then
             failwithf "Original vector was modified at index %d! This was probably caused by a thread. vec.[%d] = %A and arr.[%d] = %A" i i e.Current i arr.[i]
 
-type SingleThreadResult =
+type internal SingleThreadResult =
     | Completed of int * RRBTransientVector<int>
     | Failed of int * int * RRBTransientVector<int> * int[] * Cmd option * string
 
-type AllThreadsResult =
+type internal AllThreadsResult =
     | Go of AsyncReplyChannel<AllThreadsResult>
     | AllCompleted of RRBTransientVector<int>[]
     | OneFailed of int * int * RRBTransientVector<int> * int[] * Cmd option * string
 
-type AgentCmd =
+type internal AgentCmd =
     | Cmd of Cmd
     | Finished
 
-let completionAgent size (cts : CancellationTokenSource) (parent : MailboxProcessor<AllThreadsResult>) =
+let internal completionAgent size (cts : CancellationTokenSource) (parent : MailboxProcessor<AllThreadsResult>) =
     let results = Array.zeroCreate size
     let mutable completedCount = 0
     let run (mailbox : MailboxProcessor<SingleThreadResult>) =
@@ -131,7 +131,7 @@ let completionAgent size (cts : CancellationTokenSource) (parent : MailboxProces
         loop()
     MailboxProcessor.Start run
 
-let transientAgent token (completionAgent : MailboxProcessor<SingleThreadResult>) (position : int) (tvec : RRBTransientVector<int>) =
+let internal transientAgent token (completionAgent : MailboxProcessor<SingleThreadResult>) (position : int) (tvec : RRBTransientVector<int>) =
     let mutable arr = RRBVector.toArray tvec
     let mutable vec = tvec
     let mutable cmdsDone = 0
@@ -203,7 +203,7 @@ let transientAgent token (completionAgent : MailboxProcessor<SingleThreadResult>
     // ) |> Async.RunSynchronously
     MailboxProcessor.Start(run,token)
 
-let splitVec (tvec : RRBTransientVector<'a>) =
+let internal splitVec (tvec : RRBTransientVector<'a>) =
     let parts =
         if tvec.Length > 200 then
             tvec |> RRBVector.chunkBySize 100
@@ -219,7 +219,7 @@ let splitVec (tvec : RRBTransientVector<'a>) =
 //     else
 //         4
 
-let startSplitTesting (vec : RRBPersistentVector<int>) (cmds : (Cmd list)[]) =
+let internal startSplitTesting (vec : RRBPersistentVector<int>) (cmds : (Cmd list)[]) =
     // logger.infoWithBP (
     //     eventX "Inside startSplitTesting function with vec {vec} and cmds {cmds}"
     //     >> setField "vec" (RRBVectorGen.vecToTreeReprStr vec)

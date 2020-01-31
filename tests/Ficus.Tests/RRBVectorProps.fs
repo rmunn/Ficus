@@ -201,7 +201,7 @@ let nodeProperties = [
 ]
 
 
-let vectorPropertiesPersistent = [
+let internal vectorPropertiesPersistent = [
     "The total number of items in all leaf nodes combined, plus the tail, should equal the vector length", fun (vec : RRBPersistentVector<'T>) ->
         let rootSize = itemCount vec.Shift vec.Root
         let tailLen = vec.Tail.Length
@@ -259,7 +259,7 @@ let vectorPropertiesPersistent = [
     // The check for the tree's spine, etc., is already handled in the node properties
 ]
 
-let vectorPropertiesTransient = [
+let internal vectorPropertiesTransient = [
     "The total number of items in all leaf nodes combined, plus the tail, should equal the vector length", fun (vec : RRBTransientVector<'T>) ->
         let rootSize = itemCount vec.Shift vec.Root
         let tailLen = vec.Length - vec.TailOffset

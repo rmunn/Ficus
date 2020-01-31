@@ -54,7 +54,7 @@ type internal IRRBInternal<'T> =
     abstract member RemoveImpl : bool -> int -> RRBVector<'T>
     abstract member RemoveWithoutRebalance : int -> RRBVector<'T>
 
-type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, tail : 'T [], tailOffset : int) =
+type internal RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, tail : 'T [], tailOffset : int) =
     // TODO: Consider specifying that the root must always be an RRBFullNode<'T>, so we don't have to do nearly as many casts
     inherit RRBVector<'T>()
 
@@ -403,7 +403,7 @@ type RRBPersistentVector<'T> internal (count, shift : int, root : RRBNode<'T>, t
         else ()
 
 
-and RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tail : 'T [], tailOffset : int) =
+and internal RRBTransientVector<'T> internal (count, shift : int, root : RRBNode<'T>, tail : 'T [], tailOffset : int) =
     inherit RRBVector<'T>()
 
     member val Count = count with get, set
@@ -1000,7 +1000,7 @@ module RRBVector =
     let inline remove idx (vec : RRBVector<'T>) = vec.Remove idx
     let inline insert idx (item : 'T) (vec : RRBVector<'T>) = vec.Insert idx item
 
-    let inline empty<'T> = RRBPersistentVector<'T>.MkEmpty() :> RRBVector<'T>
+    let empty<'T> = RRBPersistentVector<'T>.MkEmpty() :> RRBVector<'T>
 
     let internal flip f a b = f b a
     let internal flip3 f a b c = f b c a
@@ -1030,7 +1030,7 @@ module RRBVector =
             // TODO: Perhaps this should be a static member of RRBVector, called FromArray? Might be nice to have this in the C# API
         else
             a |> ofSeq
-    let inline ofList (l : 'T list) =
+    let ofList (l : 'T list) =
         let mutable transient = RRBTransientVector<'T>.MkEmpty() :> RRBVector<_>
         for item in l do
             transient <- transient.Push item

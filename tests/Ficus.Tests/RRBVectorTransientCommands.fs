@@ -55,7 +55,7 @@ type Op<'Actual,'Model>() =
     ///The default postcondition is true.
     default __.Post (_,_) = true, ""
 
-type Cmd = Op<RRBTransientVector<int>, int[]>
+type internal Cmd = Op<RRBTransientVector<int>, int[]>
 
 let fsCheckCmdFromOp (op : Op<'Actual, 'Model>) =
     { new Command<'Actual, 'Model>()
@@ -87,7 +87,7 @@ let vecEqual (vec : RRBTransientVector<'a>) arr msg =
         result, msg
 *)
 
-let vecEqual (vec : RRBTransientVector<'a>) arr msg =
+let internal vecEqual (vec : RRBTransientVector<'a>) arr msg =
     RRBVectorProps.checkPropertiesSimple vec
     (RRBVector.toArray vec) = arr, msg
 
@@ -275,7 +275,7 @@ let genComplexOperations = gen {
     return SplitTestInput (vec, cmds)
 }
 
-let propFromCmds (vec : RRBPersistentVector<int>) (lst : Cmd list) =
+let internal propFromCmds (vec : RRBPersistentVector<int>) (lst : Cmd list) =
     let cmds = lst |> List.map fsCheckCmdFromOp
     // let len = vec |> RRBVector.length
     let arr = vec |> RRBVector.toArray
@@ -288,7 +288,7 @@ let propFromCmds (vec : RRBPersistentVector<int>) (lst : Cmd list) =
             Gen.elements cmds
         }
 
-let propFromCmdFrequencies (vec : RRBPersistentVector<int>) (lst : (int * Gen<Cmd>) list) =
+let internal propFromCmdFrequencies (vec : RRBPersistentVector<int>) (lst : (int * Gen<Cmd>) list) =
     let cmds = lst
     // let len = vec |> RRBVector.length
     let arr = vec |> RRBVector.toArray
