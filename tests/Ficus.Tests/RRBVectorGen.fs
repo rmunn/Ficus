@@ -272,7 +272,7 @@ let sizedGenVec<'a> = Gen.sized <| fun s -> gen {
     let len = (max len 0) % (Literals.blockSize * 5)  // Ensure length is reasonable
     let! vec = genVecOfLength<'a> len
     let! coinFlip = Arb.generate<bool>
-    return (if coinFlip then vec else (vec :?> RRBPersistentVector<_>).Transient() :> RRBVector<_>)
+    return (if coinFlip then vec else vec.Transient())
     // return vec
 }
 
