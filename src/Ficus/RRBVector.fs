@@ -1082,9 +1082,9 @@ module RRBVector =
                 | Some value -> transient <- transient.Push value
             transient.Persistent()
     // Alternate version (for persistent vectors only). TODO: Benchmark
-    let chooseAlt (chooser : 'T -> 'U option) (vec : RRBVector<'T>) : RRBVector<'U> =
-        if vec |> isTransient then failwith "DEBUG: chooseAlt only implemented for persistent vectors"
-        vec |> Seq.choose chooser |> ofSeq
+    // let chooseAlt (chooser : 'T -> 'U option) (vec : RRBVector<'T>) : RRBVector<'U> =
+    //     if vec |> isTransient then failwith "DEBUG: chooseAlt only implemented for persistent vectors"
+    //     vec |> Seq.choose chooser |> ofSeq
 
     let chunkBySize chunkSize (vec : RRBVector<'T>) =
         if chunkSize <= 0 && vec.Length > 0 then failwith "Chunk size must be greater than zero"
