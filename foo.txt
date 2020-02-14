@@ -1,0 +1,49 @@
+[Unit]
+Description=Restart LD API on config change
+
+[Path]
+PathChanged=/etc/ldapi-server/ldapi-server.ini
+
+[Install]
+WantedBy=multi-user.target
+[Unit]
+Description=Restart LD API when important files change
+After=ldapi-server.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/systemctl restart ldapi-server
+[Unit]
+Description=Restart LD API on trigger file creation
+
+[Path]
+PathExists=/usr/lib/ldapi-server/restart-server-now
+
+[Install]
+WantedBy=multi-user.target
+[Unit]
+Description=Restart LD API when restart trigger file is created
+After=ldapi-server.service
+
+[Service]
+Type=oneshot
+# First delete the file so the trigger will only fire once
+ExecStart=/bin/rm /usr/lib/ldapi-server/restart-server-now
+ExecStart=/bin/systemctl restart ldapi-server
+[Unit]
+Description=LanguageDepot API server
+
+[Service]
+WorkingDirectory=/usr/lib/ldapi-server
+ExecStart=/usr/lib/ldapi-server/Server
+Restart=always
+# Restart service after 10 seconds if the dotnet service crashes:
+RestartSec=10
+KillSignal=SIGINT
+SyslogIdentifier=ldapi-server
+User=ldapi-server
+Environment=ASPNETCORE_ENVIRONMENT=Testing
+
+[Install]
+WantedBy=multi-user.target
+

@@ -1,0 +1,40 @@
+Mailbox receives list of cmds
+Foreach cmd:
+    - Perform model update
+    - Perform actual update
+    - Compare model to actual with cmd.Post
+    - Verify that original unchanged (O(N))
+        - ToSeq, then seq-compare to orig array
+        - Or write own compare func that will:
+            - GetEnumerator, then for i = 0 to arr.Length - 1 do
+                v = enum.MoveNext()
+                if not v: failwith <| sprintf "Unexpected end at %d" i
+                compare enum.Current = arr.[i]
+        - That way we only allocate the array ONCE, and the original is likely to stay in cache
+
+Make a vector, take its transient
+If vec size > 200:
+    Split the transient into 100-item chunks
+    (96 = 3 leaves, plus short tail)
+Else (vec size <= 200):
+    Split into 4 parts
+    TEST splitting [a;b;c] into 4 parts: should be [[a];[b];[c];[]]
+Now start a new mailbox processor for each split and do independent cmds for each
+
+
+Design for split transient test:
+- One original persistent vector
+- Master thread does the split, starts new agent for each sub-section
+    - Test input calculates how many splits there will be, and generates the list of cmds for each split
+    - So input is (vec, [[cmds];[cmds];[cmds]]) where [[cmds];[cmds];[cmds]] are all independently generated. # = how many splits
+- Master thread holds cancellation tokens for sub threads
+- As sub threads loop, they check tokens before each cmd
+    (NOTE written afterwards: I think cancellation tokens are built-in to the Mailbox.Receive() call)
+- If cancelled, they report how many cards they executed so far (they have a mutable int count) before exiting
+    (NOTE written afterwards: this might not be possible, but maybe threads can send progress reports to a progress collector?)
+    (Original idea: by sending a Post to a CompletionAgent when they realize they've been cancelled)
+
+Also in my notes:
+NodaTime:
+  G (upper) - ISO 8601 to second + <G>, which may omit minutes
+  o (lower) - ISO 8601 to nanosecond + <G>, which may omit minutes

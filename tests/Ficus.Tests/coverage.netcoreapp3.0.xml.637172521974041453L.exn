@@ -1,0 +1,24 @@
+ModuleId = "11-1D-ED-0D-9A-3A-AA-07-FB-FB-EF-4A-96-D6-87-18-CC-6E-65-DD"
+hitPointId = 236
+context = Null
+exception = System.Collections.Generic.KeyNotFoundException: The given key '236' was not present in the dictionary.
+   at System.Collections.Generic.Dictionary`2.get_Item(TKey key)
+   at AltCover.Recorder.Counter.AddSingleVisit(Dictionary`2 counts, String moduleId, Int32 hitPointId, Track context)
+   at AltCover.Recorder.Instance.AddVisit(String moduleId, Int32 hitPointId, Track context)
+   at AltCover.Recorder.Instance.LogException[a,b,c,d](a moduleId, b hitPointId, c context, d x)
+   at AltCover.Recorder.Instance.AddVisit(String moduleId, Int32 hitPointId, Track context)
+   at AltCover.Recorder.Instance.VisitImpl@262.Invoke(String moduleId, Int32 hitPointId, Track context)
+   at AltCover.Recorder.Instance.VisitImpl(String moduleId, Int32 hitPointId, Track context)
+   at Ficus.RRBVector.RRBTransientVector`1.get_Count()
+   at Ficus.RRBVector.RRBTransientVector`1.Push(T newItem)
+   at Ficus.Tests.RRBVectorExpectoTest.tests@3053.Invoke(Unit _arg1)
+   at Expecto.Impl.execTestAsync@692-1.Invoke(Unit unitVar)
+   at Microsoft.FSharp.Control.AsyncBuilderImpl.callA@522.Invoke(AsyncParams`1 args)
+   at <StartupCode$FSharp-Core>.$Control.loop@124-50(Trampoline this, FSharpFunc`2 action)
+   at Microsoft.FSharp.Control.Trampoline.ExecuteAction(FSharpFunc`2 firstAction)
+   at Microsoft.FSharp.Control.TrampolineHolder.Protect(FSharpFunc`2 firstAction)
+   at <StartupCode$FSharp-Core>.$Control.-ctor@200-1.Invoke(Object o)
+   at System.Threading.QueueUserWorkItemCallbackDefaultContext.Execute()
+   at System.Threading.ThreadPoolWorkQueue.Dispatch()
+   at System.Threading._ThreadPoolWaitCallback.PerformWaitCallback()
+

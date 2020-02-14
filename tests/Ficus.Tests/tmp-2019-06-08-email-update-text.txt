@@ -1,0 +1,24 @@
+Hello everyone!
+
+We&rsquo;ve settled down in Dallas for about two months &mdash; we arrived in early May, and we&rsquo;ll be here until the end of June, staying at the house of a good friend. After all the travel we&rsquo;ve been doing in the past year, it feels good to settle down a little. For just a couple months, we won&rsquo;t be living out of our suitcases, Danny won&rsquo;t have to endure long car rides all the time, and I can cook on a regular basis (I love cooking, and I&rsquo;ve really missed it!)
+
+During this time in Dallas, Robin is working from Wycliffe&rsquo;s Dallas office. He&rsquo;s working on the same programming projects he would be if he were back in Chiang Mai, but he&rsquo;s working on them remotely because we won&rsquo;t be back to Thailand until July. Right now, that means (Robin, take a sentence or three right here and describe what you&rsquo;re working on).
+
+While Robin works remotely from the Dallas office, I stay at home with Danny. He&rsquo;s an active little boy, and loves to go for walks to the playground! In between watching him, I&rsquo;ve been able to fit in some Eastern Bui work as well &mdash; during naptimes, and times when he&rsquo;s busy reading a book or playing with his toys. It&rsquo;s a little bit difficult to work remotely, since so much of my work relies on face-to-face meetings with Eastern Bui speakers. However, do you remember Pope, the Eastern Bui speaker we met in Pennsylvania? I can still work with him while I&rsquo;m in the US, even though we&rsquo;re in different states &mdash; we can communicate over email and skype, and he&rsquo;s been providing me with a lot of valuable information about the Eastern Bui language. Thanks to him, I can make progress even while we&rsquo;re still in the US! In addition to working with Pope, I&rsquo;m studying my language recordings &mdash; both Eastern Bui and Thai &mdash; so I can keep up my skills in both languages, and maybe even make some language learning progress even while I&rsquo;m out of the country.
+
+Last month, we were interviewed on the radio about our ministry in Thailand! If you missed our broadcast on KHCB, you can listen to it here and here (it was in two parts).
+
+
+
+
+Right not, that means...
+
+... fixing bugs in the Language Forge website, which helps people put together a dictionary. To give you an idea, one user reported that the Activity Log feature (where you can see what other people changed in the dictionary project, sorted by date with the most recent changes first) wasn&rsquo;t working in the Safari Web browser on Macintosh computers. It worked in other browsers, though. Robin figured out that ...
+
+(Here&rsquo;s the technical details. In computer log files, dates are usually written with timezones in a format like &ldquo;+0700&rdquo; for the time zone that&rsquo;s 7 hours ahead of Greenwich Mean Time, or &ldquo;-0500&rdquo; for the time zone that&rsquo;s 5 hours behind Greenwich Mean Time. Most browsers will accept dates with timestamps written in that form, with no colon in it, but Safari insists on the form &ldquo;+07:00&rdquo; or &ldquo;-05:00&rdquo;, with a colon separating hours and minutes. So because Safari was refusing the load the dates, it wasn&rsquo;t loading the rest of the data either, and so people using the Safari browser couldn&rsquo;t see the recent activity log.)
+
+
+
+
+
+For his birthday, one of Danny&rsquo;s aunts made him a photo book of all his relatives. Danny is going to grow up on the other side of the world, and he may not see all his grandparents and aunts and uncles and cousins as often as we&rsquo;d wish. But with this, we can show him all the people who love him, so he&rsquo;ll know their faces and remember who they are. He loves to read it with us! He points to the faces and looks at us, and we tell him their names. When he&rsquo;s a little older, he&rsquo;ll know them all. 
