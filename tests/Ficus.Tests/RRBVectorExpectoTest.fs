@@ -2245,7 +2245,7 @@ let apiTests =
         let actual = actualVec |> RRBVector.toArray
         Expect.equal actual expected "RRBVector.concat did not produce the right results"
 
-    testProp "concat part 2" <| fun (vec1 : RRBVector<int>) (vec2 : RRBVector<int>) (vec3 : RRBVector<int>) ->
+    etestProp (101427022, 296706707) "concat part 2" <| fun (vec1 : RRBVector<int>) (vec2 : RRBVector<int>) (vec3 : RRBVector<int>) ->
         // When the vectors are transient, this will exercise the "concat multiple transients that do NOT have the same owner" logic
         let len = vec1.Length + vec2.Length + vec3.Length
         let vecs = [vec1; vec2; vec3]
