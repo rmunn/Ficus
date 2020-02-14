@@ -1109,13 +1109,12 @@ module RRBVector =
         // TODO: Benchmark this and see if it really is all that much faster, considering the complications inherent in concatenating transients
         // TODO: Simplify this now that .Append copes with mixed types; we can skip checking for all tokens being alike, because the
         // first time a different token is encountered we'll automatically switch over to persistent appending
-        // TODO: Write a unit test or three to verify that: 1) all transients, 2) some transients and some persistents, 3) transients with multiple tokens
         if vecs |> Seq.isEmpty then
             empty<'T>
         elif (vecs |> Seq.head) :? RRBTransientVector<'T> then
             let firstTransient = (vecs |> Seq.head) :?> RRBTransientVector<'T>
             let firstToken = firstTransient.Owner
-            if (vecs |> Seq.forall (fun v -> v :? RRBTransientVector<'T> && (v :?> RRBTransientVector<'T>).Owner = firstToken)) then
+            if (vecs |> Seq.forall (fun v -> v :? RRBTransientVector<'T> && isSameObj (v :?> RRBTransientVector<'T>).Owner firstToken)) then
                 let mutable result = firstTransient
                 for vec in Seq.tail vecs do
                     result <- result.Append vec :?> RRBTransientVector<'T>
