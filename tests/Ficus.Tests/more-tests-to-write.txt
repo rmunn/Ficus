@@ -1,0 +1,113 @@
+M-1 M M T24 .[11.35]  ... is that it?
+
+M T9 .[40..40] (last to last)
+
+
+A real one:
+"[18 27 24 27 M M M M M 29 29 29 M-1 M M M M M M 28 26 28 M M M 30] [M-1 M M M M M M M 30 M 30 M 29 M M M M M M-1 M M 30 M-1 M 27 28] [M-1 M 30 M 27 29 26 M 27 M M-1 M M-1 30 M 30 M 26 28 28 M-1 M M M-1] [M M 30 M 26 30 27 M M M 29 M M M M-1 29 28 M 27 30 26 30 M-1 M M 27 M-1 M M-1] [M M M M M 23 M M 28 M M 25 M 28 M M M M 28 M-1 M 29 M M 30 M M M] [M M 30 M M 25 29 M M M M-1 28 M M 29 M 29 28 30 M-1 M M 30 28 M 29] [M 29 M-1 M 28 26 M M M M-1 M M M 28 M M M M M M M-1 30 30 M M M] [26 M M M 28 M M M M-1 M M M-1 29 28 M M M M M M-1 M 29 M-1 27] [M M M M M 26 28 M-1 M M M M M M M M M M M-1 M M 30] [M M-1 M M-1 M M M 28 M-1 30 28 M M M M M M 29 M M 29 M M M M] [M M M M M M M M 30 M M 30 M M M M 17 18 M] T32"
+.[..77]
+
+"30 M 29 29 30 24 30 30 30 M 29 M-1 25 27 25 28 30 28 T32", then:
+push 215 -> "30 M 29 29 30 24 30 30 30 M 29 M-1 25 27 25 28 30 28 M M M M M M M T23"
+insert (-39,46) -> insert (727,46) -> "30 M 29 29 30 24 30 30 30 M 29 M-1 25 27 25 28 30 28 M M M M M M 17 16 T23"
+push 113 -> "30 M 29 29 30 24 30 30 30 M 29 M-1 25 27 25 28 30 28 M M M M M M 17 16 M M M M T8"
+
+"17 16 M 29 29 30 24 30 30 30 M 29 M-1 25 27 25 28 30 28 M M M M M M 17 16 M M M 17 16 T8" -> insert (808,34) ->
+"[17 16 M 29 29 30 24 30 30 30 M 29 M-1 25 27 25] [28 30 28 M M M M M M 17 16 M 17 16 M 17 16] T8"
+
+BUT... it split the node in such a way that the *rightmost* child was the one that should have called NewParent. Instead, the leftmost did.
+
+
+"[M M M M M M M M M M-1 M M M M M M M M M M M-1 M M M 28 M M M M M M M] [30 26 M M 30 25 M 27 26 M 28 30 M-1 M M-1 28 M 24 27 M-1 27 30 M-1 M 27 29 M 28 28 M 30 25] [30 27 29 M 29 27 M 29 27 30 27 M M M 27 26 M-1 28 M 29 27 28 29 27 29 27 29 29 27 30 M 30] [30 26 26 26 25 M 30 M M 30 27 M-1 28 26 30 M-1 28 M 29 29 28 M-1 29 27 28 M M] [28 M-1 M-1 30 29 M 28 26 27 28 M M-1 M-1 28 29 23 28 26 27 27 27 M M 28 27 M M] [26 M-1 M-1 M M M M 30 M M 25 29 29 M-1 30 30 30 M 30 M 25 24 M 29 30 27 M M 29 29 30 30] [M 27 28 M 30 29 29 27 24 27 M M-1 24 M M-1 29 27 M 27 M-1 M-1 M-1 M 29 29 M M 27 26 29 26 25] [M M M M M M M M M M M M M 29 M M M M M M M M M M M M] [M-1 M-1 19 M M 29 30 25 M M-1 M 29 28 29 26 M-1 29 24 26 M-1 M M 28 M 25 28 M-1 M-1 M 30 M 30] [23 28 M-1 23 M M-1 20 M 29 29 M M 25 M-1 29 25 M-1 28 26 M 26 29 M 27 28 M] [29 30 27 M M 26 29 M M-1 26 30 M 27 M-1 29 25 M M 25 30 30 M-1 29 M 29 M-1 M 25 27 M 28 M] [M M-1 M M M M 30 M M M-1 M M M 28 M M M M M M M-1 M M 29 M M M-1 M M-1 M M M] [M M M M M-1 24 28 M 26 M M M 30 28 M-1 28 25 M M M M 26 26 23 30] [M-1 M M M M M M M M M M M M 28 M M M M M M M M M 30 M M M 30 M M 29 M] [M 30 M M M M M 30 M 29 M 28 M-1 M 29 30 M M M 30 M-1 30 M-1 M 30 M-1 M M M 29 M-1 26] [M M M 27 M M-1 M M M M M 29 M M M-1 28 M-1 M-1 30 27 M M M-1 29 M 24 M M 28 M] [M-1 M-1 29 M M M M M M 27 M 27 M 30 M 28 29 29 27 M] [M 29 M M M M 29 M M 28 M 29 M M M M 24 M-1 M 29 M 28 M M-1 28 M M-1 M 23 M-1 M 28] [M M M M M M M M M 30 27 M-1 M M M M M-1 M 30 M M 30 M 28 M M M M-1 M-1 M M-1 30] [28 M-1 M M 23 M 26 28 27 M M M M-1 23 M M 26 28 M-1 25 M M M 29 27 27 M 27 30 30 30 27] [M M-1 M 30 M M 26 M M 26 M M-1 26 29 29 M M M M 24 26 M M 28 M M 27 M M M-1 M M] [30 M M 26 29 28 23 M-1 29 28 27 M M M M 30 23 M-1 30 M M M-1 29 M 29 M-1 28 29 24 M M] [M M M M M M M M M M M-1 M M M M M M M M M] [M 30 M M M M M M 30 M M M M M M M M M M M M M M 30 M M M M M M M M] [M M M M-1 25 M-1 24 25 M 29 M-1 30 M-1 30 27 M 28 M-1 30 M 28 26 27 27 M M-1 28 M-1 27 25 M 28] [M 28 26 M-1 25 28 28 30 30 M M-1 M-1 27 23 28 30 27 27 27 M 27 28 22 26] [28 M M 29 28 M 27 29 M M 29 27 24 26 M M M-1 M-1 M M 28 M-1 28 27 M-1 28 27 M 29 M 25 M] [28 30 M 26 26 M 29 29 29 30 M-1 M M-1 25 27 M 29 26 M M M-1 29 M 29 28 M 28 M 28 M-1 27 27] T22"
+--> push 45 -->
+"[M M M M M M M M M M-1 M M M M M M M M M M M-1 M M M 28 M M M M M M M] [30 26 M M 30 25 M 27 26 M 28 30 M-1 M M-1 28 M 24 27 M-1 27 30 M-1 M 27 29 M 28 28 M 30 25] [30 27 29 M 29 27 M 29 27 30 27 M M M 27 26 M-1 28 M 29 27 28 29 27 29 27 29 29 27 30 M 30] [30 26 26 26 25 M 30 M M 30 27 M-1 28 26 30 M-1 28 M 29 29 28 M-1 29 27 28 M M] [28 M-1 M-1 30 29 M 28 26 27 28 M M-1 M-1 28 29 23 28 26 27 27 27 M M 28 27 M M] [26 M-1 M-1 M M M M 30 M M 25 29 29 M-1 30 30 30 M 30 M 25 24 M 29 30 27 M M 29 29 30 30] [M 27 28 M 30 29 29 27 24 27 M M-1 24 M M-1 29 27 M 27 M-1 M-1 M-1 M 29 29 M M 27 26 29 26 25] [M M M M M M M M M M M M M 29 M M M M M M M M M M M M] [M-1 M-1 19 M M 29 30 25 M M-1 M 29 28 29 26 M-1 29 24 26 M-1 M M 28 M 25 28 M-1 M-1 M 30 M 30] [23 28 M-1 23 M M-1 20 M 29 29 M M 25 M-1 29 25 M-1 28 26 M 26 29 M 27 28 M] [29 30 27 M M 26 29 M M-1 26 30 M 27 M-1 29 25 M M 25 30 30 M-1 29 M 29 M-1 M 25 27 M 28 M] [M M-1 M M M M 30 M M M-1 M M M 28 M M M M M M M-1 M M 29 M M M-1 M M-1 M M M] [M M M M M-1 24 28 M 26 M M M 30 28 M-1 28 25 M M M M 26 26 23 30] [M-1 M M M M M M M M M M M M 28 M M M M M M M M M 30 M M M 30 M M 29 M] [M 30 M M M M M 30 M 29 M 28 M-1 M 29 30 M M M 30 M-1 30 M-1 M 30 M-1 M M M 29 M-1 26] [M M M 27 M M-1 M M M M M 29 M M M-1 28 M-1 M-1 30 27 M M M-1 29 M 24 M M 28 M] [M-1 M-1 29 M M M M M M 27 M 27 M 30 M 28 29 29 27 M] [M 29 M M M M 29 M M 28 M 29 M M M M 24 M-1 M 29 M 28 M M-1 28 M M-1 M 23 M-1 M 28] [M M M M M M M M M 30 27 M-1 M M M M M-1 M 30 M M 30 M 28 M M M M-1 M-1 M M-1 30] [28 M-1 M M 23 M 26 28 27 M M M M-1 23 M M 26 28 M-1 25 M M M 29 27 27 M 27 30 30 30 27] [M M-1 M 30 M M 26 M M 26 M M-1 26 29 29 M M M M 24 26 M M 28 M M 27 M M M-1 M M] [30 M M 26 29 28 23 M-1 29 28 27 M M M M 30 23 M-1 30 M M M-1 29 M 29 M-1 28 29 24 M M] [M M M M M M M M M M M-1 M M M M M M M M M] [M 30 M M M M M M 30 M M M M M M M M M M M M M M 30 M M M M M M M M] [M M M M-1 25 M-1 24 25 M 29 M-1 30 M-1 30 27 M 28 M-1 30 M 28 26 27 27 M M-1 28 M-1 27 25 M 28] [M 28 26 M-1 25 28 28 30 30 M M-1 M-1 27 23 28 30 27 27 27 M 27 28 22 26] [28 M M 29 28 M 27 29 M M 29 27 24 26 M M M-1 M-1 M M 28 M-1 28 27 M-1 28 27 M 29 M 25 M] [28 30 M 26 26 M 29 29 29 30 M-1 M M-1 25 27 M 29 26 M M M-1 29 M 29 28 M 28 M 28 M-1 27 27] [M*2] T3"
+--> insert (58,50) -->
+"[M 17 16 M M M M M M M M-1 M M M M M M] [M M M M M-1 M M M 28 M M M M M M M] [30 26 M M 30 25 M 27 26 M 28 30 M-1 M M-1 28 M 24 27 M-1 27 30 M-1 M 27 29 M 28 28 M 30 25] [30 27 29 M 29 27 M 29 27 30 27 M M M 27 26 M-1 28 M 29 27 28 29 27 29 27 29 29 27 30 M 30] [30 26 26 26 25 M 30 M M 30 27 M-1 28 26 30 M-1 28 M 29 29 28 M-1 29 27 28 M M] [28 M-1 M-1 30 29 M 28 26 27 28 M M-1 M-1 28 29 23 28 26 27 27 27 M M 28 27 M M] [26 M-1 M-1 M M M M 30 M M 25 29 29 M-1 30 30 30 M 30 M 25 24 M 29 30 27 M M 29 29 30 30] [M 27 28 M 30 29 29 27 24 27 M M-1 24 M M-1 29 27 M 27 M-1 M-1 M-1 M 29 29 M M 27 26 29 26 25] [M M M M M M M M M M M M M 29 M M M M M M M M M M M M] [M-1 M-1 19 M M 29 30 25 M M-1 M 29 28 29 26 M-1 29 24 26 M-1 M M 28 M 25 28 M-1 M-1 M 30 M 30] [23 28 M-1 23 M M-1 20 M 29 29 M M 25 M-1 29 25 M-1 28 26 M 26 29 M 27 28 M] [29 30 27 M M 26 29 M M-1 26 30 M 27 M-1 29 25 M M 25 30 30 M-1 29 M 29 M-1 M 25 27 M 28 M] [M M-1 M M M M 30 M M M-1 M M M 28 M M M M M M M-1 M M 29 M M M-1 M M-1 M M M] [M M M M M-1 24 28 M 26 M M M 30 28 M-1 28 25 M M M M 26 26 23 30] [M-1 M M M M M M M M M M M M 28 M M M M M M M M M 30 M M M 30 M M 29 M] [M 30 M M M M M 30 M 29 M 28 M-1 M 29 30 M M M 30 M-1 30 M-1 M 30 M-1 M M M 29 M-1 26] [M M M 27 M M-1 M M M M M 29 M M M-1 28 M-1 M-1 30 27 M M M-1 29 M 24 M M 28 M] [M-1 M-1 29 M M M M M M 27 M 27 M 30 M 28 29 29 27 M] [M 29 M M M M 29 M M 28 M 29 M M M M 24 M-1 M 29 M 28 M M-1 28 M M-1 M 23 M-1 M 28] [M M M M M M M M M 30 27 M-1 M M M M M-1 M 30 M M 30 M 28 M M M M-1 M-1 M M-1 30] [28 M-1 M M 23 M 26 28 27 M M M M-1 23 M M 26 28 M-1 25 M M M 29 27 27 M 27 30 30 30 27] [M M-1 M 30 M M 26 M M 26 M M-1 26 29 29 M M M M 24 26 M M 28 M M 27 M M M-1 M M] [30 M M 26 29 28 23 M-1 29 28 27 M M M M 30 23 M-1 30 M M M-1 29 M 29 M-1 28 29 24 M M] [M M M M M M M M M M M-1 M M M M M M M M M] [M 30 M M M M M M 30 M M M M M M M M M M M M M M 30 M M M M M M M M] [M M M M-1 25 M-1 24 25 M 29 M-1 30 M-1 30 27 M 28 M-1 30 M 28 26 27 27 M M-1 28 M-1 27 25 M 28] [M 28 26 M-1 25 28 28 30 30 M M-1 M-1 27 23 28 30 27 27 27 M 27 28 22 26] [28 M M 29 28 M 27 29 M M 29 27 24 26 M M M-1 M-1 M M 28 M-1 28 27 M-1 28 27 M 29 M 25 M] [28 30 M 26 26 M 29 29 29 30 M-1 M M-1 25 27 M 29 26 M M M-1 29 M 29 28 M 28 M 28 M-1 27 27] [M*2] T3"
+--> remove -23 (turns into idx 25088) -->
+"[M 17 16 M M M M M M M M-1 M M M M M M] [M M M M M-1 M M M 28 M M M M M M M] [30 26 M M 30 25 M 27 26 M 28 30 M-1 M M-1 28 M 24 27 M-1 27 30 M-1 M 27 29 M 28 28 M 30 25] [30 27 29 M 29 27 M 29 27 30 27 M M M 27 26 M-1 28 M 29 27 28 29 27 29 27 29 29 27 30 M 30] [30 26 26 26 25 M 30 M M 30 27 M-1 28 26 30 M-1 28 M 29 29 28 M-1 29 27 28 M M] [28 M-1 M-1 30 29 M 28 26 27 28 M M-1 M-1 28 29 23 28 26 27 27 27 M M 28 27 M M] [26 M-1 M-1 M M M M 30 M M 25 29 29 M-1 30 30 30 M 30 M 25 24 M 29 30 27 M M 29 29 30 30] [M 27 28 M 30 29 29 27 24 27 M M-1 24 M M-1 29 27 M 27 M-1 M-1 M-1 M 29 29 M M 27 26 29 26 25] [M M M M M M M M M M M M M 29 M M M M M M M M M M M M] [M-1 M-1 19 M M 29 30 25 M M-1 M 29 28 29 26 M-1 29 24 26 M-1 M M 28 M 25 28 M-1 M-1 M 30 M 30] [23 28 M-1 23 M M-1 20 M 29 29 M M 25 M-1 29 25 M-1 28 26 M 26 29 M 27 28 M] [29 30 27 M M 26 29 M M-1 26 30 M 27 M-1 29 25 M M 25 30 30 M-1 29 M 29 M-1 M 25 27 M 28 M] [M M-1 M M M M 30 M M M-1 M M M 28 M M M M M M M-1 M M 29 M M M-1 M M-1 M M M] [M M M M M-1 24 28 M 26 M M M 30 28 M-1 28 25 M M M M 26 26 23 30] [M-1 M M M M M M M M M M M M 28 M M M M M M M M M 30 M M M 30 M M 29 M] [M 30 M M M M M 30 M 29 M 28 M-1 M 29 30 M M M 30 M-1 30 M-1 M 30 M-1 M M M 29 M-1 26] [M M M 27 M M-1 M M M M M 29 M M M-1 28 M-1 M-1 30 27 M M M-1 29 M 24 M M 28 M] [M-1 M-1 29 M M M M M M 27 M 27 M 30 M 28 29 29 27 M] [M 29 M M M M 29 M M 28 M 29 M M M M 24 M-1 M 29 M 28 M M-1 28 M M-1 M 23 M-1 M 28] [M M M M M M M M M 30 27 M-1 M M M M M-1 M 30 M M 30 M 28 M M M M-1 M-1 M M-1 30] [28 M-1 M M 23 M 26 28 27 M M M M-1 23 M M 26 28 M-1 25 M M M 29 27 27 M 27 30 30 30 27] [M M-1 M 30 M M 26 M M 26 M M-1 26 29 29 M M M M 24 26 M M 28 M M 27 M M M-1 M M] [30 M M 26 29 28 23 M-1 29 28 27 M M M M 30 23 M-1 30 M M M-1 29 M 29 M-1 28 29 24 M M] [M M M M M M M M M M M-1 M M M M M M M M M] [M 30 M M M M M M 30 M M M M M M M M M M M M M M 30 M M M M M M M M] [M M M M-1 25 M-1 24 25 M 29 M-1 30 M-1 30 27 M 28 M-1 30 M 28 26 27 27 M M-1 28 M-1 27 25 M 28] [M 28 26 M-1 25 28 28 30 30 M M-1 M-1 27 23 28 30 27 27 27 M 27 28 22 26 28 M M 29 28 M 27 29] [M M 29 27 24 26 M M M-1 M-1 M M 28 M-1 28 27 M-1 28 27 M 29 M 25 M 28 30 M 26 26 M 29 29] [29 30 M-1 M M-1 25 27 M 29 26 M M M-1 29 M 29 28 M 28 M 28 M-1 27 27 M M-1] T3"
+
+
+
+
+"M 17 16 M 29 30 24 30 30 30 M 29 M-1 25 27 25 28 30 28 M M M M M 17 16 M 17 16 M M M T10"
+--> push 29 -->
+"[M 17 16 M 29 30 24 30 30 30 M 29 M-1 25 27 25 28 30 28 M M M M M 17 16 M 17 16 M M M] [M*1] T7"
+
+Failed after 185 tests. Parameters:
+	SplitTestInput
+  (RRBPersistentVector<length=9367,shift=10,tailOffset=9348,root=RelaxedNode(length=12, sizetable=[|864; 1700; 2436; 3234; 4130; 4767; 5571; 6321; 6955; 7738; 8632; 9348|], children=[|RelaxedNode(length=28, sizetable=[|32; 60; 90; 118; 150; 182; 211; 242; 274; 306; 338; 366; 396; 428; 460; 492;
+  524; 551; 582; 614; 646; 678; 710; 737; 768; 800; 832; 864|], children=[|L32; L28; L30; L28; L32; L32; L29; L31; L32; L32; L32; L28; L30; L32; L32; L32;
+  L32; L27; L31; L32; L32; L32; L32; L27; L31; L32; L32; L32|]);
+  RelaxedNode(length=27, sizetable=[|31; 56; 88; 120; 152; 184; 216; 243; 275; 307; 339; 371; 402; 434; 466; 498;
+  530; 559; 591; 617; 645; 677; 708; 740; 772; 804; 836|], children=[|L31; L25; L32; L32; L32; L32; L32; L27; L32; L32; L32; L32; L31; L32; L32; L32;
+  L32; L29; L32; L26; L28; L32; L31; L32; L32; L32; L32|]);
+  RelaxedNode(length=24, sizetable=[|31; 58; 90; 122; 149; 181; 211; 243; 272; 303; 334; 366; 397; 428; 460; 491;
+  523; 555; 582; 614; 644; 673; 704; 736|], children=[|L31; L27; L32; L32; L27; L32; L30; L32; L29; L31; L31; L32; L31; L31; L32; L31;
+  L32; L32; L27; L32; L30; L29; L31; L32|]);
+  RelaxedNode(length=26, sizetable=[|24; 55; 84; 116; 148; 180; 212; 244; 269; 295; 325; 357; 389; 421; 452; 483;
+  512; 544; 576; 608; 639; 671; 703; 735; 767; 798|], children=[|L24; L31; L29; L32; L32; L32; L32; L32; L25; L26; L30; L32; L32; L32; L31; L31;
+  L29; L32; L32; L32; L31; L32; L32; L32; L32; L31|]);
+  RelaxedNode(length=30, sizetable=[|32; 61; 93; 119; 143; 171; 203; 232; 258; 290; 321; 349; 376; 408; 439; 471;
+  502; 534; 561; 592; 624; 656; 688; 717; 747; 779; 806; 834; 865; 896|], children=[|L32; L29; L32; L26; L24; L28; L32; L29; L26; L32; L31; L28; L27; L32; L31; L32;
+  L31; L32; L27; L31; L32; L32; L32; L29; L30; L32; L27; L28; L31; L31|]);
+  RelaxedNode(length=22, sizetable=[|31; 62; 93; 123; 150; 182; 208; 236; 267; 299; 322; 352; 384; 416; 446; 470;
+  500; 528; 556; 584; 607; 637|], children=[|L31; L31; L31; L30; L27; L32; L26; L28; L31; L32; L23; L30; L32; L32; L30; L24;
+  L30; L28; L28; L28; L23; L30|]);
+  RelaxedNode(length=28, sizetable=[|28; 60; 89; 121; 146; 177; 209; 238; 263; 295; 327; 359; 390; 422; 447; 479;
+  503; 529; 556; 584; 610; 638; 668; 693; 722; 749; 778; 804|], children=[|L28; L32; L29; L32; L25; L31; L32; L29; L25; L32; L32; L32; L31; L32; L25; L32;
+  L24; L26; L27; L28; L26; L28; L30; L25; L29; L27; L29; L26|]);
+  RelaxedNode(length=25, sizetable=[|29; 61; 86; 118; 150; 182; 214; 246; 276; 303; 327; 354; 384; 416; 448; 480;
+  509; 538; 562; 594; 623; 655; 687; 719; 750|], children=[|L29; L32; L25; L32; L32; L32; L32; L32; L30; L27; L24; L27; L30; L32; L32; L32;
+  L29; L29; L24; L32; L29; L32; L32; L32; L31|]);
+  RelaxedNode(length=22, sizetable=[|26; 58; 84; 107; 138; 169; 197; 225; 257; 289; 314; 346; 373; 399; 429; 458;
+  486; 516; 545; 572; 602; 634|], children=[|L26; L32; L26; L23; L31; L31; L28; L28; L32; L32; L25; L32; L27; L26; L30; L29;
+  L28; L30; L29; L27; L30; L32|]);
+  RelaxedNode(length=25, sizetable=[|32; 64; 96; 128; 160; 192; 222; 250; 282; 314; 346; 378; 410; 442; 474; 504;
+  536; 565; 597; 629; 661; 693; 720; 752; 783|], children=[|L32; L32; L32; L32; L32; L32; L30; L28; L32; L32; L32; L32; L32; L32; L32; L30;
+  L32; L29; L32; L32; L32; L32; L27; L32; L31|]);
+  RelaxedNode(length=28, sizetable=[|32; 64; 96; 128; 160; 192; 224; 256; 288; 319; 351; 383; 415; 447; 479; 511;
+  543; 575; 607; 639; 671; 703; 735; 767; 799; 830; 862; 894|], children=[|L32; L32; L32; L32; L32; L32; L32; L32; L32; L31; L32; L32; L32; L32; L32; L32;
+  L32; L32; L32; L32; L32; L32; L32; L32; L32; L31; L32; L32|]);
+  RelaxedNode(length=24, sizetable=[|23; 55; 86; 118; 145; 169; 197; 229; 261; 287; 314; 346; 377; 409; 441; 471;
+  503; 535; 567; 596; 626; 656; 688; 716|], children=[|L23; L32; L31; L32; L27; L24; L28; L32; L32; L26; L27; L32; L31; L32; L32; L30;
+  L32; L32; L32; L29; L30; L30; L32; L28|])|]),tail=[|-4; -90; 0; -40; -8; 50; 91; -40; 17; -25; 11; 38; -17; -80; -33; -95; -24; 13;
+  -11|]>,
+"T7" + "17 26 25 M M M M T21"  ... worked?
+
+"20 25 M M T3", pop 53? no, I don't think that was the problem...
+
+Try popping something down to empty and see what happens.
+
+
+
+[remove -59; remove 31; push 15;
+ split (13,[remove 51; insert (44,26); insert (81,60); insert (-54,66); pop 56; remove -67;
+ insert (86,41); insert (-49,47); slice (<null>,Some 52); pop 43; remove -49;
+ remove 21; insert (87,58); remove 23; remove 99; insert (83,65); insert (-2,76)],[push 47; remove 37; insert (-4,29); insert (62,63); slice (Some 8,Some -9);
+ pop 62; remove 17; remove -71; insert (66,16); insert (-98,22); push 49; push 3;
+ insert (22,56); remove -16; push 82; insert (18,28); insert (33,44); push 40;
+ remove -83; insert (-41,54); insert (54,73)]);
+ slice (Some 30,Some -83); pop 53; insert (55,80); pop 61;
+ split (31,[insert (-4,25); insert (33,94); insert (99,66); push 93; remove -65; remove 46;
+ push 2; remove -11; insert (51,81); insert (-84,50); push 77; remove 75],[insert (-24,60); insert (13,32); pop 59; remove 18; remove 30; pop 75;
+ remove -86; slice (Some -1,Some 83); pop 16; remove -92; remove 86;
+ insert (95,35); insert (-40,41); push 31; push 37; insert (100,16);
+ insert (-35,22)]);
+ insert (-41,55); insert (31,39); insert (89,60); remove -6;
+ split (77,[insert (47,53); insert (-77,34); insert (-30,14); slice (Some -66,Some -64)],[insert (-81,5); insert (10,12); remove 32; insert (-79,92); insert (53,32);
+ insert (37,47); remove 56; remove 93; push 69; insert (-49,1);
+ slice (Some 43,Some -33); pop 71; pop 15; insert (-19,20); pop 79; remove 60;
+ insert (-3,30); pop 23]);
+ pop 9; insert (12,55); push 51; insert (-49,5); remove 40; insert (-10,47);
+ push 44; remove 86; insert (-80,70); remove -16; insert (-21,75);
+ insert (69,38); insert (-17,75); insert (25,15); insert (-89,86);
+ insert (55,40)]
+Shrunk 29 times to:
+	RRBPersistentVector<length=11,shift=5,tailOffset=0,root=FullNode(length=0, children=[||]),tail=[|28; -22; -8; 20; 14; -30; 28; -5; -11; 6; 3|]> [split (13,[remove 51; insert (44,26); insert (81,60); insert (-54,66); pop 56; remove -67;
+ insert (86,41); insert (-49,47); slice (<null>,Some 52); pop 43; remove -49;
+ remove 21; insert (87,58); remove 23; remove 99; insert (83,65); insert (-2,76)],[push 47; remove 37; insert (-4,29); insert (62,63); slice (Some 8,Some -9);
+ pop 62; remove 17; remove -71; insert (66,16); insert (-98,22); push 49; push 3;
+ insert (22,56); remove -16; push 82; insert (18,28); insert (33,44); push 40;
+ remove -83; insert (-41,54); insert (54,73)])]
+Result:
+	False

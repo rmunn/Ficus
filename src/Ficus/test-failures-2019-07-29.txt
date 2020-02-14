@@ -1,0 +1,695 @@
+Full sapling RRBPersistentVector<length=64,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|33; 34; 35; 36; 37; 38; 39; 40; 41; 42; 43; 44; 45; 46; 47; 48; 49; 50; 51; 52;
+  53; 54; 55; 56; 57; 58; 59; 60; 61; 62; 63; 64|]>
+failed the following RRBVector invariants:
+["The tail offset should equal (vector length - tail length) at all times, even when the vector is empty";
+ "The root node should be empty if (and only if) the tail offset is 0 (i.e., it's a tail-only node)";
+ "If tail offset = 0, the vector length should be blockSize or less"]
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-1.Invoke(AssertException exn) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-2.Invoke(String x) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-5.Invoke(FSharpList`1 arg30) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties[T](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkProperties[a](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 384
+
+  X All tests/Insert tests/insert into random vectors [252ms]                                                                                                                                                                                                                   
+  Error Message:
+   
+Failed after 1 test. Parameters:
+	RRBPersistentVector<length=53,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|17; -15; 32; 28; -46; -12; 35; 31; -43; -9; 38; 34; -40; -44; 41; 37; -37; -41;
+  44; 40; -34|]> -29
+Shrunk 2 times to:
+	RRBPersistentVector<length=53,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|17; -15; 32; 28; -46; -12; 35; 31; -43; -9; 38; 34; -40; -44; 41; 37; -37; -41;
+  44; 40; -34|]> 0
+Result:
+	Exception
+  Expecto.AssertException: insert did not insert the right value.
+expected:
+[|512; 46; -1; 46; 42; -32; -36; 49; 45; -29; -33; 14; 48; -26; -30; 17; 51; -23;
+  -27; 20; 12; -20; -24; 23; 19; -17; -21; 26; 22; -14; -18; 29; 25; 17; -15; 32;
+  28; -46; -12; 35; 31; -43; -9; 38; 34; -40; -44; 41; 37; -37; -41; 44; 40; -34|]
+  actual:
+[|46; -1; 46; 42; -32; -36; 49; 45; -29; -33; 14; 48; -26; -30; 17; 51; -23; -27;
+  20; 12; -20; -24; 23; 19; -17; -21; 26; 22; -14; -18; 29; 25; 512; 17; -15; 32;
+  28; -46; -12; 35; 31; -43; -9; 38; 34; -40; -44; 41; 37; -37; -41; 44; 40; -34|]
+   at Expecto.Expect.equal@335-7.Invoke(String x) in C:\Users\Anthony Lloyd\src\expecto\Expecto\Expect.fs:line 335
+   at Expecto.Expect.equal$cont@317[a](a actual, a expected, String message, Object e, Object a, Unit unitVar) in C:\Users\Anthony Lloyd\src\expecto\Expecto\Expect.fs:line 335
+   at Expecto.Expect.equal[a](a actual, a expected, String message) in C:\Users\Anthony Lloyd\src\expecto\Expecto\Expect.fs:line 316
+   at ExpectoTemplate.RRBVectorExpectoTest.insertTests@926-2.Invoke(RRBVector`1 vec, Int32 idx) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorExpectoTest.fs:line 931
+   at FsCheck.Testable.evaluate[a,b](FSharpFunc`2 body, a a)
+Focus on error:
+	etestPropertyWithConfig (1247921502, 296626075) "insert into random vectors"
+
+  X All tests/split + join tests/vecSkip [252ms]                                                                                                                                                                                                                                
+  Error Message:
+   
+Failed after 6 tests. Parameters:
+	VecPlusArrAndIdx
+  (RRBPersistentVector<length=34,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|81; 50|]>,
+   [|80; 29; 86; 77; 15; 96; 7; 16; 32; 89; 36; 5; 11; 83; 17; 86; 92; 64; 98; 4;
+     73; 7; 79; 85; 54; 88; 60; 66; 35; 69; 41; 47; 81; 50|],16)
+Shrunk 1 times to:
+	VecPlusArrAndIdx
+  (RRBPersistentVector<length=33,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|50|]>,
+   [|29; 86; 77; 15; 96; 7; 16; 32; 89; 36; 5; 11; 83; 17; 86; 92; 64; 98; 4; 73;
+     7; 79; 85; 54; 88; 60; 66; 35; 69; 41; 47; 81; 50|],15)
+Result:
+	Exception
+  System.ArgumentException: The index is outside the legal range.
+count = 15, array.Length = 1
+Parameter name: count
+   at Microsoft.FSharp.Core.DetailedExceptions.invalidArgOutOfRange[?](String arg, Int32 index, String text, Int32 bound)
+   at Microsoft.FSharp.Collections.ArrayModule.Skip[T](Int32 count, T[] array)
+   at Ficus.RRBVector.RRBPersistentVector`1.Skip(Int32 idx) in /home/rmunn/code/fsharp/ficus-staging/src/Ficus/RRBBetterVector.fs:line 228
+   at ExpectoTemplate.RRBVectorExpectoTest.splitJoinTests@902-19.Invoke(VecPlusArrAndIdx _arg16) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorExpectoTest.fs:line 903
+   at FsCheck.Testable.evaluate[a,b](FSharpFunc`2 body, a a)
+Focus on error:
+	etestPropertyWithConfig (1247920844, 296626075) "vecSkip"
+
+  X All tests/split + join tests/vecTake [267ms]                                                                                                                                                                                                                                
+  Error Message:
+   
+Failed after 2 tests. Parameters:
+	VecPlusArrAndIdx
+  (RRBPersistentVector<length=37,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|61; 30; 36; 70; 76|]>,
+   [|24; 69; 54; 23; 29; 63; 35; 4; 10; 44; 16; 85; 91; 25; 31; 3; 72; 6; 12; 84;
+     53; 87; 93; 27; 34; 68; 74; 8; 80; 49; 55; 89; 61; 30; 36; 70; 76|],22)
+Shrunk 4 times to:
+	VecPlusArrAndIdx
+  (RRBPersistentVector<length=33,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|76|]>,
+   [|29; 63; 35; 4; 10; 44; 16; 85; 91; 25; 31; 3; 72; 6; 12; 84; 53; 87; 93; 27;
+     34; 68; 74; 8; 80; 49; 55; 89; 61; 30; 36; 70; 76|],18)
+Result:
+	Exception
+  Expecto.AssertException: Sliced vector RRBPersistentVector<length=18,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|76|]>
+failed the following RRBVector invariants:
+["The total number of items in all leaf nodes combined, plus the tail, should equal the vector length";
+ "The tail offset should equal (vector length - tail length) at all times, even when the vector is empty";
+ "The root node should be empty if (and only if) the tail offset is 0 (i.e., it's a tail-only node)"]
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-1.Invoke(AssertException exn) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-2.Invoke(String x) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-5.Invoke(FSharpList`1 arg30) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties[T](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkProperties[a](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 384
+   at ExpectoTemplate.RRBVectorExpectoTest.splitJoinTests@897-18.Invoke(VecPlusArrAndIdx _arg15) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorExpectoTest.fs:line 899
+   at FsCheck.Testable.evaluate[a,b](FSharpFunc`2 body, a a)
+Focus on error:
+	etestPropertyWithConfig (1247920795, 296626075) "vecTake"
+
+  X All tests/Insert tests/insert into full vectors [478ms]                                                                                                                                                                                                                     
+  Error Message:
+   
+Failed after 4 tests. Parameters:
+	VecPlusArrAndIdx
+  (RRBPersistentVector<length=54,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|80; 86; 21; 27; 61; 67; 39; 8; 42; 26; 69; 68; 53; 49; 15; 31; 21; 68; 74; 8;
+  77; 49|]>,
+   [|6; 57; 60; 45; 14; 20; 54; 26; 95; 1; 35; 41; 13; 82; 16; 22; 94; 63; 97; 3;
+     75; 44; 78; 84; 18; 90; 59; 65; 99; 71; 40; 46; 80; 86; 21; 27; 61; 67; 39;
+     8; 42; 26; 69; 68; 53; 49; 15; 31; 21; 68; 74; 8; 77; 49|],21)
+Shrunk 21 times to:
+	VecPlusArrAndIdx
+  (RRBPersistentVector<length=33,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|49|]>,
+   [|44; 78; 84; 18; 90; 59; 65; 99; 71; 40; 46; 80; 86; 21; 27; 61; 67; 39; 8;
+     42; 26; 69; 68; 53; 49; 15; 31; 21; 68; 74; 8; 77; 49|],0)
+Result:
+	Exception
+  Expecto.AssertException: insert did not insert the right value.
+expected:
+[|512; 44; 78; 84; 18; 90; 59; 65; 99; 71; 40; 46; 80; 86; 21; 27; 61; 67; 39; 8;
+  42; 26; 69; 68; 53; 49; 15; 31; 21; 68; 74; 8; 77; 49|]
+  actual:
+[|44; 78; 84; 18; 90; 59; 65; 99; 71; 40; 46; 80; 86; 21; 27; 61; 67; 39; 8; 42;
+  26; 69; 68; 53; 49; 15; 31; 21; 68; 74; 8; 77; 512; 49|]
+   at Expecto.Expect.equal@335-7.Invoke(String x) in C:\Users\Anthony Lloyd\src\expecto\Expecto\Expect.fs:line 335
+   at Expecto.Expect.equal$cont@317[a](a actual, a expected, String message, Object e, Object a, Unit unitVar) in C:\Users\Anthony Lloyd\src\expecto\Expecto\Expect.fs:line 335
+   at Expecto.Expect.equal[a](a actual, a expected, String message) in C:\Users\Anthony Lloyd\src\expecto\Expecto\Expect.fs:line 316
+   at ExpectoTemplate.RRBVectorExpectoTest.insertTests@920-1.Invoke(VecPlusArrAndIdx _arg1) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorExpectoTest.fs:line 924
+   at FsCheck.Testable.evaluate[a,b](FSharpFunc`2 body, a a)
+Focus on error:
+	etestPropertyWithConfig (1247921132, 296626075) "insert into full vectors"
+
+  X All tests/Basic vector operations/vecLen [187ms]                                                                                                                                                                                                                            
+  Error Message:
+   
+Failed after 2 tests. Parameters:
+	VecPlusArrAndIdx
+  (RRBPersistentVector<length=54,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|48; 17; 23; 57; 29; 35; 4; 38; 44; 16; 85; 19; 25; 97; 66; 100; 6; 40; 12; 81;
+  87; 21|]>,
+   [|53; 68; 70; 46; 79; 92; 76; 22; 95; 16; 88; 1; 13; 60; 96; 81; 20; 80; 99;
+     71; 40; 74; 80; 52; 21; 55; 61; 95; 67; 36; 42; 76; 48; 17; 23; 57; 29; 35;
+     4; 38; 44; 16; 85; 19; 25; 97; 66; 100; 6; 40; 12; 81; 87; 21|],36)
+Shrunk 21 times to:
+	VecPlusArrAndIdx
+  (RRBPersistentVector<length=33,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|21|]>,
+   [|74; 80; 52; 21; 55; 61; 95; 67; 36; 42; 76; 48; 17; 23; 57; 29; 35; 4; 38;
+     44; 16; 85; 19; 25; 97; 66; 100; 6; 40; 12; 81; 87; 21|],15)
+Result:
+	Exception
+  Expecto.AssertException: Vector RRBPersistentVector<length=33,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|21|]>
+failed the following RRBVector invariants:
+["The tail offset should equal (vector length - tail length) at all times, even when the vector is empty";
+ "The root node should be empty if (and only if) the tail offset is 0 (i.e., it's a tail-only node)";
+ "If tail offset = 0, the vector length should be blockSize or less"]
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-1.Invoke(AssertException exn) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-2.Invoke(String x) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-5.Invoke(FSharpList`1 arg30) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties[T](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkPropertiesSimple[a](RRBVector`1 vec) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 385
+   at ExpectoTemplate.RRBVectorExpectoTest.vectorTests@198-3.Invoke(VecPlusArrAndIdx _arg3) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorExpectoTest.fs:line 198
+   at FsCheck.Testable.evaluate[a,b](FSharpFunc`2 body, a a)
+Focus on error:
+	etestPropertyWithConfig (1254672147, 296626075) "vecLen"
+
+  X All tests/Basic vector operations/vecItems [80ms]                                                                                                                                                                                                                           
+  Error Message:
+   
+Failed after 6 tests. Parameters:
+	VecPlusArrAndIdx
+  (RRBPersistentVector<length=44,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|83; 52; 24; 58; 64; 33; 5; 39; 45; 14; 48; 20|]>,
+   [|81; 28; 97; 3; 75; 9; 78; 84; 18; 90; 96; 65; 99; 71; 77; 89; 75; 73; 48;
+     85; 90; 75; 81; 15; 84; 56; 62; 96; 65; 71; 43; 77; 83; 52; 24; 58; 64; 33;
+     5; 39; 45; 14; 48; 20|],10)
+Shrunk 11 times to:
+	VecPlusArrAndIdx
+  (RRBPersistentVector<length=33,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|20|]>,
+   [|65; 99; 71; 77; 89; 75; 73; 48; 85; 90; 75; 81; 15; 84; 56; 62; 96; 65; 71;
+     43; 77; 83; 52; 24; 58; 64; 33; 5; 39; 45; 14; 48; 20|],0)
+Result:
+	Exception
+  Expecto.AssertException: Vector RRBPersistentVector<length=33,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|20|]>
+failed the following RRBVector invariants:
+["The tail offset should equal (vector length - tail length) at all times, even when the vector is empty";
+ "The root node should be empty if (and only if) the tail offset is 0 (i.e., it's a tail-only node)";
+ "If tail offset = 0, the vector length should be blockSize or less"]
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-1.Invoke(AssertException exn) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-2.Invoke(String x) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-5.Invoke(FSharpList`1 arg30) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties[T](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkPropertiesSimple[a](RRBVector`1 vec) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 385
+   at ExpectoTemplate.RRBVectorExpectoTest.vectorTests@199-4.Invoke(VecPlusArrAndIdx _arg4) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorExpectoTest.fs:line 204
+   at FsCheck.Testable.evaluate[a,b](FSharpFunc`2 body, a a)
+Focus on error:
+	etestPropertyWithConfig (1256355340, 296626075) "vecItems"
+
+  X All tests/Operational transform tests/Extra-small lists from almost-full sapling [944ms]                                                                                                                                                                                    
+  Error Message:
+   
+Failed after 1 test. Parameters:
+	[remove from first leaf; pop; remove from first leaf; insert 7 in first leaf;
+ remove from first leaf; push 42 once; insert 9 in tail; push 42 once;
+ insert 5 at head; pop; pop; insert 9 in tail; pop; insert 9 in tail;
+ remove from tail; pop; insert 7 in first leaf; pop; remove from head;
+ insert 5 at head; remove from first leaf; push 42 once; insert 9 in tail;
+ insert 9 in tail; insert 7 in first leaf; insert 7 in first leaf;
+ remove from tail; insert 7 in first leaf; remove from tail; insert 5 at head;
+ insert 9 in tail; remove from tail; insert 9 in tail; insert 5 at head;
+ insert 5 at head; remove from head; remove from first leaf;
+ insert 7 in first leaf; remove from head; remove from first leaf; pop;
+ remove from head; insert 7 in first leaf; push 42 once; push 42 once;
+ remove from first leaf; pop; remove from first leaf; insert 5 at head;
+ remove from first leaf; pop; remove from tail; insert 9 in tail;
+ insert 5 at head; remove from tail; insert 5 at head; remove from tail;
+ insert 9 in tail; remove from head; insert 9 in tail; insert 9 in tail;
+ remove from tail; remove from tail; insert 9 in tail; push 42 once; pop;
+ remove from first leaf; remove from tail; push 42 once; insert 5 at head;
+ insert 5 at head; remove from head; remove from tail; remove from first leaf;
+ push 42 once; insert 5 at head; push 42 once; remove from first leaf;
+ remove from first leaf; insert 9 in tail; insert 7 in first leaf;
+ insert 5 at head; remove from head; insert 5 at head; pop; remove from head;
+ insert 5 at head; insert 5 at head; insert 5 at head; pop; insert 5 at head;
+ remove from head; insert 9 in tail; insert 5 at head; remove from first leaf;
+ insert 5 at head; insert 5 at head; remove from tail; insert 7 in first leaf;
+ remove from tail; ...]
+Shrunk 119 times to:
+	[remove from first leaf]
+Result:
+	Exception
+  Expecto.AssertException: Vector RRBPersistentVector<length=62,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|33; 34; 35; 37; 38; 39; 40; 41; 42; 43; 44; 45; 46; 47; 48; 49; 50; 51; 52; 53;
+  54; 55; 56; 57; 58; 59; 60; 61; 62; 63|]>
+failed the following RRBVector invariants:
+["The tail offset should equal (vector length - tail length) at all times, even when the vector is empty";
+ "The root node should be empty if (and only if) the tail offset is 0 (i.e., it's a tail-only node)";
+ "If tail offset = 0, the vector length should be blockSize or less"]
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-1.Invoke(AssertException exn) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-2.Invoke(String x) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-5.Invoke(FSharpList`1 arg30) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties[T](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkPropertiesSimple[a](RRBVector`1 vec) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 385
+   at ExpectoTemplate.RRBVectorFsCheckCommands.vecEqual[a](RRBVector`1 vec, a[] arr, String msg) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorFsCheckCommands.fs:line 14
+   at ExpectoTemplate.RRBVectorFsCheckCommands.VecCommands.removeFromFirstLeaf@71.Post(RRBVector`1 vec, Int32[] arr) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorFsCheckCommands.fs:line 75
+   at FsCheck.Command.applyCommands@98[a,b](a tupledArg0, b tupledArg1, FSharpList`1 cmds)
+   at FsCheck.Command.ToPropertyWith@107.Invoke(IEnumerable`1 s)
+   at FsCheck.Testable.evaluate[a,b](FSharpFunc`2 body, a a)
+Focus on error:
+	etestPropertyWithConfig (1248237745, 296626075) "Extra-small lists from almost-full sapling"
+
+  X All tests/Operational transform tests/Small lists from almost-full sapling [961ms]                                                                                                                                                                                          
+  Error Message:
+   
+Failed after 1 test. Parameters:
+	[insert 5 at head; pop; push four items; remove from first leaf;
+ remove from tail; pop; pop; remove from tail; remove from tail; pop;
+ remove from first leaf; insert 5 at head; insert 9 in tail; push 42 once;
+ insert 5 at head; pop; pop; remove from tail; remove from tail;
+ insert 9 in tail; push four items; remove from head; insert 9 in tail;
+ push 42 once; push four items; push 42 once; remove from head; push 42 once;
+ remove from tail; push four items; push four items; push four items;
+ remove from head; remove from tail; remove from first leaf;
+ insert 7 in first leaf; pop; remove from first leaf; remove from head;
+ remove from head; push four items; insert 7 in first leaf; insert 9 in tail;
+ remove from head; push 42 once; remove from head; insert 7 in first leaf;
+ insert 9 in tail; remove from tail; insert 5 at head; push 42 once;
+ push 42 once; remove from head; remove from first leaf; insert 7 in first leaf;
+ insert 5 at head; push 42 once; insert 5 at head; push 42 once;
+ remove from head; insert 7 in first leaf; remove from first leaf;
+ push four items; remove from tail; remove from first leaf; push four items;
+ insert 5 at head; pop; push 42 once; pop; remove from tail;
+ remove from first leaf; remove from tail; push four items; remove from head;
+ push four items; insert 9 in tail; push 42 once; remove from tail;
+ insert 9 in tail; insert 9 in tail; insert 7 in first leaf; insert 9 in tail;
+ pop; insert 5 at head; remove from tail; insert 7 in first leaf; pop;
+ remove from tail; remove from first leaf; push 42 once; remove from first leaf;
+ remove from first leaf; remove from head; remove from head; remove from head;
+ insert 5 at head; insert 9 in tail; remove from tail; remove from tail; ...]
+Shrunk 119 times to:
+	[pop]
+Result:
+	Exception
+  Expecto.AssertException: Vector RRBPersistentVector<length=62,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|33; 34; 35; 36; 37; 38; 39; 40; 41; 42; 43; 44; 45; 46; 47; 48; 49; 50; 51; 52;
+  53; 54; 55; 56; 57; 58; 59; 60; 61; 62|]>
+failed the following RRBVector invariants:
+["The tail offset should equal (vector length - tail length) at all times, even when the vector is empty";
+ "The root node should be empty if (and only if) the tail offset is 0 (i.e., it's a tail-only node)";
+ "If tail offset = 0, the vector length should be blockSize or less"]
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-1.Invoke(AssertException exn) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-2.Invoke(String x) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-5.Invoke(FSharpList`1 arg30) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties[T](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkPropertiesSimple[a](RRBVector`1 vec) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 385
+   at ExpectoTemplate.RRBVectorFsCheckCommands.vecEqual[a](RRBVector`1 vec, a[] arr, String msg) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorFsCheckCommands.fs:line 14
+   at ExpectoTemplate.RRBVectorFsCheckCommands.VecCommands.pop@42-1.Post(RRBVector`1 vec, Int32[] arr) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorFsCheckCommands.fs:line 46
+   at FsCheck.Command.applyCommands@98[a,b](a tupledArg0, b tupledArg1, FSharpList`1 cmds)
+   at FsCheck.Command.ToPropertyWith@107.Invoke(IEnumerable`1 s)
+   at FsCheck.Testable.evaluate[a,b](FSharpFunc`2 body, a a)
+Focus on error:
+	etestPropertyWithConfig (1248423969, 296626075) "Small lists from almost-full sapling"
+
+  X All tests/Basic vector operations/vecPush [115ms]                                                                                                                                                                                                                           
+  Error Message:
+   
+Failed after 4 tests. Parameters:
+	VecPlusArrAndIdx
+  (RRBPersistentVector<length=35,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|40; 46; 81|]>,
+   [|44; 45; 73; 86; 11; 46; 65; 37; 6; 40; 46; 18; 52; 21; 2; 51; 77; 95; 95;
+     28; 55; 64; 23; 16; 83; 41; 6; 25; 59; 65; 100; 6; 40; 46; 81|],10)
+Shrunk 2 times to:
+	VecPlusArrAndIdx
+  (RRBPersistentVector<length=33,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|81|]>,
+   [|73; 86; 11; 46; 65; 37; 6; 40; 46; 18; 52; 21; 2; 51; 77; 95; 95; 28; 55;
+     64; 23; 16; 83; 41; 6; 25; 59; 65; 100; 6; 40; 46; 81|],8)
+Result:
+	Exception
+  Expecto.AssertException: Original vector RRBPersistentVector<length=33,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|81|]>
+failed the following RRBVector invariants:
+["The tail offset should equal (vector length - tail length) at all times, even when the vector is empty";
+ "The root node should be empty if (and only if) the tail offset is 0 (i.e., it's a tail-only node)";
+ "If tail offset = 0, the vector length should be blockSize or less"]
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-1.Invoke(AssertException exn) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-2.Invoke(String x) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-5.Invoke(FSharpList`1 arg30) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties[T](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkProperties[a](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 384
+   at ExpectoTemplate.RRBVectorExpectoTest.vectorTests@218-7.Invoke(VecPlusArrAndIdx _arg6) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorExpectoTest.fs:line 220
+   at FsCheck.Testable.evaluate[a,b](FSharpFunc`2 body, a a)
+Focus on error:
+	etestPropertyWithConfig (1257724474, 296626075) "vecPush"
+
+  X All tests/Operational transform tests/Medium lists from almost-full sapling [1s 108ms]                                                                                                                                                                                      
+  Error Message:
+   
+Failed after 4 tests. Parameters:
+	[insert 9 in tail; push 42 once; push 42 once; push nine items; remove from tail;
+ insert 9 in tail; remove from head; insert 9 in tail; remove from first leaf;
+ remove from tail; remove from first leaf; push 42 once; insert 9 in tail;
+ remove from first leaf; remove from head; remove from head; remove from head;
+ push 42 once; push 42 once; remove from first leaf; remove from tail;
+ push 42 once; insert 7 in first leaf; push four items; remove from head;
+ insert 9 in tail; remove from first leaf; insert 5 at head; insert 9 in tail;
+ remove from first leaf; remove from head; remove from tail; remove from head;
+ push nine items; push nine items; remove from tail; push four items;
+ push 42 once; remove from tail; insert 7 in first leaf; insert 9 in tail;
+ push 42 once; pop; pop; insert 7 in first leaf; remove from tail; push 42 once;
+ remove from tail; insert 5 at head; push nine items; remove from head;
+ remove from tail; insert 9 in tail; insert 9 in tail; pop; push four items;
+ push four items; push nine items; remove from head; push 42 once; push 42 once;
+ insert 5 at head; push 42 once; push nine items; insert 9 in tail; pop;
+ push nine items; remove from tail; remove from first leaf; push four items;
+ remove from head; insert 9 in tail; push 42 once; remove from tail;
+ push 42 once; insert 9 in tail; push nine items; insert 9 in tail;
+ remove from head; insert 5 at head; insert 5 at head; remove from first leaf;
+ pop; insert 9 in tail; insert 7 in first leaf; push four items;
+ remove from head; remove from head; push nine items; insert 7 in first leaf;
+ push four items; remove from first leaf; insert 7 in first leaf;
+ remove from first leaf; insert 5 at head; insert 9 in tail; pop;
+ push nine items; remove from head; remove from head; ...]
+Shrunk 120 times to:
+	[insert 9 in tail]
+Result:
+	Exception
+  System.ArgumentException: Source array was not long enough. Check the source index, length, and the array's lower bounds.
+Parameter name: sourceArray
+   at System.Array.Copy(Array sourceArray, Int32 sourceIndex, Array destinationArray, Int32 destinationIndex, Int32 length, Boolean reliable)
+   at Ficus.RRBArrayExtensions.Array.copyAndInsertIntoFullArray[a](Int32 idx, a newItem, a[] oldArr) in /home/rmunn/code/fsharp/ficus-staging/src/Ficus/RRBArrayExtensions.fs:line 38
+   at Ficus.RRBVector.RRBPersistentVector`1.Insert(Int32 idx, T newItem) in /home/rmunn/code/fsharp/ficus-staging/src/Ficus/RRBBetterVector.fs:line 343
+   at ExpectoTemplate.RRBVectorFsCheckCommands.VecCommands.insert9InTail@59.RunActual(RRBVector`1 vec) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorFsCheckCommands.fs:line 60
+   at FsCheck.Command.applyCommands@98[a,b](a tupledArg0, b tupledArg1, FSharpList`1 cmds)
+   at FsCheck.Command.ToPropertyWith@107.Invoke(IEnumerable`1 s)
+   at FsCheck.Testable.evaluate[a,b](FSharpFunc`2 body, a a)
+ (75% long sequences (>6 commands))
+Focus on error:
+	etestPropertyWithConfig (1248684497, 296626075) "Medium lists from almost-full sapling"
+
+  X All tests/Basic vector operations/vecPop [258ms]                                                                                                                                                                                                                            
+  Error Message:
+   
+Failed after 6 tests. Parameters:
+	VecPlusArrAndIdx
+  (RRBPersistentVector<length=64,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|46; 15; 21; 55; 61; 96; 2; 36; 42; 77; 83; 17; 21; 38; 67; 92; 53; 72; 7; 13;
+  47; 53; 88; 94; 28; 34; 6; 75; 9; 15; 49; 56|]>,
+   [|33; 67; 74; 8; 14; 48; 55; 89; 95; 29; 35; 70; 76; 10; 16; 51; 57; 91; 97;
+     69; 38; 72; 78; 12; 19; 53; 59; 93; 100; 34; 40; 74; 46; 15; 21; 55; 61; 96;
+     2; 36; 42; 77; 83; 17; 21; 38; 67; 92; 53; 72; 7; 13; 47; 53; 88; 94; 28;
+     34; 6; 75; 9; 15; 49; 56|],1)
+Shrunk 31 times to:
+	VecPlusArrAndIdx
+  (RRBPersistentVector<length=33,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|56|]>,
+   [|74; 46; 15; 21; 55; 61; 96; 2; 36; 42; 77; 83; 17; 21; 38; 67; 92; 53; 72;
+     7; 13; 47; 53; 88; 94; 28; 34; 6; 75; 9; 15; 49; 56|],0)
+Result:
+	Exception
+  Expecto.AssertException: Original vector RRBPersistentVector<length=33,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|56|]>
+failed the following RRBVector invariants:
+["The tail offset should equal (vector length - tail length) at all times, even when the vector is empty";
+ "The root node should be empty if (and only if) the tail offset is 0 (i.e., it's a tail-only node)";
+ "If tail offset = 0, the vector length should be blockSize or less"]
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-1.Invoke(AssertException exn) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-2.Invoke(String x) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-5.Invoke(FSharpList`1 arg30) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties[T](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkProperties[a](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 384
+   at ExpectoTemplate.RRBVectorExpectoTest.vectorTests@208-6.Invoke(VecPlusArrAndIdx _arg5) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorExpectoTest.fs:line 210
+   at FsCheck.Testable.evaluate[a,b](FSharpFunc`2 body, a a)
+Focus on error:
+	etestPropertyWithConfig (1257308266, 296626075) "vecPop"
+
+  X All tests/Basic vector operations/vecUpdate [206ms]                                                                                                                                                                                                                         
+  Error Message:
+   
+Failed after 1 test. Parameters:
+	VecPlusArrAndIdx
+  (RRBPersistentVector<length=40,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|52; 24; 30; 99; 33; 5; 11; 80|]>,
+   [|96; 70; 42; 57; 35; 68; 59; 92; 1; 98; 99; 9; 32; 18; 72; 39; 63; 2; 74; 82;
+     10; 27; 37; 56; 28; 62; 31; 37; 71; 43; 49; 18; 52; 24; 30; 99; 33; 5; 11;
+     80|],22)
+Shrunk 7 times to:
+	VecPlusArrAndIdx
+  (RRBPersistentVector<length=33,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|80|]>,
+   [|92; 1; 98; 99; 9; 32; 18; 72; 39; 63; 2; 74; 82; 10; 27; 37; 56; 28; 62; 31;
+     37; 71; 43; 49; 18; 52; 24; 30; 99; 33; 5; 11; 80|],15)
+Result:
+	Exception
+  Expecto.AssertException: Original vector RRBPersistentVector<length=33,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|80|]>
+failed the following RRBVector invariants:
+["The tail offset should equal (vector length - tail length) at all times, even when the vector is empty";
+ "The root node should be empty if (and only if) the tail offset is 0 (i.e., it's a tail-only node)";
+ "If tail offset = 0, the vector length should be blockSize or less"]
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-1.Invoke(AssertException exn) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-2.Invoke(String x) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-5.Invoke(FSharpList`1 arg30) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties[T](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkProperties[a](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 384
+   at ExpectoTemplate.RRBVectorExpectoTest.vectorTests@225-10.Invoke(VecPlusArrAndIdx _arg7) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorExpectoTest.fs:line 227
+   at FsCheck.Testable.evaluate[a,b](FSharpFunc`2 body, a a)
+Focus on error:
+	etestPropertyWithConfig (1258102034, 296626075) "vecUpdate"
+
+  X All tests/Operational transform tests/Large lists from almost-full sapling [1s 7ms]                                                                                                                                                                                         
+  Error Message:
+   
+Failed after 2 tests. Parameters:
+	[insert 7 in first leaf; remove from tail; push nine items; remove from tail;
+ insert 9 in tail; push nine items; push four items; remove from first leaf;
+ remove from tail; push four items; remove from head; insert 5 at head; pop; pop;
+ push four items; remove from tail; push four items; insert 7 in first leaf; pop;
+ push nine items; remove from tail; remove from head; insert 9 in tail;
+ insert 9 in tail; remove from tail; insert 9 in tail; pop; remove from head;
+ push 42 once; remove from head; insert 7 in first leaf; remove from tail;
+ insert 9 in tail; pop; insert 9 in tail; push four items; push 42 once;
+ push 42 once; remove from first leaf; remove from head; push nine items;
+ push 42 once; push 42 once; remove from tail; remove from tail; push 42 once;
+ insert 9 in tail; insert 7 in first leaf; pop; insert 7 in first leaf;
+ push 42 once; push 42 once; remove from head; push 42 once; push four items;
+ push nine items; insert 9 in tail; remove from head; remove from first leaf;
+ remove from first leaf; push nine items; insert 7 in first leaf;
+ remove from head; push four items; insert 7 in first leaf; remove from head;
+ insert 7 in first leaf; remove from first leaf; insert 9 in tail;
+ push four items; push nine items; push four items; remove from first leaf;
+ insert 9 in tail; push four items; insert 5 at head; insert 9 in tail;
+ remove from first leaf; pop; push four items; insert 7 in first leaf;
+ remove from tail; push 42 once; push 42 once; push 42 once; push four items;
+ push 42 once; insert 5 at head; push 42 once; remove from first leaf;
+ remove from tail; insert 9 in tail; push nine items; push four items;
+ remove from first leaf; push 42 once; insert 5 at head; push four items;
+ remove from first leaf; insert 9 in tail; ...]
+Shrunk 120 times to:
+	[remove from first leaf]
+Result:
+	Exception
+  Expecto.AssertException: Vector RRBPersistentVector<length=62,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|33; 34; 35; 37; 38; 39; 40; 41; 42; 43; 44; 45; 46; 47; 48; 49; 50; 51; 52; 53;
+  54; 55; 56; 57; 58; 59; 60; 61; 62; 63|]>
+failed the following RRBVector invariants:
+["The tail offset should equal (vector length - tail length) at all times, even when the vector is empty";
+ "The root node should be empty if (and only if) the tail offset is 0 (i.e., it's a tail-only node)";
+ "If tail offset = 0, the vector length should be blockSize or less"]
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-1.Invoke(AssertException exn) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-2.Invoke(String x) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-5.Invoke(FSharpList`1 arg30) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties[T](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkPropertiesSimple[a](RRBVector`1 vec) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 385
+   at ExpectoTemplate.RRBVectorFsCheckCommands.vecEqual[a](RRBVector`1 vec, a[] arr, String msg) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorFsCheckCommands.fs:line 14
+   at ExpectoTemplate.RRBVectorFsCheckCommands.VecCommands.removeFromFirstLeaf@71.Post(RRBVector`1 vec, Int32[] arr) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorFsCheckCommands.fs:line 75
+   at FsCheck.Command.applyCommands@98[a,b](a tupledArg0, b tupledArg1, FSharpList`1 cmds)
+   at FsCheck.Command.ToPropertyWith@107.Invoke(IEnumerable`1 s)
+   at FsCheck.Testable.evaluate[a,b](FSharpFunc`2 body, a a)
+ (50% long sequences (>6 commands))
+Focus on error:
+	etestPropertyWithConfig (1250394269, 296626075) "Large lists from almost-full sapling"
+
+  X All tests/Basic vector operations/vecSlice [210ms]                                                                                                                                                                                                                          
+  Error Message:
+   
+Failed after 1 test. Parameters:
+	VecPlusArrAndIdx
+  (RRBPersistentVector<length=45,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|39; 11; 17; 86; 20; 26; 98; 67; 1; 7; 79; 13; 82|]>,
+   [|92; 98; 32; 4; 10; 79; 13; 85; 91; 60; 94; 66; 72; 41; 75; 81; 53; 87; 56;
+     62; 34; 68; 37; 43; 77; 49; 18; 24; 58; 30; 36; 5; 39; 11; 17; 86; 20; 26;
+     98; 67; 1; 7; 79; 13; 82|],36) PositiveInt 81
+Shrunk 19 times to:
+	VecPlusArrAndIdx
+  (RRBPersistentVector<length=33,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|82|]>,
+   [|72; 41; 75; 81; 53; 87; 56; 62; 34; 68; 37; 43; 77; 49; 18; 24; 58; 30; 36;
+     5; 39; 11; 17; 86; 20; 26; 98; 67; 1; 7; 79; 13; 82|],24) PositiveInt 1
+Result:
+	Exception
+  Expecto.AssertException: Original vector RRBPersistentVector<length=33,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|82|]>
+failed the following RRBVector invariants:
+["The tail offset should equal (vector length - tail length) at all times, even when the vector is empty";
+ "The root node should be empty if (and only if) the tail offset is 0 (i.e., it's a tail-only node)";
+ "If tail offset = 0, the vector length should be blockSize or less"]
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-1.Invoke(AssertException exn) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-2.Invoke(String x) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-5.Invoke(FSharpList`1 arg30) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties[T](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkProperties[a](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 384
+   at ExpectoTemplate.RRBVectorExpectoTest.vectorTests@233-11.Invoke(VecPlusArrAndIdx _arg9, PositiveInt _arg8) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorExpectoTest.fs:line 236
+   at FsCheck.Testable.evaluate[a,b](FSharpFunc`2 body, a a)
+Focus on error:
+	etestPropertyWithConfig (1258842966, 296626075) "vecSlice"
+
+  X All tests/Basic vector operations/any random vector can be popped down to empty [18ms]                                                                                                                                                                                      
+  Error Message:
+   
+Failed after 12 tests. Parameters:
+	RRBPersistentVector<length=33,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|-8|]>
+Result:
+	Exception
+  Expecto.AssertException: Original vector RRBPersistentVector<length=33,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|-8|]>
+failed the following RRBVector invariants:
+["The tail offset should equal (vector length - tail length) at all times, even when the vector is empty";
+ "The root node should be empty if (and only if) the tail offset is 0 (i.e., it's a tail-only node)";
+ "If tail offset = 0, the vector length should be blockSize or less"]
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-1.Invoke(AssertException exn) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-2.Invoke(String x) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-5.Invoke(FSharpList`1 arg30) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties[T](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkProperties[a](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 384
+   at ExpectoTemplate.RRBVectorExpectoTest.vectorTests@313-32.Invoke(RRBVector`1 vec) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorExpectoTest.fs:line 315
+   at FsCheck.Testable.evaluate[a,b](FSharpFunc`2 body, a a)
+Focus on error:
+	etestPropertyWithConfig (1261061602, 296626075) "any random vector can be popped down to empty"
+
+  X All tests/Basic vector operations/splitVec [174ms]                                                                                                                                                                                                                          
+  Error Message:
+   
+Failed after 1 test. Parameters:
+	(RRBPersistentVector<length=47,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|-15; 43; 4; 18; 56; -5; -44; -30; 8; -53; 27; 41; 2; 40; -21|]>,
+ -14)
+Shrunk 2 times to:
+	(RRBPersistentVector<length=47,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|-15; 43; 4; 18; 56; -5; -44; -30; 8; -53; 27; 41; 2; 40; -21|]>,
+ 0)
+Result:
+	Exception
+  Expecto.AssertException: Original vector RRBPersistentVector<length=47,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|-15; 43; 4; 18; 56; -5; -44; -30; 8; -53; 27; 41; 2; 40; -21|]>
+failed the following RRBVector invariants:
+["The tail offset should equal (vector length - tail length) at all times, even when the vector is empty";
+ "The root node should be empty if (and only if) the tail offset is 0 (i.e., it's a tail-only node)";
+ "If tail offset = 0, the vector length should be blockSize or less"]
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-1.Invoke(AssertException exn) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-2.Invoke(String x) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-5.Invoke(FSharpList`1 arg30) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties[T](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkProperties[a](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 384
+   at ExpectoTemplate.RRBVectorExpectoTest.doSplitTest[a](RRBVector`1 vec, Int32 i) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorExpectoTest.fs:line 148
+   at ExpectoTemplate.RRBVectorExpectoTest.splitTest[a](RRBVector`1 vec, Int32 i) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorExpectoTest.fs:line 156
+   at ExpectoTemplate.RRBVectorExpectoTest.vectorTests@289-26.Invoke(Tuple`2 tupledArg) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorExpectoTest.fs:line 291
+   at FsCheck.Testable.evaluate[a,b](FSharpFunc`2 body, a a)
+Focus on error:
+	etestPropertyWithConfig (1260468985, 296626075) "splitVec"
+
+  X All tests/Basic vector operations/splitVecWithPushes [163ms]                                                                                                                                                                                                                
+  Error Message:
+   
+Failed after 1 test. Parameters:
+	(RRBPersistentVector<length=52,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|-37; 21; 59; 20; 34; -27; 53; -28; -14; 44; 5; 43; 57; 18; -43; -29; 9; -30;
+  28; 42|]>,
+ 43) PositiveInt 23
+Shrunk 6 times to:
+	(RRBPersistentVector<length=52,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|-37; 21; 59; 20; 34; -27; 53; -28; -14; 44; 5; 43; 57; 18; -43; -29; 9; -30;
+  28; 42|]>,
+ 0) PositiveInt 1
+Result:
+	Exception
+  Expecto.AssertException: Original vector RRBPersistentVector<length=52,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|-37; 21; 59; 20; 34; -27; 53; -28; -14; 44; 5; 43; 57; 18; -43; -29; 9; -30;
+  28; 42|]>
+failed the following RRBVector invariants:
+["The tail offset should equal (vector length - tail length) at all times, even when the vector is empty";
+ "The root node should be empty if (and only if) the tail offset is 0 (i.e., it's a tail-only node)";
+ "If tail offset = 0, the vector length should be blockSize or less"]
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-1.Invoke(AssertException exn) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-2.Invoke(String x) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties@381-5.Invoke(FSharpList`1 arg30) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkAllProperties[T](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 381
+   at ExpectoTemplate.RRBVectorProps.checkProperties[a](RRBVector`1 vec, String label) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorProps.fs:line 384
+   at ExpectoTemplate.RRBVectorExpectoTest.doSplitTest[a](RRBVector`1 vec, Int32 i) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorExpectoTest.fs:line 148
+   at ExpectoTemplate.RRBVectorExpectoTest.splitTest[a](RRBVector`1 vec, Int32 i) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorExpectoTest.fs:line 156
+   at ExpectoTemplate.RRBVectorExpectoTest.vectorTests@293-28.Invoke(PositiveInt _arg17) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorExpectoTest.fs:line 295
+   at FsCheck.Testable.evaluate[a,b](FSharpFunc`2 body, a a)
+Focus on error:
+	etestPropertyWithConfig (1260471503, 296626075) "splitVecWithPushes"
+
+  X All tests/Basic vector operations/splitWithPushes [319ms]                                                                                                                                                                                                                   
+  Error Message:
+   
+Failed after 1 test. Parameters:
+	VecPlusArrAndIdx
+  (RRBPersistentVector<length=62,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|82; 16; 22; 57; 63; 97; 3; 38; 44; 78; 84; 56; 25; 59; 65; 99; 6; 40; 46; 80;
+  52; 21; 27; 61; 33; 2; 8; 42; 48; 83|]>,
+   [|82; 32; 31; 30; 96; 46; 56; 23; 39; 40; 30; 96; 7; 73; 85; 11; 49; 72; 46;
+     56; 27; 50; 6; 1; 20; 54; 61; 95; 1; 35; 7; 76; 82; 16; 22; 57; 63; 97; 3;
+     38; 44; 78; 84; 56; 25; 59; 65; 99; 6; 40; 46; 80; 52; 21; 27; 61; 33; 2; 8;
+     42; 48; 83|],38) PositiveInt 2
+Shrunk 30 times to:
+	VecPlusArrAndIdx
+  (RRBPersistentVector<length=33,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|83|]>,
+   [|35; 7; 76; 82; 16; 22; 57; 63; 97; 3; 38; 44; 78; 84; 56; 25; 59; 65; 99; 6;
+     40; 46; 80; 52; 21; 27; 61; 33; 2; 8; 42; 48; 83|],9) PositiveInt 1
+Result:
+	Exception
+  System.InvalidOperationException: The input sequence has an insufficient number of elements.
+   at Microsoft.FSharp.Collections.ArrayModule.SplitAt[T](Int32 index, T[] array)
+   at Ficus.RRBVector.RRBPersistentVector`1.Split(Int32 idx) in /home/rmunn/code/fsharp/ficus-staging/src/Ficus/RRBBetterVector.fs:line 249
+   at ExpectoTemplate.RRBVectorExpectoTest.vectorTests@273-25.Invoke(VecPlusArrAndIdx _arg16, PositiveInt _arg15) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorExpectoTest.fs:line 275
+   at FsCheck.Testable.evaluate[a,b](FSharpFunc`2 body, a a)
+Focus on error:
+	etestPropertyWithConfig (1259998810, 296626075) "splitWithPushes"
+
+  X All tests/Basic vector operations/split [329ms]                                                                                                                                                                                                                             
+  Error Message:
+   
+Failed after 1 test. Parameters:
+	VecPlusArrAndIdx
+  (RRBPersistentVector<length=62,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|82; 16; 22; 57; 63; 97; 3; 38; 44; 78; 84; 56; 25; 59; 65; 99; 6; 40; 46; 80;
+  52; 21; 27; 61; 33; 2; 8; 42; 48; 83|]>,
+   [|82; 32; 31; 30; 96; 46; 56; 23; 39; 40; 30; 96; 7; 73; 85; 11; 49; 72; 46;
+     56; 27; 50; 6; 1; 20; 54; 61; 95; 1; 35; 7; 76; 82; 16; 22; 57; 63; 97; 3;
+     38; 44; 78; 84; 56; 25; 59; 65; 99; 6; 40; 46; 80; 52; 21; 27; 61; 33; 2; 8;
+     42; 48; 83|],38)
+Shrunk 29 times to:
+	VecPlusArrAndIdx
+  (RRBPersistentVector<length=33,shift=5,tailOffset=0,root=FullNode(length=1, children=[|L32|]),tail=[|83|]>,
+   [|35; 7; 76; 82; 16; 22; 57; 63; 97; 3; 38; 44; 78; 84; 56; 25; 59; 65; 99; 6;
+     40; 46; 80; 52; 21; 27; 61; 33; 2; 8; 42; 48; 83|],9)
+Result:
+	Exception
+  System.InvalidOperationException: The input sequence has an insufficient number of elements.
+   at Microsoft.FSharp.Collections.ArrayModule.SplitAt[T](Int32 index, T[] array)
+   at Ficus.RRBVector.RRBPersistentVector`1.Split(Int32 idx) in /home/rmunn/code/fsharp/ficus-staging/src/Ficus/RRBBetterVector.fs:line 249
+   at ExpectoTemplate.RRBVectorExpectoTest.vectorTests@264-24.Invoke(VecPlusArrAndIdx _arg14) in /home/rmunn/code/fsharp/ficus-staging/tests/Ficus.Tests/RRBVectorExpectoTest.fs:line 266
+   at FsCheck.Testable.evaluate[a,b](FSharpFunc`2 body, a a)
+Focus on error:
+	etestPropertyWithConfig (1259998810, 296626075) "split"
+
+  X All tests/Operational transform tests/Extra-large lists from almost-full sapling [1s 380ms]                                                                                                                                                                                 
+  Error Message:
+   
+Failed after 2 tests. Parameters:
+	[insert 5 at head; push four items; insert 5 at head; push four items;
+ push four items; remove from head; remove from first leaf; push four items;
+ push 33 items; push four items; insert 9 in tail; pop; push 33 items;
+ push 33 items; push four items; remove from first leaf; push four items;
+ insert 5 at head; push 33 items; push nine items; remove from first leaf;
+ push 33 items; pop; insert 7 in first leaf; remove from first leaf;
+ insert 7 in first leaf; push 33 items; insert 9 in tail; remove from tail;
+ insert 9 in tail; insert 5 at head; remove from first leaf;
+ insert 7 in first leaf; push 33 items; insert 7 in first leaf; push four items;
+ remove from tail; remove from tail; remove from head; insert 9 in tail;
+ push nine items; insert 7 in first leaf; remove from tail;
+ remove from first leaf; remove from first leaf; remove from head;
+ push nine items; push nine items; push nine items; remove from tail;
+ push 33 items; remove from first leaf; insert 9 in tail; insert 7 in first leaf;
+ insert 9 in tail; remove from head; remove from tail; remove from first leaf;
+ pop; pop; remove from head; insert 9 in tail; push 33 items; insert 9 in tail;
+ push four items; push 33 items; push four items; remove from tail;
+ push nine items; push 33 items; remove from head; push 33 items; pop;
+ push nine items; insert 5 at head; remove from tail; push nine items; pop;
+ insert 9 in tail; insert 9 in tail; remove from first leaf; insert 5 at head;
+ insert 7 in first leaf; insert 7 in first leaf; insert 7 in first leaf;
+ insert 9 in tail; insert 7 in first leaf; insert 5 at head;
+ remove from first leaf; insert 7 in first leaf; insert 9 in tail;
+ insert 7 in first leaf; insert 5 at head; push four items; push 33 items;
+ insert 5 at head; remove from first leaf; remove from head; push 33 items;
+ push 33 items; ...]
+Shrunk 120 times to:
+	[insert 7 in first leaf]
+Result:
+	False
+Label of failing property: After inserting 7, vec != arr
+ (50% long sequences (>6 commands))
+Focus on error:
+	etestPropertyWithConfig (1250564345, 296626075) "Extra-large lists from almost-full sapling"
+
+                                                                                                                                                                                                                                                                                
+Test Run Failed.
+Total tests: 453
+     Passed: 423
+     Failed: 21
+    Skipped: 9
+ Total time: 7.7378 Seconds

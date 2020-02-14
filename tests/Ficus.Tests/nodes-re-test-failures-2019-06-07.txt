@@ -1,0 +1,26 @@
+Original L: M T1
+Original R:
+  Length 661684
+  T21, so root treesize = 661663 (matches tail offset)
+  Root nodesize = 25, shift = 15, size table 31196, 54712, 73356, 99577 ...
+    
+  Root first child at shift 10 has nodesize 32, size table 955, 1937, 2902, 3894 ... 31196
+    Its first child at shift 5 has nodesize 31, size table 32, 61, 89, 120, ..., 955
+  Root secnd child at shift 10 has nodesize 27, size table 877, 1737, 2624, 3590 ... 23516
+
+
+Sizes 1, 32, 27, 22, 28, 27, 30, 32 ...
+idx 0, mergeLen 3, sizeReduction 1.
+That means that 1,32,27 -> total of 33+27 = 60
+So they should become 32,28
+
+
+
+Now I get a node of length 37(!) somewhere...
+
+"length=37, sizetable=
+
+
+[|29; 61; 90; 119; 148; 180; 205; 232; 264; 293; 325; 352; 380; 409; 436; 467;
+  499; 527; 554; 586; 616; 646; 678; 704; 735; 766; 796; 828; 859; 866; 897; 929;
+  961; 993; 1020; 1051; 1078|]
