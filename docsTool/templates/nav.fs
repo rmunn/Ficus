@@ -90,17 +90,25 @@ type NavTree =
 | File of title:string * link:string
 | Folder of title: string * NavTree list
 
+let [<Literal>] IndexPage = "index"
+
 let rec sortNavTree (navtree : NavTree list) =
+    let getTitle (navtree: NavTree) =
+        match navtree with
+        | File(title,_) -> title
+        | Folder(title,_) -> title
     navtree
     |> List.map(fun navTree ->
         match navTree with
         | File (t,l) -> File (t,l)
         | Folder(title, nodes) -> Folder(title, sortNavTree nodes)
     )
-    |> List.sortBy(fun navtree ->
-        match navtree with
-        | File(title,_) -> title
-        | Folder(title, _) -> title
+    |> List.sortWith(fun a b ->
+        let titlea = getTitle a
+        let titleb = getTitle b
+        if titlea = IndexPage then -1
+        elif titleb = IndexPage then 1
+        else titlea.CompareTo titleb
     )
 
 let navTreeFromPaths (rootPath : IO.DirectoryInfo) (files : IO.FileInfo list) =
@@ -132,16 +140,28 @@ let navTreeFromPaths (rootPath : IO.DirectoryInfo) (files : IO.FileInfo list) =
 let generateNavMenus siteBaseUrl (navTree : NavTree list) =
     let rec innerDo depth (navTree : NavTree list) =
         navTree
-        |> List.map(fun nav ->
+        |> List.collect(fun nav ->
             match nav with
-            | File (title, link) when depth = 0 -> navItemText title (siteBaseUrl |> Uri.simpleCombine link)
-            | File (title, link) -> dropDownNavItem title (siteBaseUrl |> Uri.simpleCombine link)
+            | File (title, link) when depth = 0 ->
+                [
+                    navItemText title (siteBaseUrl |> Uri.simpleCombine link)
+                    if title = IndexPage then
+                        div [ Class "dropdown-divider" ] []
+                ]
+            | File (title, link) ->
+                [
+                    dropDownNavItem title (siteBaseUrl |> Uri.simpleCombine link)
+                    if title = IndexPage then
+                        div [ Class "dropdown-divider" ] []
+                ]
             | Folder (title, subtree) when depth = 0 ->
                 innerDo (depth + 1) subtree
                 |> dropDownNavMenu title
+                |> List.singleton
             | Folder (title, subtree) ->
                 innerDo (depth + 1) subtree
                 |> dropdownSubMenu title
+                |> List.singleton
         )
     innerDo 0 navTree
 
@@ -155,7 +175,7 @@ let generateNav (navCfg : NavConfig) =
             Class "navbar-brand"
             Href (navCfg.SiteBaseUrl |> Uri.simpleCombine "/index.html")
         ] [
-            i [ Class "fa fa-car text-white mr-2"] []
+            // i [ Class "fa fa-car text-white mr-2"] []
             str (navCfg.ProjectName)
         ]
         button [
@@ -174,7 +194,7 @@ let generateNav (navCfg : NavConfig) =
             ul [ Class "navbar-nav mr-auto" ] [
                 yield! navTreeFromPaths navCfg.TopLevelNav.DocsRoot navCfg.TopLevelNav.DocsPages |> sortNavTree |> generateNavMenus navCfg.SiteBaseUrl
             ]
-            ul [ Class "navbar-nav"] [
+            ul [Class "navbar-nav";] [
                 button [Id "theme-toggle"; Class ""] [
                     str ""
                 ]

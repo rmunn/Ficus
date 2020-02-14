@@ -23,7 +23,6 @@ type DisposableDirectory (directory : string) =
             Trace.tracefn "Deleting directory %s" directory
             IO.Directory.Delete(x.Directory,true)
 
-
 let refreshWebpageEvent = new Event<string>()
 
 type Configuration = {
@@ -234,7 +233,7 @@ module GenerateDocs =
                     libDirs
                     |> Array.map(fun fi -> fi.DirectoryName)
                     |> Array.distinct
-                    |> Array.map(sprintf "-I:\"%s\"")
+                    |> Array.map(sprintf "-I:%s")
                 let runtimeDeps =
                     [|
                         "-r:System.Runtime"
@@ -269,96 +268,39 @@ module GenerateDocs =
                 + doc.FormattedTips
 
 
+        try
+            docSourcePaths
+            |> Array.ofSeq
+            |> Seq.map(fun filePath ->
 
-        docSourcePaths
-        |> Array.ofSeq
-        |> Seq.map(fun filePath ->
+                Fake.Core.Trace.tracefn "Rendering %s" filePath
+                let file = IO.File.ReadAllText filePath
+                let outPath =
+                    let changeExtension ext path = IO.Path.ChangeExtension(path,ext)
+                    filePath.Replace(cfg.DocsSourceDirectory.FullName, cfg.DocsOutputDirectory.FullName)
+                    |> changeExtension ".html"
+                    |> FileInfo
+                let fs =
+                    file
+                    |> parse filePath
+                    |> format
+                let contents =
+                    [div [] [
+                        fs
+                        |> RawText
+                    ]]
 
-            Fake.Core.Trace.tracefn "Rendering %s" filePath
-            let file = IO.File.ReadAllText filePath
-            let outPath =
-                let changeExtension ext path = IO.Path.ChangeExtension(path,ext)
-                filePath.Replace(cfg.DocsSourceDirectory.FullName, cfg.DocsOutputDirectory.FullName)
-                |> changeExtension ".html"
-                |> FileInfo
-            let fs =
-                file
-                |> parse filePath
-                |> format
-            let contents =
-                [div [] [
-                    fs
-                    |> RawText
-                ]]
-
-            {
-                SourcePath = FileInfo filePath |> Some
-                OutputPath = outPath
-                Content = contents
-                Title = sprintf "%s-%s" outPath.Name cfg.ProjectName
-            }
-        )
-        |> Seq.toList
-
-
-    let generateAPI (projInfos : ProjInfo.ProjInfo array) (cfg : Configuration) =
-        let generate (projInfo :  ProjInfo.ProjInfo) =
-            Trace.tracefn "Generating API Docs for %s" projInfo.TargetPath.FullName
-            let mscorlibDir =
-                (typedefof<System.Runtime.MemoryFailPoint>.GetType().Assembly.Location) //Find runtime dll]
-                    |> Path.GetDirectoryName
-            let references =
-                projInfo.References
-                |> Array.toList
-                |> List.map(fun fi -> fi.DirectoryName)
-                |> List.distinct
-            let libDirs = mscorlibDir :: references
-            let targetApiDir = docsApiDir cfg.DocsOutputDirectory.FullName @@ IO.Path.GetFileNameWithoutExtension(projInfo.TargetPath.Name)
-            let generatorOutput =
-                MetadataFormat.Generate(
-                    projInfo.TargetPath.FullName,
-                    libDirs = libDirs,
-                    sourceFolder = cfg.RepositoryRoot.FullName,
-                    sourceRepo = (cfg.GitHubRepoUrl |> Uri.simpleCombine "tree/master" |> string),
-                    markDownComments = false
-                    )
-
-            let fi = FileInfo <| targetApiDir @@ (sprintf "%s.html" generatorOutput.AssemblyGroup.Name)
-            let indexDoc = {
-                SourcePath = None
-                OutputPath = fi
-                Content = [Namespaces.generateNamespaceDocs generatorOutput.AssemblyGroup generatorOutput.Properties]
-                Title = sprintf "%s-%s" fi.Name cfg.ProjectName
-            }
-
-            let moduleDocs =
-                generatorOutput.ModuleInfos
-                |> List.map (fun m ->
-                    let fi = FileInfo <| targetApiDir @@ (sprintf "%s.html" m.Module.UrlName)
-                    let content = Modules.generateModuleDocs m generatorOutput.Properties
-                    {
-                        SourcePath = None
-                        OutputPath = fi
-                        Content = content
-                        Title = sprintf "%s-%s" m.Module.Name cfg.ProjectName
-                    }
-                )
-            let typeDocs =
-                generatorOutput.TypesInfos
-                |> List.map (fun m ->
-                    let fi = FileInfo <| targetApiDir @@ (sprintf "%s.html" m.Type.UrlName)
-                    let content = Types.generateTypeDocs m generatorOutput.Properties
-                    {
-                        SourcePath = None
-                        OutputPath = fi
-                        Content = content
-                        Title = sprintf "%s-%s" m.Type.Name cfg.ProjectName
-                    }
-                )
-            [ indexDoc ] @ moduleDocs @ typeDocs
-        projInfos
-        |> Seq.collect(generate)
-        |> Seq.toList
+                {
+                    SourcePath = FileInfo filePath |> Some
+                    OutputPath = outPath
+                    Content = contents
+                    Title = sprintf "%s-%s" outPath.Name cfg.ProjectName
+                }
+            )
+            |> Seq.toList
+        with e ->
+            eprintfn "%A" e
+            []
 
     let buildDocs (projInfos : ProjInfo.ProjInfo array) (cfg : Configuration) =
         let refs = projInfos |> Seq.collect (fun p -> p.References) |> Seq.distinct |> Seq.toArray
@@ -367,11 +309,8 @@ module GenerateDocs =
             async {
                 return generateDocs refs (docsFileGlob cfg.DocsSourceDirectory.FullName) cfg
             }
-        let generateAPI =
-            async {
-                return (generateAPI projInfos cfg)
-            }
-        Async.Parallel [generateDocs; generateAPI]
+
+        Async.Parallel [generateDocs]
         |> Async.RunSynchronously
         |> Array.toList
         |> List.collect id
@@ -384,8 +323,7 @@ module GenerateDocs =
     let watchDocs (cfg : Configuration) =
         let projInfos = cfg.ProjectFilesGlob |> Seq.map(ProjInfo.findReferences) |> Seq.toArray
         let initialDocs = buildDocs projInfos cfg
-        let renderGeneratedDocs = renderGeneratedDocs true
-        initialDocs |> renderGeneratedDocs cfg
+        initialDocs |> renderGeneratedDocs true cfg
 
         let refs = projInfos |> Seq.collect (fun p -> p.References) |> Seq.distinct |> Seq.toArray
         let d1 =
@@ -400,7 +338,7 @@ module GenerateDocs =
                     |> List.filter(fun x -> generated |> List.exists(fun y -> y.OutputPath =  x.OutputPath) |> not )
                     |> List.append generated
                     |> List.distinctBy(fun gd -> gd.OutputPath.FullName)
-                    |> renderGeneratedDocs cfg
+                    |> renderGeneratedDocs true cfg
                 )
                 refreshWebpageEvent.Trigger "m.FullPath"
             )
@@ -413,24 +351,7 @@ module GenerateDocs =
                 refreshWebpageEvent.Trigger "Assets"
             )
 
-
-        let d3 =
-            projInfos
-            |> Seq.map(fun p -> p.TargetPath.FullName)
-            |> Seq.fold ((++)) (!! "")
-
-            |> ChangeWatcher.run(fun changes ->
-                changes
-                |> Seq.iter(fun c -> Trace.logf "Regenerating API docs due to %s" c.FullPath )
-                let generated = generateAPI projInfos cfg
-                initialDocs
-                |> List.filter(fun x -> generated |> List.exists(fun y -> y.OutputPath =  x.OutputPath) |> not )
-                |> List.append generated
-                |> List.distinctBy(fun gd -> gd.OutputPath.FullName)
-                |> renderGeneratedDocs cfg
-                refreshWebpageEvent.Trigger "Api"
-            )
-        { disposables = [d1; d2; d3] } :> IDisposable
+        { disposables = [d1; d2] } :> IDisposable
 
 
 module WebServer =
@@ -523,66 +444,60 @@ open Fake.IO.Globbing.Operators
 open DocsTool.CLIArgs
 [<EntryPoint>]
 let main argv =
-    try
-        use tempDocsOutDir = DisposableDirectory.Create()
-        use __ = AppDomain.CurrentDomain.ProcessExit.Subscribe(fun _ ->
-            dispose tempDocsOutDir
-        )
-        use __ = Console.CancelKeyPress.Subscribe(fun _ ->
-            dispose tempDocsOutDir
-        )
-        let defaultConfig = {
-            SiteBaseUrl = Uri(sprintf "http://%s:%d/" WebServer.hostname WebServer.port )
-            GitHubRepoUrl = Uri "https://github.com"
-            RepositoryRoot = IO.DirectoryInfo (__SOURCE_DIRECTORY__ @@ "..")
-            DocsOutputDirectory = tempDocsOutDir.DirectoryInfo
-            DocsSourceDirectory = IO.DirectoryInfo "docsSrc"
-            ProjectName = ""
-            ProjectFilesGlob = !! ""
-            ReleaseVersion = "0.1.0"
-        }
+    use tempDocsOutDir = DisposableDirectory.Create()
+    use __ = AppDomain.CurrentDomain.ProcessExit.Subscribe(fun _ ->
+        dispose tempDocsOutDir
+    )
+    use __ = Console.CancelKeyPress.Subscribe(fun _ ->
+        dispose tempDocsOutDir
+    )
+    let defaultConfig = {
+        SiteBaseUrl = Uri(sprintf "http://%s:%d/" WebServer.hostname WebServer.port )
+        GitHubRepoUrl = Uri "https://github.com"
+        RepositoryRoot = IO.DirectoryInfo (__SOURCE_DIRECTORY__ @@ "..")
+        DocsOutputDirectory = tempDocsOutDir.DirectoryInfo
+        DocsSourceDirectory = IO.DirectoryInfo "docsSrc"
+        ProjectName = ""
+        ProjectFilesGlob = !! ""
+        ReleaseVersion = "0.1.0"
+    }
 
-        let errorHandler = ProcessExiter(colorizer = function ErrorCode.HelpText -> None | _ -> Some ConsoleColor.Red)
-        let programName =
-            let name = System.Reflection.Assembly.GetExecutingAssembly().GetName().Name
-            if Fake.Core.Environment.isWindows then
-                sprintf "%s.exe" name
-            else
-                name
+    let errorHandler = ProcessExiter(colorizer = function ErrorCode.HelpText -> None | _ -> Some ConsoleColor.Red)
+    let programName =
+        let name = System.Reflection.Assembly.GetExecutingAssembly().GetName().Name
+        if Fake.Core.Environment.isWindows then
+            sprintf "%s.exe" name
+        else
+            name
 
-
-
-        let parser = ArgumentParser.Create<CLIArguments>(programName = programName, errorHandler = errorHandler)
-        let parsedArgs = parser.Parse argv
-        match parsedArgs.GetSubCommand() with
-        | Build args ->
-            let config =
-                (defaultConfig, args.GetAllResults())
-                ||> List.fold(fun state next ->
-                    match next with
-                    | BuildArgs.SiteBaseUrl url ->  { state with SiteBaseUrl = Uri url }
-                    | BuildArgs.ProjectGlob glob -> { state with ProjectFilesGlob = !! glob}
-                    | BuildArgs.DocsOutputDirectory outdir -> { state with DocsOutputDirectory = IO.DirectoryInfo outdir}
-                    | BuildArgs.DocsSourceDirectory srcdir -> { state with DocsSourceDirectory = IO.DirectoryInfo srcdir}
-                    | BuildArgs.GitHubRepoUrl url -> { state with GitHubRepoUrl = Uri url}
-                    | BuildArgs.ProjectName repo -> { state with ProjectName = repo}
-                    | BuildArgs.ReleaseVersion version -> { state with ReleaseVersion = version}
-                )
-            GenerateDocs.renderDocs config
-        | Watch args ->
-            let config =
-                (defaultConfig, args.GetAllResults())
-                ||> List.fold(fun state next ->
-                    match next with
-                    | WatchArgs.ProjectGlob glob -> {state with ProjectFilesGlob = !! glob}
-                    | WatchArgs.DocsSourceDirectory srcdir -> { state with DocsSourceDirectory = IO.DirectoryInfo srcdir}
-                    | WatchArgs.GitHubRepoUrl url -> { state with GitHubRepoUrl = Uri url}
-                    | WatchArgs.ProjectName repo -> { state with ProjectName = repo}
-                    | WatchArgs.ReleaseVersion version -> { state with ReleaseVersion = version}
-                )
-            use ds = GenerateDocs.watchDocs config
-            WebServer.serveDocs config.DocsOutputDirectory.FullName
-        0
-    with e ->
-        eprintfn "Fatal error: %A" e
-        1
+    let parser = ArgumentParser.Create<CLIArguments>(programName = programName, errorHandler = errorHandler)
+    let parsedArgs = parser.Parse argv
+    match parsedArgs.GetSubCommand() with
+    | Build args ->
+        let config =
+            (defaultConfig, args.GetAllResults())
+            ||> List.fold(fun state next ->
+                match next with
+                | BuildArgs.SiteBaseUrl url ->  { state with SiteBaseUrl = Uri url }
+                | BuildArgs.ProjectGlob glob -> { state with ProjectFilesGlob = !! glob}
+                | BuildArgs.DocsOutputDirectory outdir -> { state with DocsOutputDirectory = IO.DirectoryInfo outdir}
+                | BuildArgs.DocsSourceDirectory srcdir -> { state with DocsSourceDirectory = IO.DirectoryInfo srcdir}
+                | BuildArgs.GitHubRepoUrl url -> { state with GitHubRepoUrl = Uri url}
+                | BuildArgs.ProjectName repo -> { state with ProjectName = repo}
+                | BuildArgs.ReleaseVersion version -> { state with ReleaseVersion = version}
+            )
+        GenerateDocs.renderDocs config
+    | Watch args ->
+        let config =
+            (defaultConfig, args.GetAllResults())
+            ||> List.fold(fun state next ->
+                match next with
+                | WatchArgs.ProjectGlob glob -> {state with ProjectFilesGlob = !! glob}
+                | WatchArgs.DocsSourceDirectory srcdir -> { state with DocsSourceDirectory = IO.DirectoryInfo srcdir}
+                | WatchArgs.GitHubRepoUrl url -> { state with GitHubRepoUrl = Uri url}
+                | WatchArgs.ProjectName repo -> { state with ProjectName = repo}
+                | WatchArgs.ReleaseVersion version -> { state with ReleaseVersion = version}
+            )
+        use ds = GenerateDocs.watchDocs config
+        WebServer.serveDocs config.DocsOutputDirectory.FullName
+    0 // return an integer exit code

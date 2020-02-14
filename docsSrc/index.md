@@ -10,28 +10,11 @@ splitting, concatenation, and inserting and removing anywhere in the list.
 
 ## Why use Ficus?
 
-<!-- The PersistentVector class in FSharpx.Collections is efficient at adding and removing items at the
-end of the list, but inserting or removing an item in the middle of the list is an O(N) operation.
-The RRBVector data structure (short for Relaxed Radix-Balanced Vector) can insert and remove items
-in the middle of the list in O(log<sub>32</sub>&nbsp;N) time, which is effectively constant time since
-log<sub>32</sub>&nbsp;N&nbsp;&#x2264;&nbsp;7 for all N&nbsp;&#x2264;&nbsp;2<sup>32</sup>. Splitting
-an RRBVector into two lists, and concatenating two RRBVectors into a single list, are also
-O(log<sub>32</sub>&nbsp;N) operations. **TODO**: Explain how this allows for parallel processing by
-splitting the list into as many equal-sized parts as you have CPU cores. -->
-
 **TODO**: Write an explanation of why RRBVector is an efficient data structure.
 
 ### Quickstart
 
 **TODO**: Write this.
-
-<!-- Something like:
-
-- Install NuGet package
-- Open RRBVector namespace
-- let x = RRBVector.ofList [1;2;3]
-- x |> RRBVector.map (fun x -> x * 2)  // produces [2;4;6]
--->
 
 ---
 

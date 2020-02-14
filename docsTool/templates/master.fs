@@ -11,7 +11,7 @@ type MasterTemplateConfig = {
     ProjectName : string
     ReleaseVersion : string
     ReleaseDate : DateTimeOffset
-    RepositoryRoot: IO.DirectoryInfo
+    RepositoryRoot : IO.DirectoryInfo
     IsWatchMode : bool
 }
 
@@ -39,7 +39,7 @@ let linkColumn headerTitle items =
             h2 [Class "h5"] [ str headerTitle ]
             ul [Class "list-group list-group-flush"]
                 (items |> List.choose (function | [] -> None
-                                                | items -> Some(li [Class "list-group-item bg-dark ml-0 pl-0"] items)))
+                                                | items -> Some(li [Class "list-group-item bg-dark border-secondary ml-0 pl-0"] items)))
         ]
     ]
 
@@ -60,7 +60,7 @@ let renderFooter (cfg : MasterTemplateConfig) (pageSource : string option) =
             div [Class "row"] [
                 linkColumn "Project Resources" [
                     repoFileLink "README.md" (Solid "book-reader") "README"
-                    repoFileLink "RELEASE_NOTES.md" (Solid "sticky-note") "Release Notes / Changelog"
+                    repoFileLink "CHANGELOG.md" (Solid "sticky-note") "Release Notes / Changelog"
                     repoFileLink "LICENSE.md" (Solid "id-card") "License"
                     repoFileLink "CONTRIBUTING.md" (Solid "directions") "Contributing"
                     repoFileLink "CODE_OF_CONDUCT.md" (Solid "users") "Code of Conduct"
@@ -90,7 +90,7 @@ let renderFooter (cfg : MasterTemplateConfig) (pageSource : string option) =
                 div [Class "col text-center"] [
                     small [Class "text-light"] [
                         i [Class "fas fa-copyright mr-1"] []
-                        str (sprintf "%s Ficus, All rights reserved" (DateTimeOffset.UtcNow.ToString("yyyy")))
+                        str (sprintf "%s %s, All rights reserved" (DateTimeOffset.UtcNow.ToString("yyyy")) cfg.ProjectName)
                     ]
                 ]
             ]
@@ -125,7 +125,7 @@ let masterTemplate (cfg : MasterTemplateConfig) navBar titletext bodyText pageSo
             ]
 
         ]
-        body [] [
+        body [Class "bootstrap-dark"] [
             yield navBar
             yield div [Class "wrapper d-flex flex-column justify-content-between min-vh-100"] [
                 main [Class "container main mb-4"] bodyText
