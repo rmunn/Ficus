@@ -14,9 +14,12 @@ open RRBVectorNodes
 [<AbstractClass>]
 [<StructuredFormatDisplay("{StringRepr}")>]
 type RRBVector<'T>() =
+    /// Creates an empty vector
     abstract member Empty : unit -> RRBVector<'T>
+    /// Tests whether vector is empty. <b>O(1)</b>
     abstract member IsEmpty : unit -> bool
     abstract member StringRepr : string
+    /// Number of items in vector. <b>O(1)</b>
     abstract member Length : int
     abstract member IterLeaves : unit -> seq<'T []>
     abstract member RevIterLeaves : unit -> seq<'T []>
@@ -28,9 +31,13 @@ type RRBVector<'T>() =
     abstract member Pop : unit -> RRBVector<'T>
     abstract member Take : int -> RRBVector<'T>
     abstract member Skip : int -> RRBVector<'T>
+    /// Split vector into two at index <code>i</code>. The left vector will be length <code>i</code> and
+    /// contain items 0 through i-1, while the right vector will be length <code>x.Length - i</code> and
+    /// contain items i through x.Length-1. <b>Effectively O(1)</b> (really O(log<sub>32</sub> N))
     abstract member Split : int -> RRBVector<'T> * RRBVector<'T>
     abstract member Slice : int * int -> RRBVector<'T>
     abstract member GetSlice : int option * int option -> RRBVector<'T>
+    /// Concatenate two vectors to create a new one. <b>Effectively O(1)</b> (really O(log<sub>32</sub> N))
     abstract member Append : RRBVector<'T> -> RRBVector<'T>
     abstract member Insert : int -> 'T -> RRBVector<'T>
     abstract member Remove : int -> RRBVector<'T>

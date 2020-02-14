@@ -1,2 +1,2 @@
-# How To do this specific thing
+# How to do this specific thing
 

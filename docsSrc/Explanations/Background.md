@@ -1,3 +1,3 @@
 # Background
 
-Here's a core concept and reasons why this exists at a deeper level.
+**TODO:** Explain why I wanted to port Clojure's RRB Vector to F# and C#.
