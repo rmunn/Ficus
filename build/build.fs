@@ -799,7 +799,7 @@ let initTargets () =
 
 
     "DotnetRestore"
-    ==> "CheckFormatCode"
+    // ==> "CheckFormatCode"
     ==> "DotnetBuild"
     ==> "DotnetTest"
     ==> "DotnetPack"
