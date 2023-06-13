@@ -91,7 +91,7 @@ let internal vecEqual (vec : RRBTransientVector<'a>) arr msg =
     RRBVectorProps.checkPropertiesSimple vec
     (RRBVector.toArray vec) = arr, msg
 
-module VecCommands =
+module internal VecCommands =
     let push n = { new Cmd()
                    with override __.RunActual vec = { 1 .. n } |> Seq.fold (fun vec x -> vec.Push x :?> RRBTransientVector<_>) vec
                         override __.RunModel  arr = Array.append arr [| 1 .. n |]
@@ -241,15 +241,13 @@ module VecCommands =
 
 open VecCommands
 
-let cmdsExtraSmall = [push 1; pop 1; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
-let cmdsSmall = [push 1; push 4; pop 1; pop 4; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
-let cmdsMedium = [push 1; push 4; push 9; pop 1; pop 4; pop 9; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
-let cmdsLarge = [push 1; push 4; push 9; pop 1; pop 4; pop 9; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
-let cmdsExtraLarge = [push 4; push 9; push 33; pop 4; pop 9; pop 33; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
+let internal cmdsExtraSmall = [push 1; pop 1; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
+let internal cmdsSmall = [push 1; push 4; pop 1; pop 4; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
+let internal cmdsMedium = [push 1; push 4; push 9; pop 1; pop 4; pop 9; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
+let internal cmdsLarge = [push 1; push 4; push 9; pop 1; pop 4; pop 9; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
+let internal cmdsExtraLarge = [push 4; push 9; push 33; pop 4; pop 9; pop 33; insert5AtHead; insert7InFirstLeaf; insert9InTail; removeFromHead; removeFromFirstLeaf; removeFromTail]
 
-let cmdFrequenciesForComplexOperations = (1, genSplit) :: cmdFrequenciesForSplit
-
-type SplitTestInput = SplitTestInput of RRBVector<int> * (Cmd list)[]
+let internal cmdFrequenciesForComplexOperations = (1, genSplit) :: cmdFrequenciesForSplit
 
 let expectedSize (vec : RRBVector<'a>) =
     if vec.Length > 200 then
@@ -257,22 +255,22 @@ let expectedSize (vec : RRBVector<'a>) =
     else
         4
 
-let genBasicOperations (lst : Cmd list) = gen {
+let internal genBasicOperations (lst : Cmd list) = gen {
     // let! vec = Arb.generate<RRBVector<int>>  // TODO: Ensure only persistent vectors generated here
     // let! vec = RRBVectorGen.sizedGenVec
     let vec = RRBVector.empty<int>
     let size = expectedSize vec
     let! cmds = Gen.arrayOfLength size (Gen.listOf (Gen.elements lst))
-    return SplitTestInput (vec, cmds)
+    return (vec, cmds)
 }
 
 // TODO: Add more complex operations like slicing, splitting (and running a *FEW* commands on each side before rejoining), mapping, filtering, and so on
-let genComplexOperations = gen {
+let internal genComplexOperations: Gen<RRBVector<int> * (Cmd list)[]> = gen {
     let! vec = RRBVectorGen.sizedGenVec
     // let vec = RRBVector.empty<int>
     let size = expectedSize vec
     let! cmds = Gen.arrayOfLength size (Gen.listOf (Gen.frequency cmdFrequenciesForComplexOperations))
-    return SplitTestInput (vec, cmds)
+    return (vec, cmds)
 }
 
 let internal propFromCmds (vec : RRBPersistentVector<int>) (lst : Cmd list) =
