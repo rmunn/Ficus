@@ -1,5 +1,10 @@
 {
     "workbench.colorCustomizations": {
         "tab.unfocusedActiveBorder": "#fff0"
-    }
+    },
+    "FSharp.fsacRuntime":"netcore",
+    "FSharp.enableAnalyzers": false,
+    "FSharp.analyzersPath": [
+        "./packages/analyzers"
+    ]
 }

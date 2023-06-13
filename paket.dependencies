@@ -1,24 +1,20 @@
 source https://www.nuget.org/api/v2
 source https://api.nuget.org/v3/index.json
 storage: none
-clitool dotnet-mono 0.5.2
-nuget Argu 3.7
-nuget FSharp.Core 4.3.4
-nuget Microsoft.SourceLink.GitHub prerelease copy_local: true
+nuget FSharp.Core >= 6.0 lowest_matching: true
+nuget Microsoft.SourceLink.GitHub copy_local: true
 nuget Microsoft.NETFramework.ReferenceAssemblies copy_local: true
-nuget Expecto
-nuget Expecto.FsCheck
+nuget Expecto 9.0.4
+nuget Expecto.FsCheck 9.0.4
 nuget YoloDev.Expecto.TestSdk
-nuget Microsoft.NET.Test.Sdk 15.7.2
-nuget altcover ~> 6
-nuget SourceLink.Create.CommandLine 2.7.2 copy_local: true
+nuget Microsoft.NET.Test.Sdk
+nuget altcover
 nuget FParsec
 
 // [ FAKE GROUP ]
 group Build
     source https://www.nuget.org/api/v2
     source https://api.nuget.org/v3/index.json
-    storage: none
     nuget Fake.IO.FileSystem
     nuget Fake.Core.Target
     nuget Fake.Core.ReleaseNotes
@@ -29,20 +25,16 @@ group Build
     nuget Fake.Tools.Git
     nuget Fake.DotNet.Paket
     nuget Fake.Api.GitHub
-    nuget Fake.BuildServer.AppVeyor
-    nuget Fake.BuildServer.Travis
-    nuget Fantomas 3.1.0
+    nuget Fake.BuildServer.GitHubActions
+    nuget Fantomas
     nuget Argu
+    nuget Octokit
+    nuget Microsoft.Build 17.3.2
+    nuget Microsoft.Build.Framework 17.3.2
+    nuget Microsoft.Build.Tasks.Core 17.3.2
+    nuget Microsoft.Build.Utilities.Core 17.3.2
 
-group Docs
-    storage: none
-    source https://www.nuget.org/api/v2
-    source https://api.nuget.org/v3/index.json
-    nuget Argu
-    nuget FSharp.Core
-    nuget Fake.IO.FileSystem
-    nuget FAKE.Core.Environment
-    nuget Fake.DotNet.Cli
-    nuget FSharp.Literate
-    nuget Fable.React
-    nuget Dotnet.ProjInfo.Workspace.FCS
+group Analyzers
+  source https://www.nuget.org/api/v2
+  source https://api.nuget.org/v3/index.json
+  nuget BinaryDefense.FSharp.Analyzers.Hashing 0.2.2
