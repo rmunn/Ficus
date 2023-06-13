@@ -1142,7 +1142,7 @@ let manualTests =
 // )
 
 let longRunningTests =
-  testList "Long-running tests "[
+  testList "Long-running tests" [
     largeMergeTreeTestsWIP  // This one is *extremely* long-running, in fact
   ]
 

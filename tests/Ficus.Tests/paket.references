@@ -2,7 +2,6 @@ Expecto
 Expecto.FsCheck
 FParsec
 FSharp.Core
-dotnet-mono
 Microsoft.NET.Test.Sdk
 YoloDev.Expecto.TestSdk
 altcover

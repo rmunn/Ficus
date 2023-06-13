@@ -103,8 +103,8 @@ type MyGenerators =
         { new Arbitrary<RRBVector<'a>>() with
             override x.Generator = RRBVectorGen.sizedGenVec<'a>
             override x.Shrinker _ = Seq.empty }
-    static member arbSplitTest() =
-        { new Arbitrary<RRBVectorTransientCommands.SplitTestInput>() with
+    static member internal arbSplitTest() =
+        { new Arbitrary<RRBVector<int> * (RRBVectorTransientCommands.Cmd list)[]>() with
             // override x.Generator = RRBVectorTransientCommands.genBasicOperations RRBVectorTransientCommands.cmdsExtraLarge
             override x.Generator = RRBVectorTransientCommands.genComplexOperations
             override x.Shrinker _ = Seq.empty }
@@ -1380,7 +1380,7 @@ let mergeTests =
         Expect.equal joined.Root.NodeSize vR.Root.NodeSize "Rebalance should have left the joined vector's root the same size as the original right vector's root"
   ]
 
-let doSplitTransientTest (RRBVectorTransientCommands.SplitTestInput (vec, cmds)) =
+let internal doSplitTransientTest (vec, cmds) =
     let vec = (if vec |> isTransient then vec.Persistent() else vec) :?> RRBPersistentVector<_>
     let mailbox = RRBVectorTransientMailboxTest.startSplitTesting vec cmds
     let result = mailbox.PostAndReply RRBVectorTransientMailboxTest.AllThreadsResult.Go
