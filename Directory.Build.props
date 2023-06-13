@@ -1,13 +1,16 @@
 <Project>
     <PropertyGroup>
-        <!-- summary is not migrated from project.json, but you can use the <Description> property for that if needed. -->
         <PackageTags>f#, fsharp</PackageTags>
         <PackageProjectUrl>https://github.com/rmunn/Ficus</PackageProjectUrl>
-        <PackageLicenseUrl>https://github.com/rmunn/Ficus/blob/master/LICENSE.md</PackageLicenseUrl>
         <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+        <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
+        <PackageReadmeFile>README.md</PackageReadmeFile> <!--https://docs.microsoft.com/en-gb/nuget/reference/msbuild-targets#packagereadmefile -->
         <RepositoryType>git</RepositoryType>
         <Authors>rmunn</Authors>
         <RepositoryUrl>https://github.com/rmunn/Ficus</RepositoryUrl>
-        <!-- owners is not supported in MSBuild -->
     </PropertyGroup>
+    <ItemGroup>
+        <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="/"/>    
+        <None Include="$(MSBuildThisFileDirectory)LICENSE.md" Pack="true" PackagePath="/"/>    
+    </ItemGroup>
 </Project>
