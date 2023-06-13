@@ -513,6 +513,7 @@ let generateAssemblyInfo _ =
     let getAssemblyInfoAttributes projectName = [
         AssemblyInfo.Title(projectName)
         AssemblyInfo.Product productName
+        AssemblyInfo.InternalsVisibleTo "Ficus.Tests"
         AssemblyInfo.Version latestEntry.AssemblyVersion
         AssemblyInfo.Metadata("ReleaseDate", latestEntry.Date.Value.ToString("o"))
         AssemblyInfo.FileVersion latestEntry.AssemblyVersion
