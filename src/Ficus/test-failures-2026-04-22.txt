@@ -1,0 +1,16 @@
+
+            (840879264, 297615624)
+            "joining two unrelated vectors is equivalent to array-appending their array equivalents"
+
+            (840879328, 297615624)
+            "joining two unrelated vectors is equivalent to list-appending their list equivalents"
+
+            (840878725, 297615624)
+            "joining two unrelated vectors is equivalent to list-appending their list equivalents"
+
+            (840879211, 297615624)
+            "split+reverse+join recreates reverse vector"
+
+            (840879073, 297615624)
+            "starting with 2 vectors, pop right + join = pop entire"
+
