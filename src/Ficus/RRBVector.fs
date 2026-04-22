@@ -11,6 +11,8 @@ open System.Threading
 open RRBArrayExtensions
 open RRBVectorNodes
 
+#nowarn "FS3264"
+
 [<AbstractClass>]
 [<StructuredFormatDisplay("{StringRepr}")>]
 type RRBVector<'T>() =
@@ -421,7 +423,7 @@ and internal RRBTransientVector<'T> internal (count, shift : int, root : RRBNode
     member val internal Owner = root.Owner with get, set
 
     override this.ToString() =
-        sprintf "RRBTransientVector<owner=%s,length=%d,shift=%d,tailOffset=%d,root=%A,tail=%A>" (if !this.Owner |> isNull then "<null>" else !this.Owner) this.Count this.Shift this.TailOffset this.Root this.Tail
+        sprintf "RRBTransientVector<owner=%s,length=%d,shift=%d,tailOffset=%d,root=%A,tail=%A>" (match !this.Owner with null -> "<null>" | s -> s) this.Count this.Shift this.TailOffset this.Root this.Tail
 
     // new() = RRBTransientVector(0, 5, emptyNode, Array.empty, 0)
     internal new (token : OwnerToken) =

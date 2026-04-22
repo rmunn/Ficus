@@ -9,6 +9,8 @@ module Ficus.RRBArrayExtensions
 // FSharp.Core, many of these functions will become obsolete. At that point, we
 // should replace them with the "official" versions.
 
+#nowarn "FS3264"
+
 module Array =
 
     let copyAndAppend newItem oldArr =   // FIXME: Rename to copyAndPush

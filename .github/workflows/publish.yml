@@ -11,15 +11,19 @@ jobs:
     # Sets permissions of the GITHUB_TOKEN to allow release creating
     permissions:
       contents: write
+    environment:
+      name: nuget
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
       - name: Setup necessary dotnet SDKs
-        uses: actions/setup-dotnet@v3
+        uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
           dotnet-version: |
-            6.x
+            8.x
+            9.x
+            10.x
       - name: publish
         env:
           NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}

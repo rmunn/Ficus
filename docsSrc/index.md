@@ -26,7 +26,7 @@ splitting, concatenation, and inserting and removing anywhere in the list.
         <p class="card-text">Step-by-step guides to using Ficus collections.</p>
       </div>
       <div class="card-footer text-right   border-top-0">
-        <a href="{{siteBaseUrl}}/Tutorials/Getting_Started.html" class="btn btn-primary">Get started</a>
+        <a href="{{root}}Tutorials/Getting_Started.html" class="btn btn-primary">Get started</a>
       </div>
     </div>
   </div>
@@ -37,7 +37,7 @@ splitting, concatenation, and inserting and removing anywhere in the list.
         <p class="card-text">Guides you through the steps involved in addressing key problems and use-cases. </p>
       </div>
       <div class="card-footer text-right   border-top-0">
-        <a href="{{siteBaseUrl}}/How_Tos/Doing_A_Thing.html" class="btn btn-primary">Learn Usecases</a>
+        <a href="{{root}}How_Tos/Doing_A_Thing.html" class="btn btn-primary">Learn Usecases</a>
       </div>
     </div>
   </div>
@@ -48,18 +48,18 @@ splitting, concatenation, and inserting and removing anywhere in the list.
         <p class="card-text">How the RRBVector structure works internally, in more detail.</p>
       </div>
       <div class="card-footer text-right   border-top-0">
-        <a href="{{siteBaseUrl}}/Explanations/Background.html" class="btn btn-primary">Dive Deeper</a>
+        <a href="{{root}}Explanations/Background.html" class="btn btn-primary">Dive Deeper</a>
       </div>
     </div>
   </div>
   <div class="col">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title">API Reference</h5>
+        <h5 class="card-title">Api Reference</h5>
         <p class="card-text">API reference for the RRBVector namespace.</p>
       </div>
       <div class="card-footer text-right   border-top-0">
-        <a href="{{siteBaseUrl}}/Api_Reference/Ficus/Ficus.html" class="btn btn-primary">Read Api Docs</a>
+        <a href="{{root}}reference/index.html" class="btn btn-primary">Read Api Docs</a>
       </div>
     </div>
   </div>

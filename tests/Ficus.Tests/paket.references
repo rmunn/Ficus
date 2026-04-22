@@ -1,8 +1,0 @@
-Expecto
-Expecto.FsCheck
-FParsec
-FSharp.Core
-Microsoft.NET.Test.Sdk
-YoloDev.Expecto.TestSdk
-altcover
-Microsoft.NETFramework.ReferenceAssemblies

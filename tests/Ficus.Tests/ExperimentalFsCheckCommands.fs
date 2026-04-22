@@ -15,71 +15,114 @@ let logger = Log.create "Expecto"
 
 let vecEqual vec arr msg =
     RRBVectorProps.checkProperties vec msg
-    RRBVector.toArray vec = arr |@ msg
 
-type VecState<'T>(vec : RRBVector<'T>) =
+    RRBVector.toArray vec = arr
+    |@ msg
+
+type VecState<'T>(vec: RRBVector<'T>) =
     let mutable mVec = vec
+
     member public __.Vec
-        with get() = mVec
+        with get () = mVec
         and set vec' = mVec <- vec'
 
-type Op = Operation<VecState<int>, int []>
-type Setup = Setup<VecState<int>, int []>
-type Machine = Machine<VecState<int>, int []>
+type Op = Operation<VecState<int>, int[]>
+type Setup = Setup<VecState<int>, int[]>
+type Machine = Machine<VecState<int>, int[]>
 
 module VecCommands =
     let push n =
         { new Op() with
             member __.Run model = Array.copyAndAppend n model
-            member this.Check (vecState,arr) =
+
+            member this.Check(vecState, arr) =
                 let oldVec = vecState.Vec
-                vecState.Vec <- vecState.Vec |> RRBVector.push n
+
+                vecState.Vec <-
+                    vecState.Vec
+                    |> RRBVector.push n
                 // logger.debug (
                 //     eventX "Push: old {old} -> new {new}"
                 //     >> setField "old" (RRBVectorGen.vecToTreeReprStr oldVec)
                 //     >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 // )
                 vecEqual vecState.Vec arr (sprintf "push %d" n)
+
             override __.ToString() = sprintf "push %d" n
         }
-    let pushGen = gen { let! n = Arb.generate<int> in return push n }
-    let pushGen' = Arb.generate<int> |> Gen.map push  // Same thing
+
+    let pushGen =
+        gen {
+            let! n = Arb.generate<int>
+            return push n
+        }
+
+    let pushGen' =
+        Arb.generate<int>
+        |> Gen.map push // Same thing
+
     let pop =
         { new Op() with
             override __.Pre model = Array.length model > 0
             member __.Run model = Array.copyAndPop model
-            member __.Check (vecState,arr) =
+
+            member __.Check(vecState, arr) =
                 let oldVec = vecState.Vec
-                vecState.Vec <- vecState.Vec |> RRBVector.pop
+
+                vecState.Vec <-
+                    vecState.Vec
+                    |> RRBVector.pop
                 // logger.debug (
                 //     eventX "Pop: old {old} -> new {new}"
                 //     >> setField "old" (RRBVectorGen.vecToTreeReprStr oldVec)
                 //     >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 // )
                 vecEqual vecState.Vec arr "pop"
+
             override __.ToString() = "pop"
         }
+
     let popGen = Gen.constant pop
 
     let calcSliceIdx length idx =
-        if idx < 0
-        then length + idx |> max 0
-        else (length * idx) / 100
+        if idx < 0 then
+            length
+            + idx
+            |> max 0
+        else
+            (length
+             * idx)
+            / 100
 
-    let toStartPlusLen length (start,stop) =
-        let a = calcSliceIdx length start |> max 0 |> min length
-        let b = calcSliceIdx length stop |> max 0 |> min length
-        if a <= b then a,(b-a) else b,(a-b)
+    let toStartPlusLen length (start, stop) =
+        let a =
+            calcSliceIdx length start
+            |> max 0
+            |> min length
+
+        let b =
+            calcSliceIdx length stop
+            |> max 0
+            |> min length
+
+        if a <= b then a, (b - a) else b, (a - b)
 
     let slice start stop =
         { new Op() with
             member __.Run model =
-                let from,len = toStartPlusLen (Array.length model) (start,stop)
+                let from, len = toStartPlusLen (Array.length model) (start, stop)
                 Array.sub model from len
-            member this.Check (vecState,arr) =
-                let from,len = toStartPlusLen (vecState.Vec.Length) (start,stop)
+
+            member this.Check(vecState, arr) =
+                let from, len = toStartPlusLen (vecState.Vec.Length) (start, stop)
                 let oldVec = vecState.Vec
-                vecState.Vec <- vecState.Vec.Slice (from,(from+len-1))
+
+                vecState.Vec <-
+                    vecState.Vec.Slice(
+                        from,
+                        (from + len
+                         - 1)
+                    )
                 // logger.debug (
                 //     eventX "Slice from {from} len {len} (was {start}..{stop}): old {old} -> new {new}"
                 //     >> setField "from" from
@@ -89,16 +132,33 @@ module VecCommands =
                 //     >> setField "old" (RRBVectorGen.vecToTreeReprStr oldVec)
                 //     >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 // )
-                vecEqual vecState.Vec arr (sprintf "slice %d len %d (was %d..%d)" from len start stop)
+                vecEqual
+                    vecState.Vec
+                    arr
+                    (sprintf "slice %d len %d (was %d..%d)" from len start stop)
+
             override __.ToString() = sprintf "slice %d..%d" start stop
         }
-    let genSliceIdx = Gen.frequency [3, Gen.choose(0,100); 1, Gen.choose(-32,100)]
-    let sliceGen = gen { let! start = genSliceIdx in let! stop = genSliceIdx in return slice start stop }
+
+    let genSliceIdx =
+        Gen.frequency [
+            3, Gen.choose (0, 100)
+            1, Gen.choose (-32, 100)
+        ]
+
+    let sliceGen =
+        gen {
+            let! start = genSliceIdx
+            let! stop = genSliceIdx
+            return slice start stop
+        }
 
     let join otherVec =
         { new Op() with
-            member __.Run model = let arr = RRBVector.toArray otherVec in Array.append model arr
-            member this.Check (vecState,arr) =
+            member __.Run model =
+                let arr = RRBVector.toArray otherVec in Array.append model arr
+
+            member this.Check(vecState, arr) =
                 let oldVec = vecState.Vec
                 vecState.Vec <- vecState.Vec.Append otherVec
                 // logger.debug (
@@ -107,18 +167,42 @@ module VecCommands =
                 //     >> setField "old" (RRBVectorGen.vecToTreeReprStr oldVec)
                 //     >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 // )
-                vecEqual vecState.Vec arr (sprintf "append %A" (RRBVectorGen.vecToTreeReprStr otherVec))
-            override __.ToString() = sprintf "append %A" (RRBVectorGen.vecToTreeReprStr otherVec)
+                vecEqual
+                    vecState.Vec
+                    arr
+                    (sprintf "append %A" (RRBVectorGen.vecToTreeReprStr otherVec))
+
+            override __.ToString() =
+                sprintf "append %A" (RRBVectorGen.vecToTreeReprStr otherVec)
         }
-    let joinGen = gen { let! other = Arb.generate<RRBVector<int>> in return join other }
+
+    let joinGen =
+        gen {
+            let! other = Arb.generate<RRBVector<int>>
+            return join other
+        }
 
     let insert idx n =
         { new Op() with
             member __.Run model =
-                let idx' = calcSliceIdx (Array.length model) idx |> min (Array.length model - 1)
-                model |> Array.copyAndInsertAt idx' n
-            member this.Check (vecState,arr) =
-                let idx' = calcSliceIdx (vecState.Vec.Length) idx |> min (vecState.Vec.Length - 1)
+                let idx' =
+                    calcSliceIdx (Array.length model) idx
+                    |> min (
+                        Array.length model
+                        - 1
+                    )
+
+                model
+                |> Array.copyAndInsertAt idx' n
+
+            member this.Check(vecState, arr) =
+                let idx' =
+                    calcSliceIdx (vecState.Vec.Length) idx
+                    |> min (
+                        vecState.Vec.Length
+                        - 1
+                    )
+
                 let oldVec = vecState.Vec
                 vecState.Vec <- vecState.Vec.Insert idx' n
                 // logger.debug (
@@ -130,18 +214,40 @@ module VecCommands =
                 //     >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 // )
                 vecEqual vecState.Vec arr (sprintf "insert %d at %d (was %d)" n idx' idx)
+
             override __.ToString() = sprintf "insert %d at %d" n idx
         }
-    let insertGen = gen { let! idx = genSliceIdx in let! n = Arb.generate<int> in return insert idx n }
+
+    let insertGen =
+        gen {
+            let! idx = genSliceIdx
+            let! n = Arb.generate<int>
+            return insert idx n
+        }
 
     let remove idx =
         { new Op() with
             override __.Pre model = Array.length model > 0
+
             member __.Run model =
-                let idx' = calcSliceIdx (Array.length model) idx |> min (Array.length model - 1)
-                model |> Array.copyAndRemoveAt idx'
-            member this.Check (vecState,arr) =
-                let idx' = calcSliceIdx (vecState.Vec.Length) idx |> min (vecState.Vec.Length - 1)
+                let idx' =
+                    calcSliceIdx (Array.length model) idx
+                    |> min (
+                        Array.length model
+                        - 1
+                    )
+
+                model
+                |> Array.copyAndRemoveAt idx'
+
+            member this.Check(vecState, arr) =
+                let idx' =
+                    calcSliceIdx (vecState.Vec.Length) idx
+                    |> min (
+                        vecState.Vec.Length
+                        - 1
+                    )
+
                 let oldVec = vecState.Vec
                 vecState.Vec <- vecState.Vec.Remove idx'
                 // logger.debug (
@@ -152,10 +258,14 @@ module VecCommands =
                 //     >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 // )
                 vecEqual vecState.Vec arr (sprintf "remove at %d (was %d)" idx' idx)
+
             override __.ToString() = sprintf "remove at %d" idx
         }
-    let removeGen = genSliceIdx |> Gen.map remove
-(* Disabling this one for now: the test works, but it produces SUPER-huge vectors really fast, so it slows down the test immensely. Re-enable it once its odds are FAR lower.
+
+    let removeGen =
+        genSliceIdx
+        |> Gen.map remove
+    (* Disabling this one for now: the test works, but it produces SUPER-huge vectors really fast, so it slows down the test immensely. Re-enable it once its odds are FAR lower.
     let collect (f : int -> RRBVector<int>) =
         let g = f >> RRBVector.toArray
         { new Op() with
@@ -178,92 +288,148 @@ module VecCommands =
     let collectGen = Arb.generate<int -> RRBVector<int>> |> Gen.map collect
 *)
 
-    let choose (f : int -> int option) =
+    let choose (f: int -> int option) =
         { new Op() with
             member __.Run model =
-                model |> Array.choose f
-            member this.Check (vecState,arr) =
+                model
+                |> Array.choose f
+
+            member this.Check(vecState, arr) =
                 let oldVec = vecState.Vec
-                vecState.Vec <- vecState.Vec |> RRBVector.choose f
+
+                vecState.Vec <-
+                    vecState.Vec
+                    |> RRBVector.choose f
                 // logger.debug (
                 //     eventX "Choose f: old {old} -> new {new}"
                 //     >> setField "old" (RRBVectorGen.vecToTreeReprStr oldVec)
                 //     >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 // )
                 vecEqual vecState.Vec arr "choose f"
+
             override __.ToString() = "choose f"
         }
-    let chooseGen = Arb.generate<int -> int option> |> Gen.map choose
+
+    let chooseGen =
+        Arb.generate<int -> int option>
+        |> Gen.map choose
 
     let distinct =
         { new Op() with
             member __.Run model =
-                model |> Array.distinct
-            member this.Check (vecState,arr) =
+                model
+                |> Array.distinct
+
+            member this.Check(vecState, arr) =
                 let oldVec = vecState.Vec
-                vecState.Vec <- vecState.Vec |> RRBVector.distinct
+
+                vecState.Vec <-
+                    vecState.Vec
+                    |> RRBVector.distinct
                 // logger.debug (
                 //     eventX "Distinct: old {old} -> new {new}"
                 //     >> setField "old" (RRBVectorGen.vecToTreeReprStr oldVec)
                 //     >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 // )
                 vecEqual vecState.Vec arr "distinct"
+
             override __.ToString() = "distinct"
         }
+
     let distinctGen = Gen.constant distinct
 
-    let distinctBy (f : int -> int) =
+    let distinctBy (f: int -> int) =
         { new Op() with
             member __.Run model =
-                model |> Array.distinctBy f
-            member this.Check (vecState,arr) =
+                model
+                |> Array.distinctBy f
+
+            member this.Check(vecState, arr) =
                 let oldVec = vecState.Vec
-                vecState.Vec <- vecState.Vec |> RRBVector.distinctBy f
+
+                vecState.Vec <-
+                    vecState.Vec
+                    |> RRBVector.distinctBy f
                 // logger.debug (
                 //     eventX "DistinctBy f: old {old} -> new {new}"
                 //     >> setField "old" (RRBVectorGen.vecToTreeReprStr oldVec)
                 //     >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 // )
                 vecEqual vecState.Vec arr "distinctBy f"
+
             override __.ToString() = "distinctBy f"
         }
-    let distinctByGen = Arb.generate<int -> int> |> Gen.map distinctBy
 
-    let filter (f : int -> bool) =
+    let distinctByGen =
+        Arb.generate<int -> int>
+        |> Gen.map distinctBy
+
+    let filter (f: int -> bool) =
         { new Op() with
             member __.Run model =
-                model |> Array.filter f
-            member this.Check (vecState,arr) =
+                model
+                |> Array.filter f
+
+            member this.Check(vecState, arr) =
                 let oldVec = vecState.Vec
-                vecState.Vec <- vecState.Vec |> RRBVector.filter f
+
+                vecState.Vec <-
+                    vecState.Vec
+                    |> RRBVector.filter f
                 // logger.debug (
                 //     eventX "Filter f: old {old} -> new {new}"
                 //     >> setField "old" (RRBVectorGen.vecToTreeReprStr oldVec)
                 //     >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 // )
                 vecEqual vecState.Vec arr "filter f"
+
             override __.ToString() = "filter f"
         }
-    let filterGen = Arb.generate<int -> bool> |> Gen.map filter
 
-    let map (f : int -> int) =
+    let filterGen =
+        Arb.generate<int -> bool>
+        |> Gen.map filter
+
+    let map (f: int -> int) =
         { new Op() with
             member __.Run model =
-                model |> Array.map f
-            member this.Check (vecState,arr) =
+                model
+                |> Array.map f
+
+            member this.Check(vecState, arr) =
                 let oldVec = vecState.Vec
-                vecState.Vec <- vecState.Vec |> RRBVector.map f
+
+                vecState.Vec <-
+                    vecState.Vec
+                    |> RRBVector.map f
                 // logger.debug (
                 //     eventX "Map f: old {old} -> new {new}"
                 //     >> setField "old" (RRBVectorGen.vecToTreeReprStr oldVec)
                 //     >> setField "new" (RRBVectorGen.vecToTreeReprStr vecState.Vec)
                 // )
                 vecEqual vecState.Vec arr "map f"
+
             override __.ToString() = "map f"
         }
-    let mapGen = Arb.generate<int -> int> |> Gen.map map
 
-    let genOp = Gen.oneof [ pushGen; popGen; sliceGen; joinGen; insertGen; removeGen; chooseGen; distinctGen; distinctByGen; filterGen; mapGen ]
+    let mapGen =
+        Arb.generate<int -> int>
+        |> Gen.map map
+
+    let genOp =
+        Gen.oneof [
+            pushGen
+            popGen
+            sliceGen
+            joinGen
+            insertGen
+            removeGen
+            chooseGen
+            distinctGen
+            distinctByGen
+            filterGen
+            mapGen
+        ]
     // TODO: Consider using Gen.frequency to adjust the odds, so we get more inserts and removes and fewer collects and joins.
 
     let create vec =
@@ -274,6 +440,11 @@ module VecCommands =
 
     let machine initial =
         { new Machine() with
-            member __.Setup = create initial |> Gen.constant |> Arb.fromGen
-            member __.Next arr = if arr.Length > 0 then genOp else pushGen
+            member __.Setup =
+                create initial
+                |> Gen.constant
+                |> Arb.fromGen
+
+            member __.Next arr =
+                if arr.Length > 0 then genOp else pushGen
         }

@@ -1,6 +1,7 @@
 module Ficus.Tests.TestData
 
-let largeVector = """
+let largeVector =
+    """
 [[26 M M 30 30 M M-1 M M M 27 M M M M M M M M 27 M M M M M-1 M M-1 M M M M M]
  [M M M M M M M M M M M M M M M M M M M M M M-1 M M 28 M M 29 M M M M]
  [30 M M M M M M M M M M M M M 29 M M M M 26 30 M M M M M M M M M M M]
@@ -223,7 +224,8 @@ let largeVector = """
  [27 M M M M M M M M M M 30 M 24 29 M M M M M M M M M M M 30 30 M M 29 M]]
 T6"""
 
-let ridiculouslyLargeVector = """
+let ridiculouslyLargeVector =
+    """
 [[24 M-1 27 28 29 M-1 27 28 30 30 30 M M 27 26 26 M M-1 27 M 30 M-1 29 29]
  [M M M 29 M M 29 25 26 M 22 M 28 27 M 25 29 M 29 M M M-1 29 30 M 26 30 M M 28 27 M]
  [27 M 29 M M M M M M M-1 M 25 M M M 28 25 27 26 M 29 M 30 30 M-1 M M M 27 30 26]
@@ -911,7 +913,8 @@ let ridiculouslyLargeVector = """
  [M M M M M M M M M M M M M M M M M 30 M M M M M M M M M M M M M M]]
 T25"""
 
-let anotherLargeVector = """
+let anotherLargeVector =
+    """
 [[M M-1 26 M 29 27 27 M-1 M 28 29 27 26 M 24 M 30 29 M-1 30 28 27 30 M M M 28 30 27 29 M-1 25]
  [30 M-1 27 M M-1 26 29 25 29 26 28 M 27 M 28 28 30 28 M M-1 27 30 M-1 M 27 M 29 28 30 26 28 29]
  [28 M M 27 30 24 28 M M 29 M 26 M-1 30 M 29 27 30 M M 24 M-1 M M-1 28 25 28 M 30 M-1 28 M-1]

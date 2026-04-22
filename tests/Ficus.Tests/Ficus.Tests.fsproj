@@ -1,14 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFrameworks>net6.0</TargetFrameworks>
+    <TargetFrameworks>net10.0</TargetFrameworks>
     <GenerateProgramFile>false</GenerateProgramFile>
   </PropertyGroup>
-  <ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" />
+        <PackageReference Include="Expecto" />
+        <PackageReference Include="Expecto.FsCheck" />
+        <PackageReference Include="FParsec" />
+        <PackageReference Include="YoloDev.Expecto.TestSdk" />
+        <PackageReference Include="altcover" />
+    </ItemGroup>  <ItemGroup>
     <ProjectReference Include="../../src/Ficus/Ficus.fsproj" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="AssemblyInfo.fs" />
+    <!-- <Compile Include="AssemblyInfo.fs" /> -->
     <Compile Include="TreeParser.fs" />
     <Compile Include="RRBVectorGen.fs" />
     <Compile Include="RRBVectorProps.fs" />
@@ -22,6 +30,4 @@
     <Compile Include="RRBVectorExpectoTest.fs" />
     <Compile Include="Main.fs" />
   </ItemGroup>
-  <Import Project="..\..\netfx.props" />
-  <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

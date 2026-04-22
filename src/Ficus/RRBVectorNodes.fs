@@ -2,6 +2,8 @@ module Ficus.RRBVectorNodes
 
 open RRBArrayExtensions
 
+#nowarn "FS3264"
+
 // Concepts:
 //
 // "Shift" - The height of any given node, multiplied by Literals.shiftSize.
@@ -77,7 +79,7 @@ type SlideResult<'a> =
 // we create a new ref, which will be allocated on the heap. Its value doesn't matter, so we have it reference the
 // empty string so that the minimum possible number of objects will live on the heap.
 
-type OwnerToken = string ref
+type OwnerToken = (string|null) ref
 
 let nullOwner : OwnerToken = ref null
 
