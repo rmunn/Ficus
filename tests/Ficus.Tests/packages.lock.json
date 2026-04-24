@@ -145,6 +145,12 @@
       "ficus": {
         "type": "Project"
       },
+      "ficus.fsharp": {
+        "type": "Project",
+        "dependencies": {
+          "Ficus": "[1.0.0, )"
+        }
+      },
       "FSharp.Core": {
         "type": "CentralTransitive",
         "requested": "[10.0.102, )",
