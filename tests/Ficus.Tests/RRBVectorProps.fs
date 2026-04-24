@@ -2,16 +2,18 @@ module Ficus.Tests.RRBVectorProps
 
 open System
 open Ficus
-open Ficus.RRBVectorNodes
-open Ficus.RRBVector
-open Ficus.RRBVectorNodes.RRBMath
+open Ficus.FSharp
+// open Ficus.RRBVectorNodes
+// open Ficus.RRBVector
+// open Ficus.RRBVectorNodes.RRBMath
 open FsCheck
 open Expecto.Logging
 open Expecto.Logging.Message
 
 let logger = Log.create "Property checks"
 
-module Literals = Ficus.Literals
+let down = RRBMath.Down
+let up = RRBMath.Up
 
 let children (node: RRBNode<'T>) =
     (node :?> RRBFullNode<'T>).Children
@@ -148,11 +150,12 @@ let nodeProperties = [
                 if isRelaxed node then
                     (node :?> RRBRelaxedNode<'T>).SizeTable
                 else
-                    node.BuildSizeTable
-                        shift
-                        node.NodeSize
+                    node.BuildSizeTable(
+                        shift,
+                        node.NodeSize,
                         (node.NodeSize
                          - 1)
+                    )
                 |> Array.truncate node.NodeSize
 
             let expectedSizeTable =
@@ -293,10 +296,11 @@ let nodeProperties = [
                 let nodeValid =
                     if isRelaxed node then
                         not (
-                            isSizeTableFullAtShift
-                                shift
-                                (node :?> RRBRelaxedNode<'T>).SizeTable
+                            RRBMath.IsSizeTableFullAtShift(
+                                shift,
+                                (node :?> RRBRelaxedNode<'T>).SizeTable,
                                 node.NodeSize
+                            )
                         )
                     else
                         true
@@ -600,7 +604,7 @@ let internal vectorPropertiesTransient = [
                     node
                 else
                     (node.LastChild :?> RRBFullNode<'T>)
-                    |> getRightTwig (RRBMath.down shift)
+                    |> getRightTwig (RRBMath.Down shift)
 
             let twig = getRightTwig vec.Shift (vec.Root :?> RRBFullNode<'T>)
 
@@ -663,7 +667,7 @@ let internal vectorPropertiesTransient = [
     "If a tree is Transient, its owner token must NOT be nullOwner",
     fun (vec: RRBTransientVector<'T>) ->
         not
-        <| isSameObj vec.Owner nullOwner
+        <| LanguagePrimitives.PhysicalEquality vec.Owner OwnerTokens.NullOwner
 
 // The check for the tree's spine, etc., is already handled in the node properties
 ]

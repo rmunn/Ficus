@@ -2,9 +2,11 @@ module Ficus.Tests.RRBVectorTransientMailboxTest
 
 // https://fscheck.github.io/FsCheck/StatefulTesting.html
 
-open Ficus.RRBVectorNodes
-open Ficus.RRBVector
+// open Ficus.RRBVectorNodes
+// open Ficus.RRBVector
+open Ficus
 open FsCheck
+open FsCheck.FSharp
 open Ficus.RRBArrayExtensions
 open System
 open System.Threading

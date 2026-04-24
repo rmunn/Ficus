@@ -14,13 +14,12 @@
     </AssemblyAttribute>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="../Ficus/Ficus.csproj" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" />
   </ItemGroup>
   <ItemGroup>
-    <!-- <Compile Include="Library.fs" /> -->
-    <Compile Include="Literals.fs" />
-    <Compile Include="RRBArrayExtensions.fs" />
-    <Compile Include="RRBVectorNodes.fs" />
     <Compile Include="RRBVector.fs" />
   </ItemGroup>
 </Project>

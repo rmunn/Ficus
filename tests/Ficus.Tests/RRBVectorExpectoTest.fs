@@ -3,8 +3,8 @@ module Ficus.Tests.RRBVectorExpectoTest
 open Expecto
 open Ficus
 open Ficus.RRBArrayExtensions
-open Ficus.RRBVectorNodes
-open Ficus.RRBVector
+// open Ficus.RRBVectorNodes
+// open Ficus.RRBVector
 open FsCheck
 open Expecto.Logging
 open Expecto.Logging.Message

@@ -3,8 +3,9 @@ module Ficus.Tests.RRBVectorMoreCommands
 // https://fscheck.github.io/FsCheck/StatefulTesting.html
 
 open Ficus.RRBArrayExtensions
-open Ficus.RRBVectorNodes
-open Ficus.RRBVector
+// open Ficus.RRBVectorNodes
+open Ficus
+open Ficus.FSharp
 open FsCheck
 open Expecto.Logging
 
@@ -113,8 +114,7 @@ module ParameterizedVecCommands =
                     else
                         idx in
 
-                arr
-                |> Array.copyAndInsertAt idx' item
+                RRBArrayExtensions.CopyAndInsertAt(arr, idx', item)
 
             override __.Pre(arr) =
                 (abs idx)
@@ -149,8 +149,7 @@ module ParameterizedVecCommands =
                     else
                         idx in
 
-                arr
-                |> Array.copyAndRemoveAt idx'
+                RRBArrayExtensions.CopyAndRemoveAt(arr, idx')
 
             override __.Pre(arr) =
                 (abs idx)
@@ -290,8 +289,17 @@ module ParameterizedVecCommands =
             override __.RunActual vec =
                 let from, len = toStartPlusLen (vec.Length) (start, stop)
 
-                vec.[from .. from + len
-                             - 1]
+                // TODO: Reconcile type mismatch on GetSlice -- C# version has Nullable<int> but F# wants int option
+                // Perhaps I can extend the C# type from the F# RRBVector module in order to provide GetSlice. In the meantime,
+                // we'll replace the vec.[from .. from + len - 1] syntax with a call to the GetSlice method
+                // Old:
+                // vec.[from .. from + len - 1]
+                // New:
+                vec.GetSlice(
+                    from,
+                    from + len
+                    - 1
+                )
 
             override __.RunModel arr =
                 let from, len = toStartPlusLen (Array.length arr) (start, stop)

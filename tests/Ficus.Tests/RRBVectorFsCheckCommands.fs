@@ -3,8 +3,8 @@ module Ficus.Tests.RRBVectorFsCheckCommands
 // https://fscheck.github.io/FsCheck/StatefulTesting.html
 
 open Ficus.RRBArrayExtensions
-open Ficus.RRBVectorNodes
-open Ficus.RRBVector
+open Ficus
+open Ficus.FSharp
 open FsCheck
 open Expecto
 
@@ -184,8 +184,7 @@ module VecCommands =
                 |> RRBVector.remove 0
 
             override __.RunModel arr =
-                arr
-                |> Array.copyAndRemoveAt 0
+                RRBArrayExtensions.CopyAndRemoveAt(arr, 0)
 
             override __.Pre(arr) = arr.Length > 0
 
@@ -202,8 +201,7 @@ module VecCommands =
                 |> RRBVector.remove 3
 
             override __.RunModel arr =
-                arr
-                |> Array.copyAndRemoveAt 3
+                RRBArrayExtensions.CopyAndRemoveAt(arr, 3)
 
             override __.Pre(arr) = arr.Length > 3
 
