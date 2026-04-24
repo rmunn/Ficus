@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 
+namespace Ficus.RRBArrayExtensions;
+
 public static class RRBArrayExtensions
 {
-    public static T[] CopyAndAppend<T>(this T[] oldArr, T newItem)
+    public static T[] CopyAndPush<T>(this T[] oldArr, T newItem)
     {
         int len = oldArr.Length;
         var newArr = new T[len + 1];
@@ -30,8 +32,7 @@ public static class RRBArrayExtensions
     {
         int oldLen = oldArr.Length;
 
-        if (idx == oldLen)
-            return (oldArr, newItem);
+        if (idx == oldLen) return (oldArr, newItem);
 
         var newArr = new T[oldLen];
 
@@ -66,7 +67,7 @@ public static class RRBArrayExtensions
         else
         {
             var result = new T[blockSize];
-            Array.Copy(arr, 0, result, 0);
+            Array.Copy(arr, 0, result, 0, len);
             return result;
         }
     }
@@ -146,6 +147,7 @@ public static class RRBArrayExtensions
         }
     }
 
+    // TODO: Rename to FillFromEnumerable (and also Fill2 below, as well as CreateMany)
     public static void FillFromSeq<T>(T[] arr, IEnumerable<T> s, int idx, int len)
     {
         using var e = s.GetEnumerator();
@@ -192,6 +194,55 @@ public static class RRBArrayExtensions
         using var e = s.GetEnumerator();
         foreach (var arr in CreateManyFromEnumerator(e, totalLen, lenPerArray))
             yield return arr;
+    }
+
+    // Splits an array into two as efficiently as possible
+    public static (T[] Left, T[] Right) SplitAt<T>(this T[] arr, int splitIdx)
+    {
+        int len = arr.Length;
+        // Check easy cases before doing more work
+        if (splitIdx >= len) return (arr, []);
+        if (splitIdx <= 0) return ([], arr);
+        // Left result will be splitIdx items long, no need for a lenL
+        int lenR = len - splitIdx;
+        var resultL = new T[splitIdx];
+        var resultR = new T[lenR];
+        Array.Copy(arr, 0, resultL, 0, splitIdx);
+        Array.Copy(arr, splitIdx, resultR, 0, lenR);
+        return (resultL, resultR);
+    }
+
+    // Truncate an array as efficiently as possible
+    public static T[] Truncate<T>(this T[] arr, int maxLen)
+    {
+        if (maxLen <= 0) return [];
+        int len = arr.Length;
+        if (maxLen >= len) return arr;
+        var result = new T[maxLen];
+        Array.Copy(arr, 0, result, 0, maxLen);
+        return result;
+    }
+
+    // Skip first N items of an array as efficiently as possible
+    public static T[] Skip<T>(this T[] arr, int skip)
+    {
+        if (skip <= 0) return arr;
+        int len = arr.Length;
+        if (skip >= len) return [];
+        int newLen = len - skip;
+        var result = new T[newLen];
+        Array.Copy(arr, skip, result, 0, newLen);
+        return result;
+    }
+
+    // Appends two arrays as efficiently as possible
+    public static T[] Append<T>(this T[] left, T[] right)
+    {
+        int lenL = left.Length;
+        var result = new T[lenL + right.Length];
+        left.CopyTo(result, 0);
+        right.CopyTo(result, lenL);
+        return result;
     }
 
     // Appends two arrays, splitting at given index if total length too large, without creating intermediate arrays
@@ -422,9 +473,9 @@ public static class RRBArrayExtensions
     // Finds a run of numbers whose sum is >= N in a single pass through the array; usually finds a run of minimal length, though
     // in some cases it can find a run that's just a little bit longer than the minimal possible run.
     // Basic algorithm found at https://stackoverflow.com/questions/13023188/smallest-subset-of-array-whose-sum-is-no-less-than-key
-    public static (int Index, int Length) SmallestRunOfAtLeast(this byte[] arr, byte n)
+    public static (int Index, int Length) SmallestRunOfAtLeast(this int[] arr, int n)
     {
-        byte acc = 0;
+        int acc = 0;
         int p = 0, q = 0;
         int arrLen = arr.Length;
         int bestIdx = 0;

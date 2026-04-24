@@ -1,0 +1,10 @@
+Now I need to double-check the port, then run property tests against it repeatedly until it all looks good.
+
+Then I can start to try out optimizations with Span<T> and see if they are truly optimizations.
+
+Have mostly finished checking nodes. Need to double back and look at SlideResult<T>
+and stop treating it like a namespace (search for SlideResult<T>. with trailing period)
+
+Also, the T in SlideResult is usually RRBNode<T>, sometimes RRBFullNode<T> or RRBLeafNode<T>... I need to confirm each case.
+
+Also need to double-check whether I caught and converted all the RRBArrayExtensions things, though the compiler will catch any that I missed
