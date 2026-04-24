@@ -5,9 +5,9 @@ module Ficus.Tests.RRBVectorTransientMailboxTest
 // open Ficus.RRBVectorNodes
 // open Ficus.RRBVector
 open Ficus
-open FsCheck
-open FsCheck.FSharp
+open Ficus.FSharp
 open Ficus.RRBArrayExtensions
+open FsCheck
 open System
 open System.Threading
 open Expecto.Logging

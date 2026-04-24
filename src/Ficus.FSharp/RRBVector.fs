@@ -1029,7 +1029,6 @@ module RRBVector =
 
     let inline splitAt idx (vec: RRBVector<'T>) = vec.Split idx
 
-(* Disabled until I can figure out the type mismatch between persistent and transient here
     let splitInto splitCount (vec: RRBVector<'T>) =
         let extra = if vec.Length % splitCount = 0 then 0 else 1
 
@@ -1058,8 +1057,6 @@ module RRBVector =
             result
         else
             result
-*)
-// TODO: Figure out how to reconcile those two types
 
     let inline sum (vec: RRBVector<'T>) =
         vec

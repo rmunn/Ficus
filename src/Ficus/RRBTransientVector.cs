@@ -450,7 +450,6 @@ internal sealed class RRBTransientVector<T> : RRBVector<T>
         }
     }
 
-    // TODO: Port Split, Slice, GetSlice, Append, Insert, Remove, Update, GetItem
     public override (RRBVector<T>, RRBVector<T>) Split(int idx)
     {
         ThrowIfNotValid();
