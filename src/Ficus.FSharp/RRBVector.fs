@@ -14,8 +14,20 @@ let internal emptyNode<'T> = Ficus.RRBFullNode<'T>.EmptyNode
 let internal nullOwner = Ficus.OwnerTokens.NullOwner
 let inline internal isSameObj a b = LanguagePrimitives.PhysicalEquality a b
 
+// Extensions to C# API
+
+// GetSlice needs F# options, not Nullable<int>, as parameters, so C# code won't want to consume it
+
+type Ficus.RRBVector<'T> with
+    member this.GetSlice(start, stop) =
+        match start, stop with
+        | None, None -> this
+        | None, Some stop -> this.Take(stop + 1) // vec.[..5] should return all indices from 0 to 5, i.e. 6 in total
+        | Some start, None -> this.Skip start
+        | Some start, Some stop -> this.Slice(start, stop)
+
 module RRBVector =
-    let inline nth idx (vec: RRBVector<'T>) = vec.[idx]
+    let inline nth (idx: int) (vec: RRBVector<'T>) = vec.[idx]
     let inline peek (vec: RRBVector<'T>) = vec.Peek()
     let inline pop (vec: RRBVector<'T>) = vec.Pop()
     let inline push (item: 'T) (vec: RRBVector<'T>) = vec.Push item
@@ -566,7 +578,7 @@ module RRBVector =
         |> ofSeq
 
     let inline isEmpty (vec: RRBVector<'T>) = vec.IsEmpty()
-    let inline item idx (vec: RRBVector<'T>) = vec.[idx]
+    let inline item (idx: int) (vec: RRBVector<'T>) = vec.[idx]
 
     let inline iter f (vec: RRBVector<'T>) =
         vec

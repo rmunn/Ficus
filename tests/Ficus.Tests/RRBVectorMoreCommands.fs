@@ -289,17 +289,8 @@ module ParameterizedVecCommands =
             override __.RunActual vec =
                 let from, len = toStartPlusLen (vec.Length) (start, stop)
 
-                // TODO: Reconcile type mismatch on GetSlice -- C# version has Nullable<int> but F# wants int option
-                // Perhaps I can extend the C# type from the F# RRBVector module in order to provide GetSlice. In the meantime,
-                // we'll replace the vec.[from .. from + len - 1] syntax with a call to the GetSlice method
-                // Old:
-                // vec.[from .. from + len - 1]
-                // New:
-                vec.GetSlice(
-                    from,
-                    from + len
-                    - 1
-                )
+                vec.[from .. from + len
+                             - 1]
 
             override __.RunModel arr =
                 let from, len = toStartPlusLen (Array.length arr) (start, stop)

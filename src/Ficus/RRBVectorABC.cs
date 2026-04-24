@@ -38,8 +38,15 @@ public abstract class RRBVector<T> : IEnumerable<T>
     /// contain items i through x.Length-1. <b>Effectively O(1)</b> (really O(log<sub>32</sub> N))
     public abstract (RRBVector<T> Left, RRBVector<T> Right) Split(int index);
 
-    public abstract RRBVector<T> Slice(int start, int end);
-    public abstract RRBVector<T> GetSlice(int? start, int? end);
+    // Note that this follows C# convention using start and length, *NOT* start and end as in F#. F# code should use the GetSlice method (defined in the RRBVector.fs module) instead, since that one follows F# convention.
+    public abstract RRBVector<T> Slice(int start, int length);
+    // Note that this follows C# convention: start is *inclusive* and end is *exclusive*. F# code should use the GetSlice method (defined in the RRBVector.fs module) instead, since that one follows F# convention.
+    public RRBVector<T> Slice(Index start, Index end) => this[start.GetOffset(Length)..end.GetOffset(Length)];
+    public RRBVector<T> Slice(Range slice)
+    {
+        var (start, len) = slice.GetOffsetAndLength(Length);
+        return Slice(start, len);
+    }
 
     /// Concatenate two vectors to create a new one. <b>Effectively O(1)</b> (really O(log<sub>32</sub> N))
     public abstract RRBVector<T> Append(RRBVector<T> other);
@@ -49,12 +56,15 @@ public abstract class RRBVector<T> : IEnumerable<T>
     public abstract RRBVector<T> Update(int index, T value);
 
     public abstract T GetItem(int index);
+    public T GetItem(Index index) => GetItem(index.GetOffset(Length));
 
     public abstract RRBVector<T> Transient();
     public abstract RRBVector<T> Persistent();
 
-    // Indexer
+    // Indexers
     public T this[int index] => GetItem(index);
+    public T this[Index index] => GetItem(index);
+    public RRBVector<T> this[Range range] => Slice(range);
 
     // IEnumerable<T>
     public IEnumerator<T> GetEnumerator()

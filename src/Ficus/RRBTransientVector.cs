@@ -537,36 +537,11 @@ internal sealed class RRBTransientVector<T> : RRBVector<T>
         }
     }
 
-    public override RRBVector<T> Slice(int start, int end)
+    public override RRBVector<T> Slice(int start, int length)
     {
         ThrowIfNotValid();
 
-        return Skip(start).Take(end - start + 1);
-    }
-
-    public override RRBVector<T> GetSlice(int? start, int? end)
-    {
-        ThrowIfNotValid();
-
-        if (start is int s && end is int e)
-        {
-            // both non-null
-            return Slice(s, e);
-        }
-        else if (start is null && end is int e2)
-        {
-            // F# slices use inclusive indices, i.e. vec.[..5] should return all indices from 0 to 5, 6 in total
-            return Take(e2 + 1);
-        }
-        else if (start is int s2 && end is null)
-        {
-            return Skip(s2);
-        }
-        else
-        {
-            // Both start and end null = return unchanged vector
-            return this;
-        }
+        return Skip(start).Take(length);
     }
 
     public override RRBVector<T> Append(RRBVector<T> other)

@@ -344,22 +344,10 @@ internal sealed class RRBPersistentVector<T> : RRBVector<T>
         }
     }
 
-    public override RRBVector<T> Slice(int start, int end)
+    public override RRBVector<T> Slice(int start, int length)
     {
-        int len = end - start + 1;
-        return this.Skip(start).Take(len);
-    }
-
-    public override RRBVector<T> GetSlice(int? start, int? end)
-    {
-        RRBVector<T> result = this;
-        if (start is int s) result = result.Skip(s);
-        if (end is int e)
-        {
-            int len = e - (start ?? 0) + 1;
-            result = result.Take(len);
-        }
-        return result;
+        return this.Skip(start).Take(length);
+        // TODO: Implement a more efficient version that doesn't create a throwaway tree
     }
 
     public override RRBVector<T> Append(RRBVector<T> other)

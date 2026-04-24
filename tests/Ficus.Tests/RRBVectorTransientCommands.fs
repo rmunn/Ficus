@@ -325,14 +325,7 @@ module internal VecCommands =
                 //     >> setField "len" (sprintf "%A" vec.Length)
                 //     >> setField "repr" (sprintf "%A" (RRBVectorGen.vecToTreeReprStr vec))
                 // ) |> Async.RunSynchronously
-                let newVec =
-                    vec.GetSlice(
-                        start'
-                        |> Option.toNullable,
-                        stop'
-                        |> Option.toNullable
-                    )
-                    :?> RRBTransientVector<_>
+                let newVec = vec.GetSlice(start', stop') :?> RRBTransientVector<_>
 
                 let newLen = newVec.Length
                 let newRepr = RRBVectorGen.vecToTreeReprStr newVec
