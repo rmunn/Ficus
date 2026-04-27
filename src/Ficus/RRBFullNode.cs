@@ -1091,7 +1091,6 @@ public class RRBFullNode<T> : RRBNode<T>
         // The left node, but not the right, needs to have its right spine shrunk before merging
         // Note, though, that we do *not* want to shrink *this* node yet; that will be done in MkNodeForRebalance
         var left = (RRBFullNode<T>)this.ShrinkRightSpineOfChild(owner, shift);
-        // TODO: Comment out the ShrinkRightSpineOfChild and see which tests fail, then write a simple regression test for this scenario
 
         int totalLength;
         IEnumerable<RRBNode<T>> childrenSeq;

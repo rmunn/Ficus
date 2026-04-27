@@ -337,8 +337,7 @@ public sealed class RRBExpandedFullNode<T> : RRBFullNode<T>
         }
 
         int newSize = size + n;
-        // TODO: Double-check this math, make sure we're using the right value here (should it be RRBMath.Down(shift) since we're looking for the full *child* size?)
-        int fullChildSize = (1 << shift);
+        int fullChildSize = 1 << shift;
         bool stillFull = node.LastChild.TreeSize(RRBMath.Down(shift)) >= fullChildSize;
 
         using (var eC = newChildren.GetEnumerator())
@@ -453,7 +452,7 @@ public sealed class RRBExpandedFullNode<T> : RRBFullNode<T>
 
         int prevSizeTableEntry = 0;
         bool stillFull = true;
-        int fullChildSize = (1 << shift);
+        int fullChildSize = 1 << shift;
 
         using (var eC = newChildren.GetEnumerator())
         {
@@ -536,7 +535,6 @@ public sealed class RRBExpandedFullNode<T> : RRBFullNode<T>
             ? lastChild.Expand(owner)
             // We're above twig level, so last child may need expanding itself
             : ((RRBFullNode<T>)lastChild.Expand(owner)).MaybeExpand(owner, RRBMath.Down(shift));
-        // TODO: Can we just call MaybeExpand on the child and trust in inheritance to handle this?
 
         if (!ReferenceEquals(lastChild, expandedLastChild))
         {
