@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;net8.0;net9.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>netstandard2.1;net8.0;net9.0;net10.0</TargetFrameworks>
+    <!-- We're not ready for XML comments yet, so disable the warning for now -->
+    <NoWarn>1591</NoWarn>
+    <!-- netstandard2.1 came with C# 8.0 by default, but we want to target at least 12.0 so we can use collection expressions -->
+    <LangVersion>12.0</LangVersion>
   </PropertyGroup>
   <PropertyGroup>
     <Title>Ficus</Title>
@@ -10,17 +14,13 @@
   <ItemGroup>
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
     <_Parameter1>$(AssemblyName).Tests</_Parameter1>
-    <!-- TODO: Replace that with Ficus.tests if the $(AssemblyName) trick doesn't work -->
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+    <_Parameter1>$(AssemblyName).FSharp</_Parameter1>
     </AssemblyAttribute>
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" />
   </ItemGroup>
-  <ItemGroup>
-    <!-- <Compile Include="Library.fs" /> -->
-    <Compile Include="Literals.fs" />
-    <Compile Include="RRBArrayExtensions.fs" />
-    <Compile Include="RRBVectorNodes.fs" />
-    <Compile Include="RRBVector.fs" />
-  </ItemGroup>
 </Project>
+
