@@ -793,21 +793,21 @@ internal sealed class RRBTransientVector<T> : RRBVector<T>
 
             switch (result)
             {
-                case SlideResult<RRBNode<T>>.Tag.SimpleInsertion:
+                case InsertResult<RRBNode<T>>.Tag.SimpleInsertion:
                     newShift = Shift;
                     break;
 
-                case SlideResult<RRBNode<T>>.Tag.SplitNode:
+                case InsertResult<RRBNode<T>>.Tag.SplitNode:
                     // Note we're calling .NewParent on the new *right* node
                     // TODO: Write explanation as to why (rightmost node should be an Expanded variant in transients, but I need to explain this better)
                     newRoot = ((RRBFullNode<T>)newRight).NewParent(Owner, Shift, new[] { newLeft, newRight });
                     newShift = RRBMath.Up(Shift);
                     break;
 #if DEBUG
-                case SlideResult<RRBNode<T>>.Tag.SlidItemsLeft:
+                case InsertResult<RRBNode<T>>.Tag.SlidItemsLeft:
                     throw new InvalidOperationException("Impossible case: SlidItemsLeft in Insert() of transient vector");
 
-                case SlideResult<RRBNode<T>>.Tag.SlidItemsRight:
+                case InsertResult<RRBNode<T>>.Tag.SlidItemsRight:
                     throw new InvalidOperationException("Impossible case: SlidItemsRight in Insert() of transient vector");
 
                 default:

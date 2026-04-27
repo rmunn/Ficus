@@ -8,7 +8,7 @@ namespace Ficus;
 //     | SlidItemsRight of newCurrent: 'a * newRight: 'a
 //     | SplitNode of newCurrent: 'a * newRight: 'a
 
-internal readonly struct SlideResult<T>
+internal readonly struct InsertResult<T>
 {
     internal enum Tag : byte
     {
@@ -23,24 +23,24 @@ internal readonly struct SlideResult<T>
     private readonly T _left;
     private readonly T _right;
 
-    private SlideResult(Tag @case, T left, T right)
+    private InsertResult(Tag @case, T left, T right)
     {
         Case = @case;
         _left = left;
         _right = right;
     }
 
-    internal static SlideResult<T> SimpleInsertion(T newCurrent) =>
-        new SlideResult<T>(Tag.SimpleInsertion, newCurrent, default!);
+    internal static InsertResult<T> SimpleInsertion(T newCurrent) =>
+        new InsertResult<T>(Tag.SimpleInsertion, newCurrent, default!);
 
-    internal static SlideResult<T> SlidItemsLeft(T newLeft, T newCurrent) =>
-        new SlideResult<T>(Tag.SlidItemsLeft, newLeft, newCurrent);
+    internal static InsertResult<T> SlidItemsLeft(T newLeft, T newCurrent) =>
+        new InsertResult<T>(Tag.SlidItemsLeft, newLeft, newCurrent);
 
-    internal static SlideResult<T> SlidItemsRight(T newCurrent, T newRight) =>
-        new SlideResult<T>(Tag.SlidItemsRight, newCurrent, newRight);
+    internal static InsertResult<T> SlidItemsRight(T newCurrent, T newRight) =>
+        new InsertResult<T>(Tag.SlidItemsRight, newCurrent, newRight);
 
-    internal static SlideResult<T> SplitNode(T newCurrent, T newRight) =>
-        new SlideResult<T>(Tag.SplitNode, newCurrent, newRight);
+    internal static InsertResult<T> SplitNode(T newCurrent, T newRight) =>
+        new InsertResult<T>(Tag.SplitNode, newCurrent, newRight);
 
     internal void Deconstruct(out Tag tag, out T l, out T mid, out T r)
     {

@@ -493,13 +493,13 @@ internal sealed class RRBPersistentVector<T> : RRBVector<T>
         {
             // Inserting into the root, tail will remain unchanged
             var (insertionResult, newLeft, newRoot, newRight) = ((RRBFullNode<T>)Root).InsertedTree(OwnerTokens.NullOwner, Shift, idx, newItem, null, 0);
-            if (insertionResult is SlideResult<RRBNode<T>>.Tag.SimpleInsertion)
+            if (insertionResult is InsertResult<RRBNode<T>>.Tag.SimpleInsertion)
             {
                 // Tree did not grow... but invariant might be violated now depending on where the insertion happened, so we must adjust tree
                 return new RRBPersistentVector<T>(Count + 1, Shift, newRoot, Tail, TailOffset + 1).AdjustTree();
                 // TODO: Remove this AdjustTree call and make a test fail, then create a targeted regression test for that scenario
             }
-            if (insertionResult is SlideResult<RRBNode<T>>.Tag.SplitNode)
+            if (insertionResult is InsertResult<RRBNode<T>>.Tag.SplitNode)
             {
                 // Note we're parenting off of newRight, to parallel RRBTransientVector logic
                 // Doesn't matter here, but matters for transients
@@ -509,11 +509,11 @@ internal sealed class RRBPersistentVector<T> : RRBVector<T>
                 // TODO: Remove this AdjustTree call and make a test fail, then create a targeted regression test for that scenario
             }
 #if DEBUG
-            if (insertionResult is SlideResult<RRBNode<T>>.Tag.SlidItemsLeft)
+            if (insertionResult is InsertResult<RRBNode<T>>.Tag.SlidItemsLeft)
             {
                 throw new InvalidOperationException("Impossible case: SlidItemsLeft in Insert() of persistent vector");
             }
-            if (insertionResult is SlideResult<RRBNode<T>>.Tag.SlidItemsRight)
+            if (insertionResult is InsertResult<RRBNode<T>>.Tag.SlidItemsRight)
             {
                 throw new InvalidOperationException("Impossible case: SlidItemsRight in Insert() of persistent vector");
             }

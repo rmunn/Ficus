@@ -769,7 +769,7 @@ public class RRBFullNode<T> : RRBNode<T>
         return UpdateChild(owner, shift, localIdx, newNode);
     }
 
-    internal override SlideResult<RRBNode<T>> InsertedTree(OwnerToken owner, int shift, int treeIdx, T item, RRBFullNode<T>? parentOpt, int idxOfNodeInParent)
+    internal override InsertResult<RRBNode<T>> InsertedTree(OwnerToken owner, int shift, int treeIdx, T item, RRBFullNode<T>? parentOpt, int idxOfNodeInParent)
     {
         var (localIdx, child, nextIdx) = IndexesAndChild(shift, treeIdx);
 
@@ -778,37 +778,37 @@ public class RRBFullNode<T> : RRBNode<T>
 
         switch (insertResult)
         {
-            case SlideResult<RRBNode<T>>.Tag.SimpleInsertion:
-                return SlideResult<RRBNode<T>>.SimpleInsertion(
+            case InsertResult<RRBNode<T>>.Tag.SimpleInsertion:
+                return InsertResult<RRBNode<T>>.SimpleInsertion(
                     UpdateChildSRel(owner, shift, localIdx, newChild, 1));
 
-            case SlideResult<RRBNode<T>>.Tag.SlidItemsLeft:
+            case InsertResult<RRBNode<T>>.Tag.SlidItemsLeft:
                 // TODO: Do we need an "Update two child items at once" function? What about the size table? We should be able to manage the size table more cleverly in RelaxedNodes.
                 node = (RRBFullNode<T>)UpdateChildSAbs(
                     owner, shift, localIdx - 1,
                     newLeftChild,
                     newLeftChild.TreeSize(RRBMath.Down(shift)));
 
-                return SlideResult<RRBNode<T>>.SimpleInsertion(
+                return InsertResult<RRBNode<T>>.SimpleInsertion(
                     node.UpdateChildSAbs(
                         owner, shift, localIdx,
                         newChild,
                         newChild.TreeSize(RRBMath.Down(shift))));
 
-            case SlideResult<RRBNode<T>>.Tag.SlidItemsRight:
+            case InsertResult<RRBNode<T>>.Tag.SlidItemsRight:
                 // TODO: Do we need an "Update two child items at once" function? What about the size table? We should be able to manage the size table more cleverly in RelaxedNodes.
                 node = (RRBFullNode<T>)UpdateChildSAbs(
                     owner, shift, localIdx,
                     newChild,
                     newChild.TreeSize(RRBMath.Down(shift)));
 
-                return SlideResult<RRBNode<T>>.SimpleInsertion(
+                return InsertResult<RRBNode<T>>.SimpleInsertion(
                     node.UpdateChildSAbs(
                         owner, shift, localIdx + 1,
                         newRightChild,
                         newRightChild.TreeSize(RRBMath.Down(shift))));
 
-            case SlideResult<RRBNode<T>>.Tag.SplitNode:
+            case InsertResult<RRBNode<T>>.Tag.SplitNode:
                 if (NodeSize < Literals.blockSize)
                 {
                     // We have room to grow the current node
@@ -817,7 +817,7 @@ public class RRBFullNode<T> : RRBNode<T>
                         newLeftChild,
                         newLeftChild.TreeSize(RRBMath.Down(shift)));
 
-                    return SlideResult<RRBNode<T>>.SimpleInsertion(
+                    return InsertResult<RRBNode<T>>.SimpleInsertion(
                         node.InsertChild(owner, shift, localIdx + 1, newRightChild));
                 }
 
@@ -838,7 +838,7 @@ public class RRBFullNode<T> : RRBNode<T>
 
                     var (l, r) = node.InsertAndSlideChildrenLeft(owner, shift, localIdx + 1, newRightChild, leftSib);
 
-                    return SlideResult<RRBNode<T>>.SlidItemsLeft(l, r);
+                    return InsertResult<RRBNode<T>>.SlidItemsLeft(l, r);
                 }
 
                 if (parentOpt != null &&
@@ -856,7 +856,7 @@ public class RRBFullNode<T> : RRBNode<T>
                     var (l2, r2) = node.InsertAndSlideChildrenRight(
                         owner, shift, localIdx + 1, newRightChild, rightSib);
 
-                    return SlideResult<RRBNode<T>>.SlidItemsRight(l2, r2);
+                    return InsertResult<RRBNode<T>>.SlidItemsRight(l2, r2);
                 }
 
                 // No room in immediate left or right siblings, so split current node
@@ -869,7 +869,7 @@ public class RRBFullNode<T> : RRBNode<T>
                 var (l3, r3) = node.InsertAndSplitNode(
                     owner, shift, localIdx + 1, newRightChild);
 
-                return SlideResult<RRBNode<T>>.SplitNode(l3, r3);
+                return InsertResult<RRBNode<T>>.SplitNode(l3, r3);
 
 #if DEBUG
             default:
