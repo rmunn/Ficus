@@ -492,33 +492,30 @@ internal sealed class RRBPersistentVector<T> : RRBVector<T>
         else
         {
             // Inserting into the root, tail will remain unchanged
-            var insertionResult = ((RRBFullNode<T>)Root).InsertedTree(OwnerTokens.NullOwner, Shift, idx, newItem, null, 0);
-            if (insertionResult is SimpleInsertion<RRBNode<T>> simple)
+            var (insertionResult, newLeft, newRoot, newRight) = ((RRBFullNode<T>)Root).InsertedTree(OwnerTokens.NullOwner, Shift, idx, newItem, null, 0);
+            if (insertionResult is SlideResult<RRBNode<T>>.Tag.SimpleInsertion)
             {
-                var newRoot = (RRBFullNode<T>)simple.NewCurrent;
                 // Tree did not grow... but invariant might be violated now depending on where the insertion happened, so we must adjust tree
                 return new RRBPersistentVector<T>(Count + 1, Shift, newRoot, Tail, TailOffset + 1).AdjustTree();
                 // TODO: Remove this AdjustTree call and make a test fail, then create a targeted regression test for that scenario
             }
-            if (insertionResult is SplitNode<RRBNode<T>> pair)
+            if (insertionResult is SlideResult<RRBNode<T>>.Tag.SplitNode)
             {
-                var newRoot = ((RRBFullNode<T>)pair.NewCurrent).NewParent(OwnerTokens.NullOwner, Shift, new[] { pair.NewCurrent, pair.NewRight });
+                // Note we're parenting off of newRight, to parallel RRBTransientVector logic
+                // Doesn't matter here, but matters for transients
+                newRoot = ((RRBFullNode<T>)newRight).NewParent(OwnerTokens.NullOwner, Shift, new[] { newLeft, newRight });
                 var newShift = RRBMath.Up(Shift);
                 return new RRBPersistentVector<T>(Count + 1, newShift, newRoot, Tail, TailOffset + 1).AdjustTree();
                 // TODO: Remove this AdjustTree call and make a test fail, then create a targeted regression test for that scenario
             }
 #if DEBUG
-            if (insertionResult is SlidItemsLeft<T>)
+            if (insertionResult is SlideResult<RRBNode<T>>.Tag.SlidItemsLeft)
             {
                 throw new InvalidOperationException("Impossible case: SlidItemsLeft in Insert() of persistent vector");
             }
-            if (insertionResult is SlidItemsRight<T>)
+            if (insertionResult is SlideResult<RRBNode<T>>.Tag.SlidItemsRight)
             {
                 throw new InvalidOperationException("Impossible case: SlidItemsRight in Insert() of persistent vector");
-            }
-            if (insertionResult is null)
-            {
-                throw new InvalidOperationException("Impossible case: null insertion result in Insert() of persistent vector");
             }
             else
             {

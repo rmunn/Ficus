@@ -88,12 +88,12 @@ public sealed class RRBLeafNode<T> : RRBNode<T>
         return new RRBLeafNode<T>(owner, newItems);
     }
 
-    public override SlideResult<RRBNode<T>> InsertedTree(OwnerToken owner, int shift, int treeIdx, T item, RRBFullNode<T>? parentOpt, int idxOfNodeInParent)
+    internal override SlideResult<RRBNode<T>> InsertedTree(OwnerToken owner, int shift, int treeIdx, T item, RRBFullNode<T>? parentOpt, int idxOfNodeInParent)
     {
         if (NodeSize < Literals.blockSize)
         {
             // Easiest case
-            return new SimpleInsertion<RRBNode<T>>(InsertedItem(owner, treeIdx, item));
+            return SlideResult<RRBNode<T>>.SimpleInsertion(InsertedItem(owner, treeIdx, item));
         }
 
         int localIdx = treeIdx;
@@ -113,7 +113,7 @@ public sealed class RRBLeafNode<T> : RRBNode<T>
                 var newLeft = RRBNode<T>.MkLeaf(owner, newLeftItems);
                 var newRight = LeafNodeWithItems(owner, newRightItems);
 
-                return new SlidItemsLeft<RRBNode<T>>(newLeft, newRight);
+                return SlideResult<RRBNode<T>>.SlidItemsLeft(newLeft, newRight);
             }
 
             if (idxOfNodeInParent < parent.NodeSize - 1 &&
@@ -129,14 +129,14 @@ public sealed class RRBLeafNode<T> : RRBNode<T>
                 var newLeft = LeafNodeWithItems(owner, newLeftItems); // TODO: Verify that this doesn't cause bugs
                 var newRight = RRBNode<T>.MkLeaf(owner, newRightItems);
 
-                return new SlidItemsRight<RRBNode<T>>(newLeft, newRight);
+                return SlideResult<RRBNode<T>>.SlidItemsRight(newLeft, newRight);
             }
         }
 
         // No parent, so we have to make one
         var (l, r) = RRBArrayExtensions.RRBArrayExtensions.InsertAndSplitEvenly(items, localIdx, item);
 
-        return new SplitNode<RRBNode<T>>(
+        return SlideResult<RRBNode<T>>.SplitNode(
             RRBNode<T>.MkLeaf(owner, l),
             LeafNodeWithItems(owner, r)
         );

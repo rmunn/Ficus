@@ -126,7 +126,7 @@ public abstract class RRBNode<T>
         int treeIdx,
         T newItem);
 
-    public abstract SlideResult<RRBNode<T>> InsertedTree(
+    internal abstract SlideResult<RRBNode<T>> InsertedTree(
         OwnerToken owner,
         int shift,
         int treeIdx,

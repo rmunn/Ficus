@@ -1,7 +1,5 @@
 namespace Ficus;
 
-// TODO: Turn this into a simple tuple to avoid so many allocations, once we're confident we have the logic right
-
 // This is the equivalent of the following F# code:
 //
 // type SlideResult<'a> =
@@ -10,69 +8,70 @@ namespace Ficus;
 //     | SlidItemsRight of newCurrent: 'a * newRight: 'a
 //     | SplitNode of newCurrent: 'a * newRight: 'a
 
-public abstract class SlideResult<T> { }
-
-public sealed class SimpleInsertion<T> : SlideResult<T>
+internal readonly struct SlideResult<T>
 {
-    public T NewCurrent { get; }
-
-    public SimpleInsertion(T newCurrent)
+    internal enum Tag : byte
     {
-        NewCurrent = newCurrent;
+        SimpleInsertion = 0,
+        SlidItemsLeft = 1,
+        SlidItemsRight = 2,
+        SplitNode = 3
     }
-    public void Deconstruct(out T newCurrent)
-    {
-        newCurrent = NewCurrent;
-    }
-}
 
-public sealed class SlidItemsLeft<T> : SlideResult<T>
-{
-    public T NewLeft { get; }
-    public T NewCurrent { get; }
+    internal Tag Case { get; }
 
-    public SlidItemsLeft(T newLeft, T newCurrent)
-    {
-        NewLeft = newLeft;
-        NewCurrent = newCurrent;
-    }
-    public void Deconstruct(out T newLeft, out T newCurrent)
-    {
-        newLeft = NewLeft;
-        newCurrent = NewCurrent;
-    }
-}
+    private readonly T _left;
+    private readonly T _right;
 
-public sealed class SlidItemsRight<T> : SlideResult<T>
-{
-    public T NewCurrent { get; }
-    public T NewRight { get; }
-
-    public SlidItemsRight(T newCurrent, T newRight)
+    private SlideResult(Tag @case, T left, T right)
     {
-        NewCurrent = newCurrent;
-        NewRight = newRight;
+        Case = @case;
+        _left = left;
+        _right = right;
     }
-    public void Deconstruct(out T newCurrent, out T newRight)
-    {
-        newCurrent = NewCurrent;
-        newRight = NewRight;
-    }
-}
 
-public sealed class SplitNode<T> : SlideResult<T>
-{
-    public T NewCurrent { get; }
-    public T NewRight { get; }
+    internal static SlideResult<T> SimpleInsertion(T newCurrent) =>
+        new SlideResult<T>(Tag.SimpleInsertion, newCurrent, default!);
 
-    public SplitNode(T newCurrent, T newRight)
+    internal static SlideResult<T> SlidItemsLeft(T newLeft, T newCurrent) =>
+        new SlideResult<T>(Tag.SlidItemsLeft, newLeft, newCurrent);
+
+    internal static SlideResult<T> SlidItemsRight(T newCurrent, T newRight) =>
+        new SlideResult<T>(Tag.SlidItemsRight, newCurrent, newRight);
+
+    internal static SlideResult<T> SplitNode(T newCurrent, T newRight) =>
+        new SlideResult<T>(Tag.SplitNode, newCurrent, newRight);
+
+    internal void Deconstruct(out Tag tag, out T l, out T mid, out T r)
     {
-        NewCurrent = newCurrent;
-        NewRight = newRight;
-    }
-    public void Deconstruct(out T newCurrent, out T newRight)
-    {
-        newCurrent = NewCurrent;
-        newRight = NewRight;
+        tag = Case;
+        switch (Case)
+        {
+            case Tag.SimpleInsertion:
+                mid = _left;
+                l = default!;
+                r = default!;
+                break;
+            case Tag.SlidItemsLeft:
+                l = _left;
+                mid = _right;
+                r = default!;
+                break;
+            case Tag.SlidItemsRight:
+                l = default!;
+                mid = _left;
+                r = _right;
+                break;
+            case Tag.SplitNode:
+                mid = default!;
+                l = _left;
+                r = _right;
+                break;
+            default:
+                l = default!;
+                mid = default!;
+                r = default!;
+                break;
+        }
     }
 }

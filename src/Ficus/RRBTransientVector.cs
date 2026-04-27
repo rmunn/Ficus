@@ -788,26 +788,26 @@ internal sealed class RRBTransientVector<T> : RRBVector<T>
         else
         {
             // Inserting into middle of tree. Might result in splitting the tree
-            var result = Root.InsertedTree(Owner, Shift, idx, newItem, null, 0);
-            RRBNode<T> newRoot; // TODO: RRBFullNode<T> once we switch the root to be a FullNode
+            var (result, newLeft, newRoot, newRight) = Root.InsertedTree(Owner, Shift, idx, newItem, null, 0);
             int newShift;
 
             switch (result)
             {
-                case SimpleInsertion<RRBNode<T>> simpleInsertion:
-                    newRoot = simpleInsertion.NewCurrent;
+                case SlideResult<RRBNode<T>>.Tag.SimpleInsertion:
                     newShift = Shift;
                     break;
 
-                case SplitNode<RRBNode<T>> splitNode:
-                    newRoot = ((RRBFullNode<T>)splitNode.NewRight).NewParent(Owner, Shift, new[] { splitNode.NewCurrent, splitNode.NewRight });
+                case SlideResult<RRBNode<T>>.Tag.SplitNode:
+                    // Note we're calling .NewParent on the new *right* node
+                    // TODO: Write explanation as to why (rightmost node should be an Expanded variant in transients, but I need to explain this better)
+                    newRoot = ((RRBFullNode<T>)newRight).NewParent(Owner, Shift, new[] { newLeft, newRight });
                     newShift = RRBMath.Up(Shift);
                     break;
 #if DEBUG
-                case SlidItemsLeft<RRBNode<T>> slidItemsLeft:
+                case SlideResult<RRBNode<T>>.Tag.SlidItemsLeft:
                     throw new InvalidOperationException("Impossible case: SlidItemsLeft in Insert() of transient vector");
 
-                case SlidItemsRight<RRBNode<T>> slidItemsRight:
+                case SlideResult<RRBNode<T>>.Tag.SlidItemsRight:
                     throw new InvalidOperationException("Impossible case: SlidItemsRight in Insert() of transient vector");
 
                 default:
