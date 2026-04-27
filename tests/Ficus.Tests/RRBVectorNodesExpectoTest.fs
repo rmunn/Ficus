@@ -3,12 +3,11 @@ module Ficus.Tests.RRBVectorNodesExpectoTest
 open Expecto
 open Expecto.Logging
 open Expecto.Logging.Message
-open Ficus.RRBVectorNodes
+// open Ficus.RRBVectorNodes
 open RRBVectorProps
 open FsCheck
-open RRBMath
+open Ficus
 
-module Literals = Ficus.Literals
 let logger = Log.create "Expecto"
 
 // TODO: Test all the low-level node-manipulation functions in all four node variants: compact/extended, full/relaxed
@@ -23,6 +22,7 @@ let logger = Log.create "Expecto"
 // Tests will be things like "Here's a new, randomly-generated child leaf. Append it to the existing node and make sure the node is still full / becomes relaxed as appropriate"
 // And we'll do some manually-generated tests (e.g., here's a manually-generated full leaf, or here's a manually generated all-but-last-is-full node which should become relaxed after append)
 
+let nullOwner = OwnerTokens.NullOwner
 
 let children (node: RRBNode<'T>) =
     (node :?> RRBFullNode<'T>).Children
@@ -183,35 +183,35 @@ let genLeavesForMultipleRelaxedNodes =
     )
 
 let mkFullTwig children =
-    RRBNode<int>.MkFullNode nullOwner children
+    RRBNode<int>.MkFullNode(nullOwner, children)
 
 let mkExpandedFullTwig children =
     RRBExpandedFullNode<int>(nullOwner, children) :> RRBNode<int>
 
 let mkRelaxedTwig children =
-    RRBNode<int>.MkNode nullOwner Literals.shiftSize children
+    RRBNode<int>.MkNode(nullOwner, Literals.shiftSize, children)
 
 let mkExpandedRelaxedTwig children =
-    let sizeTable = RRBNode<int>.CreateSizeTable Literals.shiftSize children
+    let sizeTable = RRBNode<int>.CreateSizeTable(Literals.shiftSize, children)
 
-    if isSizeTableFullAtShift Literals.shiftSize sizeTable sizeTable.Length then
+    if RRBMath.IsSizeTableFullAtShift(Literals.shiftSize, sizeTable, sizeTable.Length) then
         RRBExpandedFullNode<int>(nullOwner, children) :> RRBNode<int>
     else
         RRBExpandedRelaxedNode<int>(nullOwner, children, sizeTable) :> RRBNode<int>
 
 let mkFullNode shift children =
-    RRBNode<int>.MkFullNode nullOwner children
+    RRBNode<int>.MkFullNode(nullOwner, children)
 
 let mkExpandedFullNode shift children =
     RRBExpandedFullNode<int>(nullOwner, children) :> RRBNode<int>
 
 let mkRelaxedNode shift children =
-    RRBNode<int>.MkNode nullOwner shift children
+    RRBNode<int>.MkNode(nullOwner, shift, children)
 
 let mkExpandedRelaxedNode shift children =
-    let sizeTable = RRBNode<int>.CreateSizeTable shift children
+    let sizeTable = RRBNode<int>.CreateSizeTable(shift, children)
 
-    if isSizeTableFullAtShift shift sizeTable sizeTable.Length then
+    if RRBMath.IsSizeTableFullAtShift(shift, sizeTable, sizeTable.Length) then
         RRBExpandedFullNode<int>(nullOwner, children) :> RRBNode<int>
     else
         RRBExpandedRelaxedNode<int>(nullOwner, children, sizeTable) :> RRBNode<int>
@@ -295,7 +295,7 @@ let genSmallRelaxedTree =
     )
 
 let toTransient (root: RRBNode<'T>) =
-    let newToken = mkOwnerToken ()
+    let newToken = OwnerTokens.MkOwnerToken()
 
     let rec expandNode token (root: RRBNode<'T>) =
         if root :? RRBLeafNode<'T> then
@@ -308,12 +308,14 @@ let toTransient (root: RRBNode<'T>) =
             let thisShift = up childShift
 
             let root' =
-                ((root.Expand token) :?> RRBFullNode<'T>).UpdateChild
-                    token
-                    thisShift
-                    (root.NodeSize
-                     - 1)
-                    child
+                ((root.Expand token) :?> RRBFullNode<'T>)
+                    .UpdateChild(
+                        token,
+                        thisShift,
+                        (root.NodeSize
+                         - 1),
+                        child
+                    )
 
             root', thisShift
 
@@ -332,12 +334,14 @@ let toPersistent (root: RRBNode<'T>) =
             let thisShift = up childShift
 
             let root' =
-                ((root.Shrink token) :?> RRBFullNode<'T>).UpdateChild
-                    token
-                    thisShift
-                    (root.NodeSize
-                     - 1)
-                    child
+                ((root.Shrink token) :?> RRBFullNode<'T>)
+                    .UpdateChild(
+                        token,
+                        thisShift,
+                        (root.NodeSize
+                         - 1),
+                        child
+                    )
 
             root', thisShift
 
@@ -402,7 +406,7 @@ let genTwigForLargeTrees counter =
                 )
 
         let! leaves = genLeavesForLargeTrees leafCount counter
-        return RRBNode<int>.MkNode nullOwner Literals.shiftSize leaves
+        return RRBNode<int>.MkNode(nullOwner, Literals.shiftSize, leaves)
     }
 
 let genBranchForLargeTrees counter =
@@ -426,12 +430,13 @@ let genBranchForLargeTrees counter =
         let! twigs = Gen.listOfLength twigCount (genTwigForLargeTrees counter)
 
         return
-            RRBNode<int>.MkNode
-                nullOwner
-                (Literals.shiftSize
-                 * 2)
-                (twigs
-                 |> Array.ofList)
+            RRBNode<int>
+                .MkNode(
+                    nullOwner,
+                    (Literals.shiftSize
+                     * 2),
+                    (Array.ofList twigs)
+                )
     }
 
 let genLimbForLargeTrees counter =
@@ -456,12 +461,13 @@ let genLimbForLargeTrees counter =
         let! branches = Gen.listOfLength branchCount (genBranchForLargeTrees counter)
 
         return
-            RRBNode<int>.MkNode
-                nullOwner
-                (Literals.shiftSize
-                 * 3)
-                (branches
-                 |> Array.ofList)
+            RRBNode<int>
+                .MkNode(
+                    nullOwner,
+                    (Literals.shiftSize
+                     * 3),
+                    (Array.ofList branches)
+                )
     }
 
 let genTrunkForLargeTrees counter =
@@ -486,12 +492,13 @@ let genTrunkForLargeTrees counter =
         let! limbs = Gen.listOfLength limbCount (genLimbForLargeTrees counter)
 
         return
-            RRBNode<int>.MkNode
-                nullOwner
-                (Literals.shiftSize
-                 * 4)
-                (limbs
-                 |> Array.ofList)
+            RRBNode<int>
+                .MkNode(
+                    nullOwner,
+                    (Literals.shiftSize
+                     * 4),
+                    (Array.ofList limbs)
+                )
     }
 
 let genMediumPersistentTree =
@@ -526,10 +533,15 @@ let genMediumPersistentTree =
                     Gen.listOfLength n (genTwigForLargeTrees counter)
                     |> Gen.map (
                         Array.ofList
-                        >> RRBNode<int>.MkNode
-                            nullOwner
-                            (Literals.shiftSize
-                             * 2)
+                        >> (fun arr ->
+                            RRBNode<int>
+                                .MkNode(
+                                    nullOwner,
+                                    (Literals.shiftSize
+                                     * 2),
+                                    arr
+                                )
+                        )
                     )
             }
         elif s <= 96 then
@@ -542,10 +554,15 @@ let genMediumPersistentTree =
                     Gen.listOfLength n (genBranchForLargeTrees counter)
                     |> Gen.map (
                         Array.ofList
-                        >> RRBNode<int>.MkNode
-                            nullOwner
-                            (Literals.shiftSize
-                             * 3)
+                        >> (fun arr ->
+                            RRBNode<int>
+                                .MkNode(
+                                    nullOwner,
+                                    (Literals.shiftSize
+                                     * 3),
+                                    arr
+                                )
+                        )
                     )
             }
         else
@@ -558,10 +575,15 @@ let genMediumPersistentTree =
                     Gen.listOfLength n (genLimbForLargeTrees counter)
                     |> Gen.map (
                         Array.ofList
-                        >> RRBNode<int>.MkNode
-                            nullOwner
-                            (Literals.shiftSize
-                             * 4)
+                        >> (fun arr ->
+                            RRBNode<int>
+                                .MkNode(
+                                    nullOwner,
+                                    (Literals.shiftSize
+                                     * 4),
+                                    arr
+                                )
+                        )
                     )
             }
     )
@@ -601,10 +623,15 @@ let genLargePersistentTree =
                     Gen.listOfLength n (genTwigForLargeTrees counter)
                     |> Gen.map (
                         Array.ofList
-                        >> RRBNode<int>.MkNode
-                            nullOwner
-                            (Literals.shiftSize
-                             * 2)
+                        >> (fun arr ->
+                            RRBNode<int>
+                                .MkNode(
+                                    nullOwner,
+                                    (Literals.shiftSize
+                                     * 2),
+                                    arr
+                                )
+                        )
                     )
             }
         elif s <= 56 then
@@ -617,10 +644,15 @@ let genLargePersistentTree =
                     Gen.listOfLength n (genBranchForLargeTrees counter)
                     |> Gen.map (
                         Array.ofList
-                        >> RRBNode<int>.MkNode
-                            nullOwner
-                            (Literals.shiftSize
-                             * 3)
+                        >> (fun arr ->
+                            RRBNode<int>
+                                .MkNode(
+                                    nullOwner,
+                                    (Literals.shiftSize
+                                     * 3),
+                                    arr
+                                )
+                        )
                     )
             }
         elif s <= 88 then
@@ -633,10 +665,15 @@ let genLargePersistentTree =
                     Gen.listOfLength n (genLimbForLargeTrees counter)
                     |> Gen.map (
                         Array.ofList
-                        >> RRBNode<int>.MkNode
-                            nullOwner
-                            (Literals.shiftSize
-                             * 4)
+                        >> (fun arr ->
+                            RRBNode<int>
+                                .MkNode(
+                                    nullOwner,
+                                    (Literals.shiftSize
+                                     * 4),
+                                    arr
+                                )
+                        )
                     )
             }
         else
@@ -649,10 +686,15 @@ let genLargePersistentTree =
                     Gen.listOfLength n (genTrunkForLargeTrees counter)
                     |> Gen.map (
                         Array.ofList
-                        >> RRBNode<int>.MkNode
-                            nullOwner
-                            (Literals.shiftSize
-                             * 5)
+                        >> (fun arr ->
+                            RRBNode<int>
+                                .MkNode(
+                                    nullOwner,
+                                    (Literals.shiftSize
+                                     * 5),
+                                    arr
+                                )
+                        )
                     )
             }
     )
@@ -901,9 +943,9 @@ let mkAppendTests (leafSizes, newLeafSize, expectedResult, namePart) =
 
                 let result =
                     if fname = "AppendChild" then
-                        node.AppendChild nullOwner Literals.shiftSize newChild
+                        node.AppendChild(nullOwner, Literals.shiftSize, newChild)
                     elif fname = "AppendChildS" then
-                        node.AppendChildS nullOwner Literals.shiftSize newChild newLeafSize
+                        node.AppendChildS(nullOwner, Literals.shiftSize, newChild, newLeafSize)
                     else
                         failwith
                         <| sprintf "Unknown method name %s in test creation - fix unit tests" fname
@@ -946,7 +988,7 @@ let appendPropertyTests =
         <| fun (IsolatedShortNode node) ->
             checkNodeProperties Literals.shiftSize node "Starting node"
             let newChild = mkSimpleLeaf (M - 2)
-            let result = node.AppendChild nullOwner Literals.shiftSize newChild
+            let result = node.AppendChild(nullOwner, Literals.shiftSize, newChild)
             checkNodeProperties Literals.shiftSize result "Result"
 
             result.NodeSize = node.NodeSize
@@ -956,7 +998,7 @@ let appendPropertyTests =
         <| fun (IsolatedShortNode node) ->
             checkNodeProperties Literals.shiftSize node "Starting node"
             let newChild = mkSimpleLeaf (M - 2)
-            let result = node.AppendChildS nullOwner Literals.shiftSize newChild (M - 2)
+            let result = node.AppendChildS(nullOwner, Literals.shiftSize, newChild, (M - 2))
             checkNodeProperties Literals.shiftSize result "Result"
 
             result.NodeSize = node.NodeSize
@@ -1186,14 +1228,15 @@ let mkInsertTests (leafSizes, insertPos, newLeafSize, expectedResult, namePart) 
 
                 let result =
                     if fname = "InsertChild" then
-                        node.InsertChild nullOwner Literals.shiftSize insertPos newChild
+                        node.InsertChild(nullOwner, Literals.shiftSize, insertPos, newChild)
                     elif fname = "InsertChildS" then
-                        node.InsertChildS
-                            nullOwner
-                            Literals.shiftSize
-                            insertPos
-                            newChild
+                        node.InsertChildS(
+                            nullOwner,
+                            Literals.shiftSize,
+                            insertPos,
+                            newChild,
                             newLeafSize
+                        )
                     else
                         failwith
                         <| sprintf "Unknown method name %s in test creation - fix unit tests" fname
@@ -1247,7 +1290,7 @@ let insertPropertyTests =
 
             checkNodeProperties Literals.shiftSize node "Starting node"
             let newChild = mkSimpleLeaf (M - 2)
-            let result = node.InsertChild nullOwner Literals.shiftSize idx newChild
+            let result = node.InsertChild(nullOwner, Literals.shiftSize, idx, newChild)
             checkNodeProperties Literals.shiftSize result "Result"
 
             result.NodeSize = node.NodeSize
@@ -1261,7 +1304,10 @@ let insertPropertyTests =
 
             checkNodeProperties Literals.shiftSize node "Starting node"
             let newChild = mkSimpleLeaf (M - 2)
-            let result = node.InsertChildS nullOwner Literals.shiftSize idx newChild (M - 2)
+
+            let result =
+                node.InsertChildS(nullOwner, Literals.shiftSize, idx, newChild, (M - 2))
+
             checkNodeProperties Literals.shiftSize result "Result"
 
             result.NodeSize = node.NodeSize
@@ -1276,7 +1322,7 @@ let removePropertyTests =
             ==> lazy
                 (let idx = idx % node.NodeSize
                  checkNodeProperties Literals.shiftSize node "Starting node"
-                 let result = node.RemoveChild nullOwner Literals.shiftSize idx
+                 let result = node.RemoveChild(nullOwner, Literals.shiftSize, idx)
                  checkNodeProperties Literals.shiftSize result "Result"
 
                  result.NodeSize = node.NodeSize
@@ -1287,7 +1333,7 @@ let removePropertyTests =
             node.NodeSize > 1
             ==> lazy
                 (checkNodeProperties Literals.shiftSize node "Starting node"
-                 let result = node.RemoveLastChild nullOwner Literals.shiftSize
+                 let result = node.RemoveLastChild(nullOwner, Literals.shiftSize)
                  checkNodeProperties Literals.shiftSize result "Result"
 
                  result.NodeSize = node.NodeSize
@@ -1302,7 +1348,7 @@ let updatePropertyTests =
             let oldLeaf = node.Children.[idx]
             let newLeaf = mkSimpleLeaf (oldLeaf.NodeSize)
             checkNodeProperties Literals.shiftSize node "Starting node"
-            let result = node.UpdateChild nullOwner Literals.shiftSize idx newLeaf
+            let result = node.UpdateChild(nullOwner, Literals.shiftSize, idx, newLeaf)
             checkNodeProperties Literals.shiftSize result "Result"
 
             result.NodeSize = node.NodeSize
@@ -1320,7 +1366,7 @@ let updatePropertyTests =
             checkNodeProperties Literals.shiftSize node "Starting node"
 
             let result =
-                node.UpdateChildSAbs nullOwner Literals.shiftSize idx newLeaf newLeaf.NodeSize
+                node.UpdateChildSAbs(nullOwner, Literals.shiftSize, idx, newLeaf, newLeaf.NodeSize)
 
             checkNodeProperties Literals.shiftSize result "Result"
 
@@ -1338,7 +1384,10 @@ let updatePropertyTests =
                 - oldLeaf.NodeSize
 
             checkNodeProperties Literals.shiftSize node "Starting node"
-            let result = node.UpdateChildSRel nullOwner Literals.shiftSize idx newLeaf sizeDiff
+
+            let result =
+                node.UpdateChildSRel(nullOwner, Literals.shiftSize, idx, newLeaf, sizeDiff)
+
             checkNodeProperties Literals.shiftSize result "Result"
 
             result.NodeSize = node.NodeSize
@@ -1356,7 +1405,7 @@ let keepPropertyTests =
                 |> max 1
 
             checkNodeProperties Literals.shiftSize node "Starting node"
-            let result = node.KeepNLeft nullOwner Literals.shiftSize n
+            let result = node.KeepNLeft(nullOwner, Literals.shiftSize, n)
             checkNodeProperties Literals.shiftSize result "Result"
 
             let keptLeaves =
@@ -1379,7 +1428,7 @@ let keepPropertyTests =
                 |> max 1
 
             checkNodeProperties Literals.shiftSize node "Starting node"
-            let result = node.KeepNRight nullOwner Literals.shiftSize n
+            let result = node.KeepNRight(nullOwner, Literals.shiftSize, n)
             checkNodeProperties Literals.shiftSize result "Result"
 
             let keptLeaves =
@@ -1418,8 +1467,8 @@ let splitAndKeepPropertyTests =
 
             checkNodeProperties Literals.shiftSize node "Starting node"
 
-            let resultNode, resultLeavesR =
-                node.SplitAndKeepNLeft nullOwner Literals.shiftSize n
+            let struct (resultNode, resultLeavesR) =
+                node.SplitAndKeepNLeft(nullOwner, Literals.shiftSize, n)
 
             checkNodeProperties Literals.shiftSize resultNode "Result"
             Expect.equal resultNode.NodeSize n "Node after split should have N items"
@@ -1455,8 +1504,8 @@ let splitAndKeepPropertyTests =
 
             checkNodeProperties Literals.shiftSize node "Starting node"
 
-            let resultLeavesL, resultNode =
-                node.SplitAndKeepNRight nullOwner Literals.shiftSize n
+            let struct (resultLeavesL, resultNode) =
+                node.SplitAndKeepNRight(nullOwner, Literals.shiftSize, n)
 
             checkNodeProperties Literals.shiftSize resultNode "Result"
             Expect.equal resultNode.NodeSize n "Node after split should have N items"
@@ -1489,8 +1538,8 @@ let splitAndKeepPropertyTests =
 
             checkNodeProperties Literals.shiftSize node "Starting node"
 
-            let resultNode, (resultLeavesR, resultSizesR) =
-                node.SplitAndKeepNLeftS nullOwner Literals.shiftSize n
+            let struct (resultNode, struct (resultLeavesR, resultSizesR)) =
+                node.SplitAndKeepNLeftS(nullOwner, Literals.shiftSize, n)
 
             let expectedSizesR =
                 origLeavesR
@@ -1538,8 +1587,8 @@ let splitAndKeepPropertyTests =
 
             checkNodeProperties Literals.shiftSize node "Starting node"
 
-            let (resultLeavesL, resultSizesL), resultNode =
-                node.SplitAndKeepNRightS nullOwner Literals.shiftSize n
+            let struct (struct (resultLeavesL, resultSizesL), resultNode) =
+                node.SplitAndKeepNRightS(nullOwner, Literals.shiftSize, n)
 
             let expectedSizesL =
                 origLeavesL
@@ -1595,13 +1644,7 @@ let appendAndPrependChildrenPropertyTests =
             checkNodeProperties Literals.shiftSize node "Starting node"
 
             let result =
-                node.AppendNChildren
-                    nullOwner
-                    Literals.shiftSize
-                    n
-                    (toAdd
-                     |> Seq.cast)
-                    true
+                node.AppendNChildren(nullOwner, Literals.shiftSize, n, (Seq.cast toAdd), true)
                 :?> RRBFullNode<int>
 
             checkNodeProperties Literals.shiftSize result "Result"
@@ -1654,14 +1697,14 @@ let appendAndPrependChildrenPropertyTests =
             checkNodeProperties Literals.shiftSize node "Starting node"
 
             let result =
-                node.AppendNChildrenS
-                    nullOwner
-                    Literals.shiftSize
-                    n
-                    (toAdd
-                     |> Seq.cast)
-                    sizes
+                node.AppendNChildrenS(
+                    nullOwner,
+                    Literals.shiftSize,
+                    n,
+                    (Seq.cast toAdd),
+                    sizes,
                     true
+                )
                 :?> RRBFullNode<int>
 
             checkNodeProperties Literals.shiftSize result "Result"
@@ -1708,12 +1751,7 @@ let appendAndPrependChildrenPropertyTests =
             checkNodeProperties Literals.shiftSize node "Starting node"
 
             let result =
-                node.PrependNChildren
-                    nullOwner
-                    Literals.shiftSize
-                    n
-                    (toAdd
-                     |> Seq.cast)
+                node.PrependNChildren(nullOwner, Literals.shiftSize, n, (Seq.cast toAdd))
                 :?> RRBFullNode<int>
 
             checkNodeProperties Literals.shiftSize result "Result"
@@ -1766,13 +1804,7 @@ let appendAndPrependChildrenPropertyTests =
             checkNodeProperties Literals.shiftSize node "Starting node"
 
             let result =
-                node.PrependNChildrenS
-                    nullOwner
-                    Literals.shiftSize
-                    n
-                    (toAdd
-                     |> Seq.cast)
-                    sizes
+                node.PrependNChildrenS(nullOwner, Literals.shiftSize, n, (Seq.cast toAdd), sizes)
                 :?> RRBFullNode<int>
 
             checkNodeProperties Literals.shiftSize result "Result"
@@ -1859,15 +1891,12 @@ let doRebalance2Test shift (nodeL: RRBNode<'T>) (nodeR: RRBNode<'T>) =
              Seq.append (nodeItems shift nodeL) (nodeItems shift nodeR)
              |> Array.ofSeq
 
-         let newL, newR =
-             (nodeL :?> RRBFullNode<'T>).Rebalance2Plus1
-                 nullOwner
-                 shift
-                 None
-                 (nodeR :?> RRBFullNode<'T>)
+         let struct (newL, newR) =
+             (nodeL :?> RRBFullNode<'T>)
+                 .Rebalance2Plus1(nullOwner, shift, null, (nodeR :?> RRBFullNode<'T>))
 
          match newR with
-         | None ->
+         | null ->
              Expect.isLessThanOrEqual
                  minSize
                  Literals.blockSize
@@ -1885,7 +1914,7 @@ let doRebalance2Test shift (nodeL: RRBNode<'T>) (nodeR: RRBNode<'T>) =
                  "Order of items should not change during rebalance"
 
              checkNodeProperties shift newL "Newly-rebalanced merged node"
-         | Some nodeR' ->
+         | nodeR' ->
              Expect.equal
                  (Seq.append (nodeItems shift newL) (nodeItems shift nodeR')
                   |> Array.ofSeq)
@@ -1954,10 +1983,10 @@ let rebalanceTestsWIP =
                 nodeL.NodeSize
                 + nodeR.NodeSize
 
-            let (idx1, len1) = findMergeCandidates sizesCombined lenBothNodes
+            let struct (idx1, len1) = RRBMath.FindMergeCandidates(sizesCombined, lenBothNodes)
 
-            let (idx2, len2, reduction) =
-                findMergeCandidatesTwoPasses sizesCombined lenBothNodes
+            let struct (idx2, len2, reduction) =
+                RRBMath.FindMergeCandidatesTwoPasses(sizesCombined, lenBothNodes)
 
             if reduction = 1 then
                 Expect.equal (idx2, len2) (idx1, len1)
@@ -1970,14 +1999,12 @@ let rebalanceTestsWIP =
 
         testCase "findMergeCandidates performs better with two passes than with one (single)"
         <| fun _ ->
-            let l =
-                RRBVectorGen.treeReprStrToVec "M-2 M M M T1"
-                :?> Ficus.RRBVector.RRBPersistentVector<int>
+            let l = RRBVectorGen.treeReprStrToVec "M-2 M M M T1" :?> RRBPersistentVector<int>
 
             let r =
                 RRBVectorGen.treeReprStrToVec
                     "M-4 M M-2 M M-1 M M/2 M M/2+1 M M/2+3 M M/2+4 M M/2+6 T1"
-                :?> Ficus.RRBVector.RRBPersistentVector<int>
+                :?> RRBPersistentVector<int>
 
             let sizesL =
                 (l.Root :?> RRBFullNode<_>).ChildrenSeq
@@ -1993,10 +2020,10 @@ let rebalanceTestsWIP =
                 l.Root.NodeSize
                 + r.Root.NodeSize
 
-            let (idx1, len1) = findMergeCandidates sizesCombined lenBothNodes
+            let struct (idx1, len1) = RRBMath.FindMergeCandidates(sizesCombined, lenBothNodes)
 
-            let (idx2, len2, reduction) =
-                findMergeCandidatesTwoPasses sizesCombined lenBothNodes
+            let struct (idx2, len2, reduction) =
+                RRBMath.FindMergeCandidatesTwoPasses(sizesCombined, lenBothNodes)
 
             Expect.equal
                 (idx1, len1)
@@ -2018,10 +2045,9 @@ let rebalanceTestsWIP =
             let l =
                 RRBVectorGen.treeReprStrToVec
                     "20 M 32 M 23 M 17 M 26 M 20 M 29 24 M 18 M 27 M 21 M 30 M 24 M 16 M 17 M 19 M 20 T1"
-                :?> Ficus.RRBVector.RRBPersistentVector<int>
+                :?> RRBPersistentVector<int>
 
-            let r =
-                RRBVectorGen.treeReprStrToVec "M*M T1" :?> Ficus.RRBVector.RRBPersistentVector<int>
+            let r = RRBVectorGen.treeReprStrToVec "M*M T1" :?> RRBPersistentVector<int>
 
             let sizesL =
                 (l.Root :?> RRBFullNode<_>).ChildrenSeq
@@ -2046,8 +2072,8 @@ let rebalanceTestsWIP =
                 (l.Root :?> RRBFullNode<_>).NodeSize
                 + (r.Root :?> RRBFullNode<_>).NodeSize
 
-            let (idx2, len2, reduction) =
-                findMergeCandidatesTwoPasses sizesCombined lenBothNodes
+            let struct (idx2, len2, reduction) =
+                RRBMath.FindMergeCandidatesTwoPasses(sizesCombined, lenBothNodes)
 
             let exhaustiveResults = findMergeCandidatesExhaustive sizesCombined lenBothNodes
 
@@ -2116,7 +2142,7 @@ let rebalanceTestsWIP =
                 totalSize
                 - minSize > Literals.radixSearchErrorMax
 
-            Expect.equal (nodeL.NeedsRebalance2 shift nodeR) needsRebalancing
+            Expect.equal (nodeL.NeedsRebalance2(shift, nodeR)) needsRebalancing
             <| sprintf "NeedsRebalancing was wrong for left %A and right %A" nodeL nodeR
 
         testProp "Concat test"
@@ -2127,10 +2153,10 @@ let rebalanceTestsWIP =
                 Seq.append (nodeItems shift nodeL) (nodeItems shift nodeR)
                 |> Array.ofSeq
 
-            let newL, newR = nodeL.ConcatNodes nullOwner shift nodeR
+            let struct (newL, newR) = nodeL.ConcatNodes(nullOwner, shift, nodeR)
 
             match newR with
-            | None ->
+            | null ->
                 Expect.isLessThanOrEqual
                     newL.NodeSize
                     Literals.blockSize
@@ -2143,7 +2169,7 @@ let rebalanceTestsWIP =
                     "Order of items should not change during concatenate"
 
                 checkNodeProperties shift newL "Newly-concatenated merged node"
-            | Some nodeR' ->
+            | nodeR' ->
                 Expect.equal
                     (Seq.append (nodeItems shift newL) (nodeItems shift nodeR')
                      |> Array.ofSeq)
@@ -2155,7 +2181,7 @@ let rebalanceTestsWIP =
                     + nodeR.NodeSize
 
                 let validNewSizes =
-                    if nodeL.NeedsRebalance2 shift nodeR then
+                    if nodeL.NeedsRebalance2(shift, nodeR) then
                         [
                             totalOldSize
                             - 2
@@ -2193,11 +2219,11 @@ let rebalanceTestsWIP =
                 ]
                 |> Array.ofSeq
 
-            if nodeL.HasRoomToMergeTheTail shift leaf nodeR then
-                let newL, newR = nodeL.ConcatTwigsPlusLeaf nullOwner shift leaf nodeR
+            if nodeL.HasRoomToMergeTheTail(shift, leaf, nodeR) then
+                let struct (newL, newR) = nodeL.ConcatTwigsPlusLeaf(nullOwner, shift, leaf, nodeR)
 
                 match newR with
-                | None ->
+                | null ->
                     Expect.isLessThanOrEqual
                         newL.NodeSize
                         Literals.blockSize
@@ -2210,7 +2236,7 @@ let rebalanceTestsWIP =
                         "Order of items should not change during concatenate"
 
                     checkNodeProperties shift newL "Newly-concatenated merged node"
-                | Some nodeR' ->
+                | nodeR' ->
                     Expect.equal
                         (Seq.append (nodeItems shift newL) (nodeItems shift nodeR')
                          |> Array.ofSeq)
@@ -2223,7 +2249,7 @@ let rebalanceTestsWIP =
                         + nodeR.NodeSize
 
                     let validNewSizes =
-                        if nodeL.NeedsRebalance2PlusLeaf shift leaf.NodeSize nodeR then
+                        if nodeL.NeedsRebalance2PlusLeaf(shift, leaf.NodeSize, nodeR) then
                             [
                                 totalOldSize
                                 - 2
@@ -2256,7 +2282,7 @@ let doIndividualMergeTestLeftTwigRightTwoNodeTree L R1 R2 =
             mkLeaf counter
             >> fun node -> node :> RRBNode<int>
         )
-        |> RRBNode<int>.MkNode nullOwner shift
+        |> fun arr -> RRBNode<int>.MkNode(nullOwner, shift, arr)
 
     let nodeR1 =
         R1
@@ -2264,7 +2290,7 @@ let doIndividualMergeTestLeftTwigRightTwoNodeTree L R1 R2 =
             mkLeaf counter
             >> fun node -> node :> RRBNode<int>
         )
-        |> RRBNode<int>.MkNode nullOwner shift
+        |> fun arr -> RRBNode<int>.MkNode(nullOwner, shift, arr)
 
     let nodeR2 =
         R2
@@ -2272,33 +2298,41 @@ let doIndividualMergeTestLeftTwigRightTwoNodeTree L R1 R2 =
             mkLeaf counter
             >> fun node -> node :> RRBNode<int>
         )
-        |> RRBNode<int>.MkNode nullOwner shift
+        |> fun arr -> RRBNode<int>.MkNode(nullOwner, shift, arr)
 
     let nodeR =
-        RRBNode<int>.MkNode nullOwner (shift * 2) [|
-            nodeR1
-            nodeR2
-        |]
+        RRBNode<int>
+            .MkNode(
+                nullOwner,
+                (shift * 2),
+                [|
+                    nodeR1
+                    nodeR2
+                |]
+            )
 
     let origCombined =
         Seq.append (nodeItems shift nodeL) (nodeItems (shift * 2) nodeR)
         |> Array.ofSeq
 
-    let newL, newR =
-        (nodeL :?> RRBFullNode<int>).MergeTree
-            nullOwner
-            shift
-            None
-            (shift * 2)
-            (nodeR :?> RRBFullNode<int>)
-            false
+    let struct (newL, newR) =
+        (nodeL :?> RRBFullNode<int>)
+            .MergeTree(nullOwner, shift, null, (shift * 2), (nodeR :?> RRBFullNode<int>), false)
     // TODO: let newR, _ = newR.toPersistent  ... except down in the match expression
     let arrL' =
         newL
         |> nodeItems (shift * 2)
 
     match newR with
-    | Some nodeR ->
+    | null ->
+        Expect.equal
+            (arrL'
+             |> Array.ofSeq)
+            origCombined
+            "Order of items should not change during merge"
+
+        checkNodeProperties (shift * 2) newL "Newly merged node"
+    | nodeR ->
         let nodeR = toPersistent nodeR
 
         let arrR' =
@@ -2314,20 +2348,17 @@ let doIndividualMergeTestLeftTwigRightTwoNodeTree L R1 R2 =
         checkNodeProperties (shift * 2) nodeR "Newly merged node"
 
         let newRoot =
-            (newL :?> RRBFullNode<int>).NewParent nullOwner (shift * 2) [|
-                newL
-                nodeR
-            |]
+            (newL :?> RRBFullNode<int>)
+                .NewParent(
+                    nullOwner,
+                    (shift * 2),
+                    [|
+                        newL
+                        nodeR
+                    |]
+                )
 
         checkNodeProperties (shift * 3) newRoot "Newly merged node"
-    | None ->
-        Expect.equal
-            (arrL'
-             |> Array.ofSeq)
-            origCombined
-            "Order of items should not change during merge"
-
-        checkNodeProperties (shift * 2) newL "Newly merged node"
 
 let splitTreeTests =
     testList "Split tests" [
@@ -2350,7 +2381,7 @@ let splitTreeTests =
                 |> Seq.truncate keep
                 |> Array.ofSeq
 
-            let newRoot = root.KeepNTreeItems nullOwner shift keep
+            let newRoot = root.KeepNTreeItems(nullOwner, shift, keep)
             checkNodeProperties shift newRoot "Root after keep"
 
             Expect.equal
@@ -2378,7 +2409,7 @@ let splitTreeTests =
                 |> Seq.skip skip
                 |> Array.ofSeq
 
-            let newRoot = root.SkipNTreeItems nullOwner shift skip
+            let newRoot = root.SkipNTreeItems(nullOwner, shift, skip)
             checkNodeProperties shift newRoot "Root after skip"
 
             Expect.equal
@@ -2407,7 +2438,7 @@ let splitTreeTests =
 
             let expectedL = expectedArr.[0 .. idx - 1]
             let expectedR = expectedArr.[idx..]
-            let newL, newR = root.SplitTree nullOwner shift idx
+            let struct (newL, newR) = root.SplitTree(nullOwner, shift, idx)
             checkNodeProperties shift newL "Left node after split"
             checkNodeProperties shift newR "Right node after split"
 
@@ -2437,10 +2468,11 @@ let mergeTreeTestsWIP =
                 ]
                 |> Array.ofSeq
 
-            let newL, newR = nodeL.MergeTree nullOwner shift None shift nodeR false
+            let struct (newL, newR) =
+                nodeL.MergeTree(nullOwner, shift, null, shift, nodeR, false)
 
             match newR with
-            | None ->
+            | null ->
                 let newL = toPersistent newL
 
                 Expect.isLessThanOrEqual
@@ -2455,7 +2487,7 @@ let mergeTreeTestsWIP =
                     "Order of items should not change during merge"
 
                 checkNodeProperties shift newL "Newly merged node"
-            | Some nodeR' ->
+            | nodeR' ->
                 let newL = toPersistent newL
                 let nodeR' = toPersistent nodeR'
 
@@ -2470,7 +2502,7 @@ let mergeTreeTestsWIP =
                     + nodeR.NodeSize
 
                 let validNewSizes =
-                    if nodeL.NeedsRebalance2 shift nodeR then
+                    if nodeL.NeedsRebalance2(shift, nodeR) then
                         [
                             totalOldSize
                             - 2
@@ -2510,11 +2542,13 @@ let mergeTreeTestsWIP =
                 ]
                 |> Array.ofSeq
 
-            let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR false
+            let struct (newL, newR) =
+                nodeL.MergeTree(nullOwner, shiftL, null, shiftR, nodeR, false)
+
             let newShift = max shiftL shiftR
 
             match newR with
-            | None ->
+            | null ->
                 let newL = toPersistent newL
 
                 Expect.equal
@@ -2524,7 +2558,7 @@ let mergeTreeTestsWIP =
                     "Order of items should not change during merge"
 
                 checkNodeProperties newShift newL "Newly merged node"
-            | Some nodeR' ->
+            | nodeR' ->
                 let newL = toPersistent newL
                 let nodeR' = toPersistent nodeR'
 
@@ -2535,10 +2569,15 @@ let mergeTreeTestsWIP =
                     "Order of items should not change during merge"
 
                 let parent =
-                    (newL :?> RRBFullNode<int>).NewParent nullOwner newShift [|
-                        newL
-                        nodeR'
-                    |]
+                    (newL :?> RRBFullNode<int>)
+                        .NewParent(
+                            nullOwner,
+                            newShift,
+                            [|
+                                newL
+                                nodeR'
+                            |]
+                        )
 
                 checkNodeProperties (up newShift) parent "Newly rooted merged tree"
                 checkNodeProperties newShift newL "Newly merged left node"
@@ -2561,11 +2600,13 @@ let mergeTreeTestsWIP =
                 ]
                 |> Array.ofSeq
 
-            let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR false
+            let struct (newL, newR) =
+                nodeL.MergeTree(nullOwner, shiftL, null, shiftR, nodeR, false)
+
             let newShift = max shiftL shiftR
 
             match newR with
-            | None ->
+            | null ->
                 let newL = toPersistent newL
 
                 Expect.equal
@@ -2575,7 +2616,7 @@ let mergeTreeTestsWIP =
                     "Order of items should not change during merge"
 
                 checkNodeProperties newShift newL "Newly merged node"
-            | Some nodeR' ->
+            | nodeR' ->
                 let newL = toPersistent newL
                 let nodeR' = toPersistent nodeR'
 
@@ -2586,10 +2627,15 @@ let mergeTreeTestsWIP =
                     "Order of items should not change during merge"
 
                 let parent =
-                    (newL :?> RRBFullNode<int>).NewParent nullOwner newShift [|
-                        newL
-                        nodeR'
-                    |]
+                    (newL :?> RRBFullNode<int>)
+                        .NewParent(
+                            nullOwner,
+                            newShift,
+                            [|
+                                newL
+                                nodeR'
+                            |]
+                        )
 
                 checkNodeProperties (up newShift) parent "Newly rooted merged tree"
                 checkNodeProperties newShift newL "Newly merged left node"
@@ -2615,11 +2661,13 @@ let mergeTreeTestsWIP =
                 ]
                 |> Array.ofSeq
 
-            let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR false
+            let struct (newL, newR) =
+                nodeL.MergeTree(nullOwner, shiftL, null, shiftR, nodeR, false)
+
             let newShift = max shiftL shiftR
 
             match newR with
-            | None ->
+            | null ->
                 let newL = toPersistent newL
 
                 Expect.equal
@@ -2629,7 +2677,7 @@ let mergeTreeTestsWIP =
                     "Order of items should not change during merge"
 
                 checkNodeProperties newShift newL "Newly merged node"
-            | Some nodeR' ->
+            | nodeR' ->
                 let newL = toPersistent newL
                 let nodeR' = toPersistent nodeR'
 
@@ -2640,10 +2688,15 @@ let mergeTreeTestsWIP =
                     "Order of items should not change during merge"
 
                 let parent =
-                    (newL :?> RRBFullNode<int>).NewParent nullOwner newShift [|
-                        newL
-                        nodeR'
-                    |]
+                    (newL :?> RRBFullNode<int>)
+                        .NewParent(
+                            nullOwner,
+                            newShift,
+                            [|
+                                newL
+                                nodeR'
+                            |]
+                        )
 
                 checkNodeProperties (up newShift) parent "Newly rooted merged tree"
                 checkNodeProperties newShift newL "Newly merged left node"
@@ -2796,11 +2849,13 @@ let largeMergeTreeTestsWIP =
                 ]
                 |> Array.ofSeq
 
-            let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR false
+            let struct (newL, newR) =
+                nodeL.MergeTree(nullOwner, shiftL, null, shiftR, nodeR, false)
+
             let newShift = max shiftL shiftR
 
             match newR with
-            | None ->
+            | null ->
                 let newL = toPersistent newL
 
                 Expect.equal
@@ -2810,7 +2865,7 @@ let largeMergeTreeTestsWIP =
                     "Order of items should not change during merge"
 
                 checkNodeProperties newShift newL "Newly merged node"
-            | Some nodeR' ->
+            | nodeR' ->
                 let newL = toPersistent newL
                 let nodeR' = toPersistent nodeR'
 
@@ -2821,10 +2876,15 @@ let largeMergeTreeTestsWIP =
                     "Order of items should not change during merge"
 
                 let parent =
-                    (newL :?> RRBFullNode<int>).NewParent nullOwner newShift [|
-                        newL
-                        nodeR'
-                    |]
+                    (newL :?> RRBFullNode<int>)
+                        .NewParent(
+                            nullOwner,
+                            newShift,
+                            [|
+                                newL
+                                nodeR'
+                            |]
+                        )
 
                 checkNodeProperties (up newShift) parent "Newly rooted merged tree"
                 checkNodeProperties newShift newL "Newly merged left node"
@@ -2847,11 +2907,13 @@ let largeMergeTreeTestsWIP =
                 ]
                 |> Array.ofSeq
 
-            let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR false
+            let struct (newL, newR) =
+                nodeL.MergeTree(nullOwner, shiftL, null, shiftR, nodeR, false)
+
             let newShift = max shiftL shiftR
 
             match newR with
-            | None ->
+            | null ->
                 let newL = toPersistent newL
 
                 Expect.equal
@@ -2861,7 +2923,7 @@ let largeMergeTreeTestsWIP =
                     "Order of items should not change during merge"
 
                 checkNodeProperties newShift newL "Newly merged node"
-            | Some nodeR' ->
+            | nodeR' ->
                 let newL = toPersistent newL
                 let nodeR' = toPersistent nodeR'
 
@@ -2872,10 +2934,15 @@ let largeMergeTreeTestsWIP =
                     "Order of items should not change during merge"
 
                 let parent =
-                    (newL :?> RRBFullNode<int>).NewParent nullOwner newShift [|
-                        newL
-                        nodeR'
-                    |]
+                    (newL :?> RRBFullNode<int>)
+                        .NewParent(
+                            nullOwner,
+                            newShift,
+                            [|
+                                newL
+                                nodeR'
+                            |]
+                        )
 
                 checkNodeProperties (up newShift) parent "Newly rooted merged tree"
                 checkNodeProperties newShift newL "Newly merged left node"
@@ -2901,11 +2968,13 @@ let largeMergeTreeTestsWIP =
                 ]
                 |> Array.ofSeq
 
-            let newL, newR = nodeL.MergeTree nullOwner shiftL None shiftR nodeR false
+            let struct (newL, newR) =
+                nodeL.MergeTree(nullOwner, shiftL, null, shiftR, nodeR, false)
+
             let newShift = max shiftL shiftR
 
             match newR with
-            | None ->
+            | null ->
                 let newL = toPersistent newL
 
                 Expect.equal
@@ -2915,7 +2984,7 @@ let largeMergeTreeTestsWIP =
                     "Order of items should not change during merge"
 
                 checkNodeProperties newShift newL "Newly merged node"
-            | Some nodeR' ->
+            | nodeR' ->
                 let newL = toPersistent newL
                 let nodeR' = toPersistent nodeR'
 
@@ -2926,10 +2995,15 @@ let largeMergeTreeTestsWIP =
                     "Order of items should not change during merge"
 
                 let parent =
-                    (newL :?> RRBFullNode<int>).NewParent nullOwner newShift [|
-                        newL
-                        nodeR'
-                    |]
+                    (newL :?> RRBFullNode<int>)
+                        .NewParent(
+                            nullOwner,
+                            newShift,
+                            [|
+                                newL
+                                nodeR'
+                            |]
+                        )
 
                 checkNodeProperties (up newShift) parent "Newly rooted merged tree"
                 checkNodeProperties newShift newL "Newly merged left node"
@@ -2953,18 +3027,18 @@ let manualTests =
         testCase
             "ToRelaxedNodeIfNeeded will change a full node that has lost an item from a non-final child"
         <| fun _ ->
-            let vec =
-                RRBVectorGen.treeReprStrToVec "M M M T1" :?> Ficus.RRBVector.RRBPersistentVector<_>
+            let vec = RRBVectorGen.treeReprStrToVec "M M M T1" :?> RRBPersistentVector<_>
 
             let root = vec.Root :?> RRBFullNode<_>
 
             let root' =
-                root.RemovedItem
-                    nullOwner
-                    vec.Shift
-                    false
+                root.RemovedItem(
+                    nullOwner,
+                    vec.Shift,
+                    false,
                     (Literals.blockSize
                      + 5)
+                )
                 :?> RRBFullNode<_>
 
             let maybeRelaxed = root'.ToRelaxedNodeIfNeeded Literals.shiftSize
@@ -2977,19 +3051,19 @@ let manualTests =
         testCase
             "ToRelaxedNodeIfNeeded will NOT change a full node that has lost an item from its final child"
         <| fun _ ->
-            let vec =
-                RRBVectorGen.treeReprStrToVec "M M M T1" :?> Ficus.RRBVector.RRBPersistentVector<_>
+            let vec = RRBVectorGen.treeReprStrToVec "M M M T1" :?> RRBPersistentVector<_>
 
             let root = vec.Root :?> RRBFullNode<_>
 
             let root' =
-                root.RemovedItem
-                    nullOwner
-                    vec.Shift
-                    false
+                root.RemovedItem(
+                    nullOwner,
+                    vec.Shift,
+                    false,
                     (Literals.blockSize
                      * 2
                      + 5)
+                )
                 :?> RRBFullNode<_>
             // Note that vec.Remove would have adjusted this tree to promote a new leaf, so we use root.RemovedItem instead
             let maybeRelaxed = root'.ToRelaxedNodeIfNeeded Literals.shiftSize

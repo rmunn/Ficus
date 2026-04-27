@@ -3,8 +3,9 @@ module Ficus.Tests.RRBVectorMoreCommands
 // https://fscheck.github.io/FsCheck/StatefulTesting.html
 
 open Ficus.RRBArrayExtensions
-open Ficus.RRBVectorNodes
-open Ficus.RRBVector
+// open Ficus.RRBVectorNodes
+open Ficus
+open Ficus.FSharp
 open FsCheck
 open Expecto.Logging
 
@@ -113,8 +114,7 @@ module ParameterizedVecCommands =
                     else
                         idx in
 
-                arr
-                |> Array.copyAndInsertAt idx' item
+                RRBArrayExtensions.CopyAndInsertAt(arr, idx', item)
 
             override __.Pre(arr) =
                 (abs idx)
@@ -149,8 +149,7 @@ module ParameterizedVecCommands =
                     else
                         idx in
 
-                arr
-                |> Array.copyAndRemoveAt idx'
+                RRBArrayExtensions.CopyAndRemoveAt(arr, idx')
 
             override __.Pre(arr) =
                 (abs idx)

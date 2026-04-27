@@ -2,16 +2,21 @@ module Ficus.Tests.RRBVectorTransientCommands
 
 // https://fscheck.github.io/FsCheck/StatefulTesting.html
 
-open Ficus.RRBVectorNodes
-open Ficus.RRBVector
+// open Ficus.RRBVectorNodes
+// open Ficus.RRBVector
+open Ficus
 open FsCheck
+open Ficus.FSharp
 open Ficus.RRBArrayExtensions
 open System
 open System.Threading
 open Expecto.Logging
 open Expecto.Logging.Message
 
+let nullOwner = Ficus.OwnerTokens.NullOwner
 let logger = Log.create "In-test"
+let internal isTransient (vec: RRBVector<'T>) = vec :? RRBTransientVector<'T>
+
 (*
 TODO: Write a test with the following structure:
 
@@ -102,7 +107,7 @@ module internal VecCommands =
     let push n =
         { new Cmd() with
             override __.RunActual vec =
-                { 1..n }
+                seq { 1..n }
                 |> Seq.fold (fun vec x -> vec.Push x :?> RRBTransientVector<_>) vec
 
             override __.RunModel arr = Array.append arr [| 1..n |]
@@ -127,7 +132,7 @@ module internal VecCommands =
                 //         >> setField "vec" (sprintf "%A" vec)
                 //         >> setField "repr" (sprintf "%A" (RRBVectorGen.vecToTreeReprStr vec))
                 //     ) |> Async.RunSynchronously
-                { 1..n }
+                seq { 1..n }
                 |> Seq.fold (fun vec _ -> vec.Pop() :?> RRBTransientVector<_>) vec
 
             override __.RunModel arr =
@@ -184,8 +189,7 @@ module internal VecCommands =
                     |> min arr.Length
                     |> max 0 in
 
-                arr
-                |> Array.copyAndInsertAt idx' item
+                RRBArrayExtensions.CopyAndInsertAt(arr, idx', item)
 
             override __.Pre(arr) =
                 (abs idx)
@@ -238,8 +242,7 @@ module internal VecCommands =
                     )
                     |> max 0 in
 
-                arr
-                |> Array.copyAndRemoveAt idx'
+                RRBArrayExtensions.CopyAndRemoveAt(arr, idx')
 
             override __.Pre(arr) =
                 let idx' =
@@ -323,6 +326,7 @@ module internal VecCommands =
                 //     >> setField "repr" (sprintf "%A" (RRBVectorGen.vecToTreeReprStr vec))
                 // ) |> Async.RunSynchronously
                 let newVec = vec.GetSlice(start', stop') :?> RRBTransientVector<_>
+
                 let newLen = newVec.Length
                 let newRepr = RRBVectorGen.vecToTreeReprStr newVec
                 // logger.warnWithBP (eventX "Slice [{start}..{stop}] in vector of length {len} with repr {repr} produced new vector len {newLen} with repr {newRepr}"
@@ -430,7 +434,7 @@ module internal VecCommands =
                     |> min vec.Length
                     |> max 0
 
-                let vL, vR = vec.Split idx'
+                let struct (vL, vR) = vec.Split idx'
                 let s = this.ToString() // For efficiency since we use this in multiple sprintf calls
 
                 let vL' =

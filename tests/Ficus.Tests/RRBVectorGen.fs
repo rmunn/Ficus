@@ -1,30 +1,35 @@
 module Ficus.Tests.RRBVectorGen
 
 open Ficus
-open Ficus.RRBVectorNodes
-open Ficus.RRBVector
+// open Ficus.RRBVectorNodes
+// open Ficus.RRBVector
 open FsCheck
 open Expecto.Logging
 open Expecto.Logging.Message
+open Ficus.FSharp
 
 // module Literals = Ficus.Literals
 
+let nullOwner = OwnerTokens.NullOwner
+
 let logger = Log.create "Expecto"
 
-let mkLeaf items = RRBNode<'T>.MkLeaf nullOwner items
+let mkLeaf items = RRBNode<'T>.MkLeaf(nullOwner, items)
 
 let mkNode<'T> level items =
     if level = 0 then
         failwith "Don't call RRBVectorGen.mkNode at level 0" // Leaves have 'T children, whereas nodes have RRBNode<'T> children
     else
-        RRBNode<'T>.MkNode
-            nullOwner
-            (level
-             * Literals.shiftSize)
-            items
+        RRBNode<'T>
+            .MkNode(
+                nullOwner,
+                (level
+                 * Literals.shiftSize),
+                items
+            )
 
 let mkEmptyNode<'T> () =
-    RRBNode<'T>.MkFullNode nullOwner Array.empty
+    RRBNode<'T>.MkFullNode(nullOwner, Array.empty)
 
 let minSlots childCount =
     (childCount
@@ -412,7 +417,7 @@ let rec getRightTwig shift (node: RRBFullNode<'T>) =
         node
     else
         (node.LastChild :?> RRBFullNode<'T>)
-        |> getRightTwig (RRBMath.down shift)
+        |> getRightTwig (RRBMath.Down shift)
 
 let fleshOutRightmostLeafIfNecessary g level (root: RRBFullNode<'a>) =
     gen {
@@ -446,12 +451,13 @@ let fleshOutRightmostLeafIfNecessary g level (root: RRBFullNode<'a>) =
                 }
 
             return
-                (root.ReplaceLastLeaf
-                    nullOwner
+                root.ReplaceLastLeaf(
+                    nullOwner,
                     (level
-                     * Literals.shiftSize)
-                    (newLeaf :?> RRBLeafNode<'a>)
-                    missingItemCount)
+                     * Literals.shiftSize),
+                    (newLeaf :?> RRBLeafNode<'a>),
+                    missingItemCount
+                )
                 :?> RRBFullNode<'a>
     }
 

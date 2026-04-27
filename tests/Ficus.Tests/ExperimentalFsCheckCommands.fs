@@ -3,8 +3,8 @@ module Ficus.Tests.ExperimentalFsCheckCommands
 // https://fscheck.github.io/FsCheck/StatefulTesting.html
 
 open Ficus.RRBArrayExtensions
-open Ficus.RRBVectorNodes
-open Ficus.RRBVector
+open Ficus
+open Ficus.FSharp
 open FsCheck
 open FsCheck.Experimental
 open Expecto
@@ -33,7 +33,8 @@ type Machine = Machine<VecState<int>, int[]>
 module VecCommands =
     let push n =
         { new Op() with
-            member __.Run model = Array.copyAndAppend n model
+            member __.Run model =
+                RRBArrayExtensions.CopyAndPush(model, n)
 
             member this.Check(vecState, arr) =
                 let oldVec = vecState.Vec
@@ -64,7 +65,7 @@ module VecCommands =
     let pop =
         { new Op() with
             override __.Pre model = Array.length model > 0
-            member __.Run model = Array.copyAndPop model
+            member __.Run model = RRBArrayExtensions.CopyAndPop model
 
             member __.Check(vecState, arr) =
                 let oldVec = vecState.Vec
@@ -192,8 +193,7 @@ module VecCommands =
                         - 1
                     )
 
-                model
-                |> Array.copyAndInsertAt idx' n
+                RRBArrayExtensions.CopyAndInsertAt(model, idx', n)
 
             member this.Check(vecState, arr) =
                 let idx' =
@@ -204,7 +204,7 @@ module VecCommands =
                     )
 
                 let oldVec = vecState.Vec
-                vecState.Vec <- vecState.Vec.Insert idx' n
+                vecState.Vec <- vecState.Vec.Insert(idx', n)
                 // logger.debug (
                 //     eventX "Insert {item} at idx {idx} (was {oldIdx}): old {old} -> new {new}"
                 //     >> setField "item" n
@@ -237,8 +237,7 @@ module VecCommands =
                         - 1
                     )
 
-                model
-                |> Array.copyAndRemoveAt idx'
+                RRBArrayExtensions.CopyAndRemoveAt(model, idx')
 
             member this.Check(vecState, arr) =
                 let idx' =

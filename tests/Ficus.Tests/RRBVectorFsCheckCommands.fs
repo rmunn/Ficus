@@ -3,8 +3,8 @@ module Ficus.Tests.RRBVectorFsCheckCommands
 // https://fscheck.github.io/FsCheck/StatefulTesting.html
 
 open Ficus.RRBArrayExtensions
-open Ficus.RRBVectorNodes
-open Ficus.RRBVector
+open Ficus
+open Ficus.FSharp
 open FsCheck
 open Expecto
 
@@ -23,9 +23,7 @@ module VecCommands =
                 vec
                 |> RRBVector.push 42
 
-            override __.RunModel arr =
-                arr
-                |> Array.copyAndAppend 42
+            override __.RunModel arr = RRBArrayExtensions.CopyAndPush(arr, 42)
 
             override __.Post(vec, arr) =
                 vecEqual vec arr "After pushing 42 once, vec != arr"
@@ -105,7 +103,7 @@ module VecCommands =
 
             override __.RunModel arr =
                 arr
-                |> Array.copyAndPop
+                |> RRBArrayExtensions.CopyAndPop
 
             override __.Pre(arr) = arr.Length > 0
 
@@ -122,8 +120,7 @@ module VecCommands =
                 |> RRBVector.insert 0 5
 
             override __.RunModel arr =
-                arr
-                |> Array.copyAndInsertAt 0 5
+                RRBArrayExtensions.CopyAndInsertAt(arr, 0, 5)
 
             override __.Post(vec, arr) =
                 vecEqual vec arr "After inserting 5, vec != arr"
@@ -138,8 +135,7 @@ module VecCommands =
                 |> RRBVector.insert 3 7
 
             override __.RunModel arr =
-                arr
-                |> Array.copyAndInsertAt 3 7
+                RRBArrayExtensions.CopyAndInsertAt(arr, 3, 7)
 
             override __.Pre(arr) =
                 arr.Length
@@ -161,11 +157,12 @@ module VecCommands =
                     9
 
             override __.RunModel arr =
-                arr
-                |> Array.copyAndInsertAt
+                RRBArrayExtensions.CopyAndInsertAt(
+                    arr,
                     (Array.length arr
-                     - 2)
+                     - 2),
                     9
+                )
 
             override __.Pre(arr) =
                 arr.Length
@@ -184,8 +181,7 @@ module VecCommands =
                 |> RRBVector.remove 0
 
             override __.RunModel arr =
-                arr
-                |> Array.copyAndRemoveAt 0
+                RRBArrayExtensions.CopyAndRemoveAt(arr, 0)
 
             override __.Pre(arr) = arr.Length > 0
 
@@ -202,8 +198,7 @@ module VecCommands =
                 |> RRBVector.remove 3
 
             override __.RunModel arr =
-                arr
-                |> Array.copyAndRemoveAt 3
+                RRBArrayExtensions.CopyAndRemoveAt(arr, 3)
 
             override __.Pre(arr) = arr.Length > 3
 
@@ -223,8 +218,8 @@ module VecCommands =
                 )
 
             override __.RunModel arr =
-                arr
-                |> Array.copyAndRemoveAt (
+                RRBArrayExtensions.CopyAndRemoveAt(
+                    arr,
                     Array.length arr
                     - 2
                 )

@@ -12,8 +12,10 @@
         <PackageReference Include="FParsec" />
         <PackageReference Include="YoloDev.Expecto.TestSdk" />
         <PackageReference Include="altcover" />
-    </ItemGroup>  <ItemGroup>
-    <ProjectReference Include="../../src/Ficus/Ficus.fsproj" />
+    </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Ficus/Ficus.csproj" />
+    <ProjectReference Include="../../src/Ficus.FSharp/Ficus.FSharp.fsproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- <Compile Include="AssemblyInfo.fs" /> -->

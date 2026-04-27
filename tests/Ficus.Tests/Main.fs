@@ -42,6 +42,24 @@ let main argv =
     then
         printfn "Debugging"
 
+        runTestsWithCLIArgs
+            []
+            (argv
+             |> Array.except [ "--debug-vscode" ])
+        <| testList "Nodes and vectors" [
+            // RRBVectorNodesExpectoTest.tests
+            RRBVectorExpectoTest.tests
+        // RRBVectorExpectoTest.arrayTests
+        ]
+    elif
+        argv
+        |> Array.contains "--wait-for-attach"
+    then
+        printfn "Waiting for process to attach, press Enter once attached"
+        let _enter = System.Console.ReadLine()
+        printfn "Debugger attached, breakpoint on next line to be sure"
+        printfn "Breakpoint here"
+
         runTestsWithCLIArgs [] argv
         <| testList "Nodes and vectors" [
             RRBVectorNodesExpectoTest.tests
@@ -108,9 +126,19 @@ let main argv =
             RRBVectorExpectoTest.tests
         ]
     else
+        let pid = System.Diagnostics.Process.GetCurrentProcess().Id
+        // Or Environment.ProcessId
+
+        // Regular
+        // runTestsWithCLIArgs [] argv
+        // <| testList "Nodes and vectors" [
+        //     RRBVectorNodesExpectoTest.tests
+        //     RRBVectorExpectoTest.tests
+        // ]
+
+        // Custom:
+        printfn "%d" pid
+
         runTestsWithCLIArgs [] argv
-        <| testList "Nodes and vectors" [
-            RRBVectorNodesExpectoTest.tests
-            RRBVectorExpectoTest.tests
-        ]
+        <| testList "First test" [ RRBVectorExpectoTest.tests (*arrayTests*) ]
 // runTestsWithArgs defaultConfig argv experimentalTests

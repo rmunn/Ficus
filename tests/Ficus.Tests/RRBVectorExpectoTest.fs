@@ -3,13 +3,15 @@ module Ficus.Tests.RRBVectorExpectoTest
 open Expecto
 open Ficus
 open Ficus.RRBArrayExtensions
-open Ficus.RRBVectorNodes
-open Ficus.RRBVector
+open Ficus.FSharp
+// open Ficus.RRBVectorNodes
+// open Ficus.RRBVector
 open FsCheck
 open Expecto.Logging
 open Expecto.Logging.Message
 
 let logger = Log.create "Expecto"
+let internal isTransient (vec: RRBVector<'T>) = vec :? RRBTransientVector<'T>
 
 // For various tests, we'll want to generate a list and an index of an item within that list.
 // Note that if the list is empty, the index will be 0, which is not a valid index of an
@@ -423,7 +425,7 @@ let doSplitTest vec i =
     let repr = RRBVectorGen.vecToTreeReprStr vec
     RRBVectorProps.checkProperties vec "Original vector"
 
-    let vL, vR =
+    let struct (vL, vR) =
         vec
         |> RRBVector.split i
 
@@ -507,7 +509,7 @@ let vectorTests =
             let vec = ridiculouslyBigVectorAtBlockSize8
             RRBVectorProps.checkProperties vec "Original huge vector"
 
-            let vL, vR =
+            let struct (vL, vR) =
                 vec
                 |> RRBVector.split 9 // Past first leaf, but not very far past
 
@@ -595,11 +597,9 @@ let vectorTests =
                 ()
             else // Can't run this test if we've picked an index equal to length, since that's not a legal update index (it *is* a legal take or skip index)
                 RRBVectorProps.checkProperties v "Original vector"
-                let vec' = v.Update i 512
+                let vec' = v.Update(i, 512)
 
-                let arr' =
-                    a
-                    |> Array.copyAndSet i 512
+                let arr' = RRBArrayExtensions.CopyAndSet(a, i, 512)
 
                 RRBVectorProps.checkProperties vec' (sprintf "Vector after updating at %d" i)
                 Expect.vecEqualArr vec' arr' "Vector update produced wrong results"
@@ -619,7 +619,15 @@ let vectorTests =
                         endIdx, idx
 
                 RRBVectorProps.checkProperties v "Original vector"
-                let v' = v.Slice(idx, endIdx)
+
+                let v' =
+                    // Note that the .Slice() method now uses C# semantics, start idx and length rather than start and end indices
+                    v.Slice(
+                        idx,
+                        endIdx
+                        - idx
+                        + 1
+                    )
 
                 RRBVectorProps.checkProperties v'
                 <| sprintf "Vector after slicing from %d to %d" idx endIdx
@@ -690,10 +698,32 @@ let vectorTests =
                 slicedArr
                 "Vector slicing should be equivalent to array slicing"
 
+        testCase "vec.[0..0] should be length 1"
+        <| fun _ ->
+            let vec = RRBVector.singleton 1
+            let arr = Array.singleton 1
+
+            let slicedArr = arr.[0..0]
+            let slicedVec = vec.[0..0]
+
+            RRBVectorProps.checkProperties vec "Original vector"
+            RRBVectorProps.checkProperties slicedVec "Vector after slicing from 0 to 0"
+
+            Expect.equal
+                slicedVec.Length
+                slicedArr.Length
+                "Vector slicing should be equivalent to array slicing in length"
+
+            Expect.equal
+                (slicedVec
+                 |> RRBVector.toArray)
+                slicedArr
+                "Vector slicing should be equivalent to array slicing"
+
         testCase "Slicing only in tail, case 1"
         <| fun _ ->
             let vec =
-                { 1..39 }
+                seq { 1..39 }
                 |> RRBVector.ofSeq
 
             let t = vec.Transient()
@@ -704,7 +734,7 @@ let vectorTests =
         testCase "Slicing only in tail, case 2"
         <| fun _ ->
             let vec =
-                { 1..39 }
+                seq { 1..39 }
                 |> RRBVector.ofSeq
 
             let t = vec.Transient()
@@ -715,12 +745,12 @@ let vectorTests =
         testCase "Test appending a new child to an empty transient with relaxed root"
         <| fun _ ->
             let vec =
-                { 1..52 }
+                seq { 1..52 }
                 |> RRBVector.ofSeq
 
             let mutable t = vec.Transient()
             // Split the node with an insert
-            t <- t.Insert 18 -512
+            t <- t.Insert(18, -512)
             // Empty the tree with a slice so the root remains an ExpandedRelaxedNode
             t <- t.[54..]
             // Push a full tail
@@ -802,7 +832,7 @@ let vectorTests =
             (fun (VecPlusArrAndIdx(v, a, i)) ->
                 let aL, aR = Array.truncate i a, Array.skip i a
 
-                let vL, vR =
+                let struct (vL, vR) =
                     v
                     |> RRBVector.split i
 
@@ -821,7 +851,7 @@ let vectorTests =
             (fun (VecPlusArrAndIdx(v, a, i)) (PositiveInt pushCnt) ->
                 let aL, aR = Array.truncate i a, Array.skip i a
 
-                let vL, vR =
+                let struct (vL, vR) =
                     v
                     |> RRBVector.split i
 
@@ -934,7 +964,7 @@ let vectorTests =
 
                 splitTest vec i
 
-                let vL, vR =
+                let struct (vL, vR) =
                     vec
                     |> RRBVector.split i
 
@@ -1034,7 +1064,7 @@ let regressionTests =
                 let a = RRBVector.toArray v
                 let aL, aR = Array.truncate i a, Array.skip i a
 
-                let vL, vR =
+                let struct (vL, vR) =
                     v
                     |> RRBVector.split i
 
@@ -1170,14 +1200,14 @@ let regressionTests =
             testCase "Big full vector has right properties"
             <| fun _ ->
                 let vec =
-                    { 1..98321 }
+                    seq { 1..98321 }
                     |> RRBVector.ofSeq
 
                 RRBVectorProps.checkProperties vec "Full three-level vector"
 
             testCase "Smallish transient vector has right properties"
             <| fun _ ->
-                let mutable vec = RRBTransientVector() :> RRBVector<_>
+                let mutable vec = RRBTransientVector.MkEmpty() :> RRBVector<_>
 
                 for i = 1 to Literals.blockSize
                              * Literals.blockSize
@@ -1670,7 +1700,7 @@ let regressionTests =
                 let vec =
                     (RRBVectorGen.treeReprStrToVec "M T5" :?> RRBPersistentVector<_>).Transient()
 
-                let vL, vR =
+                let struct (vL, vR) =
                     vec.Split(
                         Literals.blockSize
                         + 2
@@ -2169,7 +2199,7 @@ let regressionTests =
                     |> RRBVectorGen.treeReprStrToVec
 
                 let startEvenShorter =
-                    { 0..1982 }
+                    seq { 0..1982 }
                     |> RRBVector.ofSeq
 
                 for vec in
@@ -2297,7 +2327,7 @@ let regressionTests =
                         "[26 18 25 24 17 26 24 M M M M M M M M M M M M M M M M M M M] [M M M M M M M M M M M M M M M M M M M M M M M M M 17 16 M 17 25 24 M] [M M M M 17 16 M] T24"
 
                 let startEvenShorter =
-                    { 0..1982 }
+                    seq { 0..1982 }
                     |> RRBVector.ofSeq
 
                 let logVec action vec =
@@ -2495,7 +2525,7 @@ let regressionTests =
         <| fun _ ->
             let vec = RRBVectorGen.treeReprStrToVec "M M TM/2"
 
-            let a, b =
+            let struct (a, b) =
                 vec
                 |> RRBVector.split 1
 
@@ -2606,10 +2636,11 @@ let regressionTests =
             let vec = RRBVectorGen.treeReprStrToVec "M/2-1 M T2"
 
             let vec' =
-                vec.Insert
-                    (Literals.blockSize
-                     / 2)
+                vec.Insert(
+                    Literals.blockSize
+                    / 2,
                     512
+                )
 
             RRBVectorProps.checkProperties vec "Original vector"
             RRBVectorProps.checkProperties vec' "Vector after insertion"
@@ -2620,10 +2651,11 @@ let regressionTests =
             let vec = RRBVectorGen.treeReprStrToVec "M-2 M T1"
 
             let vec' =
-                vec.Insert
-                    (vec.Length
-                     - 2)
+                vec.Insert(
+                    vec.Length
+                    - 2,
                     512
+                )
             // You'd think this would turn into "M M-1 T1", but that would break the invariant. So instead a node is shifted out of the tail to make M TM, which has height 0.
             RRBVectorProps.checkProperties vec "Original vector"
             RRBVectorProps.checkProperties vec' "Vector after insertion"
@@ -2652,14 +2684,18 @@ let regressionTests =
         testCase
             "An insert that splits the last leaf will not cause later pushes to break the invariant"
         <| fun _ ->
-            let vec = RRBVector.ofSeq { 0..1982 }
+            let vec =
+                RRBVector.ofSeq
+                <| seq { 0..1982 }
+
             let vec = RRBVectorGen.treeReprStrToVec "[M*M] [M*M-3] T31"
 
             let mutable vec' =
-                vec.Insert
-                    (vec.Length
-                     - 42)
+                vec.Insert(
+                    vec.Length
+                    - 42,
                     -42
+                )
 
             RRBVectorProps.checkProperties vec "Original vector"
             RRBVectorProps.checkProperties vec' "Vector after insertion"
@@ -2748,19 +2784,21 @@ let mergeTests =
                 <| sprintf "M*M/2 TM"
             // let vR = RRBVectorGen.treeReprStrToVec <| sprintf "M M M-1 T2" // This makes an invalid tree
             let fullLeaf =
-                [| 1 .. Literals.blockSize |]
-                |> RRBNode<int>.MkLeaf nullOwner
+                RRBNode<int>.MkLeaf(OwnerTokens.NullOwner, [| 1 .. Literals.blockSize |])
 
             let fullLeafMinusOne =
-                [|
-                    1 .. Literals.blockSize
-                         - 1
-                |]
-                |> RRBNode<int>.MkLeaf nullOwner
+                RRBNode<int>
+                    .MkLeaf(
+                        OwnerTokens.NullOwner,
+                        [|
+                            1 .. Literals.blockSize
+                                 - 1
+                        |]
+                    )
 
             let vR_root =
                 RRBRelaxedNode<int>(
-                    ref null,
+                    OwnerTokens.NullOwner,
                     [|
                         fullLeaf
                         fullLeaf
@@ -2934,9 +2972,9 @@ let splitTransientTests =
         // testPropSm "small vectors (up to root+tail in size)" doSplitTransientTest
         // testPropMed "medium vectors (up to about 1-2 levels high)" doSplitTransientTest
         // testProp "large vectors (up to about 3-4 levels high)" doSplitTransientTest
-        testPropSm "small vectors into thing"
+        testPropSm (*1205315639, 297617583*) "small vectors into thing"
         <| fun (vec: RRBVector<int>) -> RRBVectorTransientCommands.doTestXL vec
-        testPropSm "small commands"
+        testPropSm (*1205788508, 297617583*) "small commands"
         <| fun (vec: RRBVector<int>) -> RRBVectorTransientCommands.doComplexTest vec
         testPropMed "medium commands"
         <| fun (vec: RRBVector<int>) -> RRBVectorTransientCommands.doComplexTest vec
@@ -2998,7 +3036,7 @@ let splitTransientTests =
             //     logVec (cmd.ToString()) current
             //     RRBVectorProps.checkProperties current <| sprintf "Pre-split vector after %s" (cmd.ToString())
 
-            let vL, vR =
+            let struct (vL, vR) =
                 current.Split(
                     current.Length
                     - 89
@@ -3047,6 +3085,19 @@ let splitTransientTests =
             )
             // >> setField "structure" (sprintf "%A" joined))
             RRBVectorProps.checkProperties joined "Joined vector after all commands run"
+
+        testCase "pop from 2-leaf transient vector"
+        <| fun _ ->
+            let v = (RRBVectorGen.treeReprStrToVec "17 16 T1").Transient()
+            // This can easily happen if an insert has split a node; here, we started with M T1 and then inserted one item into a non-tail index
+
+            RRBVectorProps.checkProperties v
+            <| sprintf "vector before pop"
+
+            let after = v.Pop()
+
+            RRBVectorProps.checkProperties after
+            <| sprintf "vector after pop"
 
         testCase "split commands that failed, medium, simpler"
         <| fun _ ->
@@ -3213,9 +3264,7 @@ let splitTransientTests =
             let vec = RRBVector.ofArray arr
             let newVec = vec.Remove 3
 
-            let newArr =
-                arr
-                |> Array.copyAndRemoveAt 3
+            let newArr = RRBArrayExtensions.CopyAndRemoveAt(arr, 3)
 
             RRBVectorProps.checkProperties newVec "New vector"
 
@@ -3246,9 +3295,7 @@ let splitTransientTests =
             let vec = RRBVector.ofArray arr
             let newVec = vec.Remove 3
 
-            let newArr =
-                arr
-                |> Array.copyAndRemoveAt 3
+            let newArr = RRBArrayExtensions.CopyAndRemoveAt(arr, 3)
 
             RRBVectorProps.checkProperties newVec "New vector"
 
@@ -3273,11 +3320,9 @@ let splitTransientTests =
         <| fun _ ->
             let arr = [| 1 .. Literals.blockSize |]
             let vec = RRBVector.ofArray arr
-            let newVec = vec.Insert 0 3
+            let newVec = vec.Insert(0, 3)
 
-            let newArr =
-                arr
-                |> Array.copyAndInsertAt 0 3
+            let newArr = RRBArrayExtensions.CopyAndInsertAt(arr, 0, 3)
 
             RRBVectorProps.checkProperties newVec "New vector"
 
@@ -3288,7 +3333,7 @@ let splitTransientTests =
                 "New vector did not match array"
 
             let tvec = vec.Transient()
-            let newTVec = tvec.Insert 0 3
+            let newTVec = tvec.Insert(0, 3)
             RRBVectorProps.checkProperties newTVec "New transient vector"
 
             Expect.equal
@@ -3319,11 +3364,9 @@ let splitTransientTests =
                 (Literals.blockSize
                  - 1)
 
-            let newVec = vec.Insert 0 3
+            let newVec = vec.Insert(0, 3)
 
-            let newArr =
-                arr
-                |> Array.copyAndInsertAt 0 3
+            let newArr = RRBArrayExtensions.CopyAndInsertAt(arr, 0, 3)
 
             RRBVectorProps.checkProperties newVec "New vector"
 
@@ -3359,7 +3402,7 @@ let splitTransientTests =
                 0
                 "Transient vector's tail should initially end in 0"
 
-            let newTVec = tvec.Insert 0 3 :?> RRBTransientVector<_>
+            let newTVec = tvec.Insert(0, 3) :?> RRBTransientVector<_>
             RRBVectorProps.checkProperties newTVec "New transient vector"
 
             Expect.equal
@@ -3430,7 +3473,7 @@ let splitTransientTests =
 
             let newArr =
                 arr
-                |> Array.copyAndPop
+                |> RRBArrayExtensions.CopyAndPop
 
             RRBVectorProps.checkProperties newPVec "New vector"
             Expect.equal newPVec.Root.NodeSize 0 "New vector's root should be empty now"
@@ -3486,9 +3529,7 @@ let splitTransientTests =
             let vec = RRBVector.ofArray arr
             let newVec = vec.Remove 0
 
-            let newArr =
-                arr
-                |> Array.copyAndRemoveAt 0
+            let newArr = RRBArrayExtensions.CopyAndRemoveAt(arr, 0)
 
             RRBVectorProps.checkProperties newVec "New vector"
 
@@ -3641,10 +3682,11 @@ let manualVectorTests =
             RRBVectorProps.checkProperties vec2 "Sapling with short leaf"
 
             let vec3 =
-                vec2.Insert
-                    (vec2.Length
-                     - 2)
+                vec2.Insert(
+                    vec2.Length
+                    - 2,
                     65
+                )
                 :?> RRBPersistentVector<int>
 
             RRBVectorProps.checkProperties
@@ -3789,7 +3831,10 @@ let splitJoinTests =
         // TODO: Make custom test that joins "T0" (emptyVec) with "M T2"
         testCase "split+reverse+join on a sapling"
         <| fun _ ->
-            let vec = RRBVector.ofSeq { 1..40 }
+            let vec =
+                RRBVector.ofSeq
+                <| seq { 1..40 }
+
             let vL, vR = doSplitTest vec 0
             let revL = RRBVector.rev vL
             let revR = RRBVector.rev vR
@@ -3983,7 +4028,7 @@ let splitJoinTests =
             let orig = RRBVectorGen.treeReprStrToVec "[M-3 M-3] [2 1 3] [M] TM-1"
             RRBVectorProps.checkProperties orig "Original vector"
 
-            let left, right =
+            let struct (left, right) =
                 orig
                 |> RRBVector.split 17
 
@@ -4047,6 +4092,18 @@ let splitJoinTests =
             let sliced = v.Skip i
             RRBVectorProps.checkProperties sliced "Sliced vector"
             Expect.sequenceEqual sliced (Array.skip i a) "Sliced things didn't match"
+
+        testCase "ShiftNodesFromTailIfNeeded correctly handles case where new tail is promoted"
+        <| fun _ ->
+            let v = RRBVectorGen.treeReprStrToVec "M T1"
+            // let v = RRBVectorGen.treeReprStrToVec "[M 5] [5] T1"
+            let a = RRBVector.toArray v
+            let i = 3
+            let sliced = v.Skip i
+            // This would shift all items out of the tail, meaning the last (only) leaf ends up back in the tail
+            // At one point there was a bug where the promoted leaf was appended to the tail instead of prepended, resulting in wrong item order
+            RRBVectorProps.checkProperties sliced "Sliced vector"
+            Expect.sequenceEqual sliced (Array.skip i a) "Sliced things didn't match"
     ]
 
 let manualInsertTestWithVec idx item vec =
@@ -4054,9 +4111,7 @@ let manualInsertTestWithVec idx item vec =
         vec
         |> RRBVector.toArray
 
-    let expected =
-        a
-        |> Array.copyAndInsertAt idx item
+    let expected = RRBArrayExtensions.CopyAndInsertAt(a, idx, item)
 
     let actual =
         vec
@@ -4084,9 +4139,7 @@ let insertTests =
         testProp
             "insert into full vectors"
             (fun (VecPlusArrAndIdx(v, a, i)) ->
-                let expected =
-                    a
-                    |> Array.copyAndInsertAt i 512
+                let expected = RRBArrayExtensions.CopyAndInsertAt(a, i, 512)
 
                 let v' =
                     v
@@ -4108,9 +4161,12 @@ let insertTests =
                                  + 1)
 
                 let expected =
-                    vec
-                    |> RRBVector.toArray
-                    |> Array.copyAndInsertAt i 512
+                    RRBArrayExtensions.CopyAndInsertAt(
+                        vec
+                        |> RRBVector.toArray,
+                        i,
+                        512
+                    )
 
                 let vec' =
                     vec
@@ -4124,6 +4180,13 @@ let insertTests =
                     expected
                     "insert did not insert the right value"
             )
+
+        testCase "Regression test for inserting into vector"
+        <| fun _ ->
+            manualInsertTest
+                79
+                512
+                "22 25 M M M 28 M M 30 M 29 30 M M M 29 M M-1 M 30 M 30 30 M M 26 M 28 28 M M-1 M T32"
 
         // Specifically-constructed tests
         testCase "Insert into root+tail vector at head"
@@ -4338,7 +4401,7 @@ let operationTests =
         <| fun _ ->
             let vec = RRBVectorGen.treeReprStrToVec "M T5"
             RRBVectorProps.checkProperties vec "Original vector"
-            let step1 = vec.Insert 3 -512
+            let step1 = vec.Insert(3, -512)
             RRBVectorProps.checkProperties step1 "Vector after one insert"
             let step2 = step1.Remove 0
             RRBVectorProps.checkProperties step2 "Vector after one insert and one remove"
@@ -4429,9 +4492,7 @@ let arrayTests =
                      + 1)
                     (fun i -> if i = Array.length arr then 512 else arr.[i])
 
-            let actual =
-                arr
-                |> Array.copyAndAppend 512
+            let actual = RRBArrayExtensions.CopyAndPush(arr, 512)
 
             Expect.equal
                 actual
@@ -4443,9 +4504,7 @@ let arrayTests =
             let expected = Array.copy arr
             expected.[i] <- 512
 
-            let actual =
-                arr
-                |> Array.copyAndSet i 512
+            let actual = RRBArrayExtensions.CopyAndSet(arr, i, 512)
 
             Expect.equal
                 actual
@@ -4457,9 +4516,7 @@ let arrayTests =
             let expected =
                 Array.append (Array.append (Array.take i arr) [| 512 |]) (Array.skip i arr)
 
-            let actual =
-                arr
-                |> Array.copyAndInsertAt i 512
+            let actual = RRBArrayExtensions.CopyAndInsertAt(arr, i, 512)
 
             Expect.equal
                 actual
@@ -4470,9 +4527,7 @@ let arrayTests =
         <| fun (NonEmptyArrayAndIdx(arr, i)) ->
             let expected = Array.append (Array.take i arr) (Array.skip (i + 1) arr)
 
-            let actual =
-                arr
-                |> Array.copyAndRemoveAt i
+            let actual = RRBArrayExtensions.CopyAndRemoveAt(arr, i)
 
             Expect.equal
                 actual
@@ -4487,9 +4542,7 @@ let arrayTests =
                      - 1)
                     arr
 
-            let actual =
-                arr
-                |> Array.copyAndPop
+            let actual = RRBArrayExtensions.CopyAndPop(arr)
 
             Expect.equal
                 actual
@@ -4518,9 +4571,9 @@ let arrayTests =
                 joined
                 |> Array.splitAt idx
 
-            let actual = Array.appendAndSplitAt idx a b
+            let struct (actualL, actualR) = RRBArrayExtensions.AppendAndSplitAt(idx, a, b)
 
-            Expect.equal actual expected
+            Expect.equal (actualL, actualR) expected
             <| sprintf
                 "appendAndSplitAt did not produce the right results at idx %d and with input arrays %A and %A"
                 idx
@@ -4536,8 +4589,7 @@ let arrayTests =
                              + 1)
 
             let expected =
-                joined
-                |> Array.copyAndInsertAt idx 512
+                RRBArrayExtensions.CopyAndInsertAt(joined, idx, 512)
                 |> Array.splitAt (
                     ((Array.length a
                       + Array.length b)
@@ -4545,9 +4597,10 @@ let arrayTests =
                     + 1
                 )
 
-            let actual = Array.appendAndInsertAndSplitEvenly idx 512 a b
+            let struct (actualL, actualR) =
+                RRBArrayExtensions.AppendAndInsertAndSplitEvenly(a, b, idx, 512)
 
-            Expect.equal actual expected
+            Expect.equal (actualL, actualR) expected
             <| sprintf
                 "appendAndInsertAndSplitEvenly did not produce the right results at idx %d and with input arrays %A and %A"
                 idx
@@ -4557,30 +4610,32 @@ let arrayTests =
         testProp "insertAndSplitEvenly"
         <| fun (NonEmptyArrayAndIdx(arr, idx)) ->
             let expected =
-                arr
-                |> Array.copyAndInsertAt idx 512
+                RRBArrayExtensions.CopyAndInsertAt(arr, idx, 512)
                 |> Array.splitAt (
                     ((Array.length arr)
                      >>> 1)
                     + 1
                 )
 
-            let actual =
-                arr
-                |> Array.insertAndSplitEvenly idx 512
+            let struct (actualL, actualR) =
+                RRBArrayExtensions.InsertAndSplitEvenly(arr, idx, 512)
 
-            Expect.equal actual expected "insertAndSplitEvenly did not produce the right results"
+            Expect.equal
+                (actualL, actualR)
+                expected
+                "insertAndSplitEvenly did not produce the right results"
 
         testCase "smallestRunOfAtLeast 32 in 0-9 array"
         <| fun _ ->
-            let arr = [| 0uy .. 9uy |]
+            let arr = [| 0..9 |]
             let expected = (5, 5) // 3+4+5+6+7+8 = 33, a run of 6 starting at idx 3... but 5+6+7+8+9 = 35, a run of 5 starting at idx 5
 
-            let actual =
-                arr
-                |> Array.smallestRunOfAtLeast 32uy
+            let struct (actualL, actualR) = RRBArrayExtensions.SmallestRunOfAtLeast(arr, 32)
 
-            Expect.equal actual expected "smallestRunOfAtLeast did not produce the right results"
+            Expect.equal
+                (actualL, actualR)
+                expected
+                "smallestRunOfAtLeast did not produce the right results"
 
         testProp "smallestRunOfAtLeast M in random array always finds the optimal solution"
         <| fun (ListForRunTesting lst) ->
@@ -4626,13 +4681,11 @@ let arrayTests =
                     arr
                     |> findBestRun
 
-                let actual =
-                    arr
-                    |> Array.map byte
-                    |> Array.smallestRunOfAtLeast (byte Literals.blockSize)
+                let struct (actualL, actualR) =
+                    RRBArrayExtensions.SmallestRunOfAtLeast(arr, Literals.blockSize)
 
                 Expect.equal
-                    actual
+                    (actualL, actualR)
                     expected
                     "smallestRunOfAtLeast did not produce the best possible result"
             )
@@ -4768,6 +4821,66 @@ let apiTests =
                 |> RRBVector.toArray
 
             Expect.equal actual expected "RRBVector.concat did not produce the right results"
+
+        testCase "Regression test for rebalance bug where wrong number of items were copied"
+        <| fun _ ->
+            let reprs = [
+                "T30"
+                "[M M 30 29 M M M-1 M 28 M M M M M 23 28 M-1 30 M M-1 M 29 M 27 M-1 27 27 M-1 M 28 M M] [30 28 28 30 M-1 M-1 M-1 M M M 27 29 27 M M M M-1 M M 26 M M-1 M 30 M M-1 26 M 27 M M 30] [29 29 30 M 30 M M 27 M M 27 M 30 28 M M 29 M 28 M-1 25 M 26 30 M 29 26 M] [M M M-1 M-1 29 M M M M M 26 30 M M M M M M M M-1 29 M M M M] [M 29 21 29 29 M-1 M M 30 23 M M-1 30 29 29 M-1 26 27 26 24 M 30 M 29 M] [M M M M M M M M M M M M M M M M M M M M M M M M M M M M M 30 M] [23 30 29 26 M 28 26 28 M 22 26 M-1 M M M 26 24 M-1 28 30 28 27 28 23 M M] [29 27 M M M 28 M M 26 M 29 22 M M M M M M M M-1 27 M M M 28] [30 M M M M M M M M M M 27 M M M-1 M-1 27 M M M 30 27 M M 29 M M M 30 M M M] [M-1 M M M-1 M M-1 30 M M M-1 28 26 29 27 30 M M-1 28 M M M M M M M M M] [29 M M M M M M M-1 M M M M M M M M M 30 M-1 M M M M M M 30 25] [25 M-1 M M M M M M M M M M M M M M M M 28 M M M M M M-1 M M 24] [M M M M M M M M M M M M M 30 M-1 29 M M M M M M M M M M M M] [M M-1 M M 28 M M M M M M M M M M M M M M 30 M M M 29 M M M M M-1 M M] [29 28 30 M M 23 M 25 28 M 29 M 29 M 27 26 30 24 M 24 30 M 30 M-1 M-1 M 26 26 27 27 M] [M M M M M M M M M M M M M M M M M M M M M M M-1 M M M M M] [25 M M 27 25 M-1 M 28 27 29 M M M 25 26 28 M M M 29 M 28 23 28 29 M M M-1 26 M M 29] [25 M M 29 M 29 30 27 27 M 28 M-1 22 30 M 26 M 27 M-1 M 29 29 27 28 30 M M 27 M M-1 25 29] [27 30 24 25 M 28 M M M 26 26 24 M M 29 M 30 M 21 26 M-1 M M M 29] [M M 27 26 27 24 M 30 M-1 M 29 30 30 M M M 28 M 28 22 M-1 27 28 M 27 29 28 29 M] [29 M 28 M M M M 25 M-1 28 30 29 30 M M 26 M 30 30 29 23 30 29 M M 30 M 28 M M 30 M-1] [M 29 M-1 M M M M M 29 27 28 M M M M 27 20 24 26 M-1 M M 29 29 26 25 M M M] [27 30 M M-1 M M M 26 M M 30 M M 30 M M-1 29 28 28 M-1 29 29 29 M 30 M 29 M 28 29] [M-1 M M 29 29 M 29 23 M M M M M M M 26 M M-1 M M 28 28 M M 26 26 M-1 M M 29 29 28] [M M 26 M M M M 30 M M M M 27 M 30 28 29 M-1 M 29 27 M 30 M 27 M M M M 29 M-1 M] [24 24 M M 26 26 M M 30 29 30 M 30 M M 28 M M M M 30 M M 28] [M M 30 M M 29 M M M 27 29 M M M M-1 M 26 M M M M M 25 29 M-1 M-1] [M-1 M 29 M M M 27 27 M 30 M M-1 29 M 30 M M 26 M M-1 M M M M 24 M M M M M M M] [30 M M M 28 M M M-1 M 30 M M M M M M M 29 M 29 M M 26 M M M M M-1 M M M M] [M M M M M 29 M-1 M-1 M M 28 M M M M M M 23 M M M M M-1 M M-1 M M M M 27 30] T31"
+                "[M M M M M M M 29 30 M 30 M M M M 30 M 30 M M M M M M M 24 M M M M] [M-1 M M M M-1 M M M 30 30 28 30 M M M M M M-1 29 M M 30 30 M M M M M M 28] [M M 29 M M M M M M M M M M M M M M M M 29 M M M-1 M-1 M M M-1] [M M 30 28 M M M M M M M M M M-1 M 30 M M M M M M M 30 M M M 29 M M M M] [M 25 M 26 M M 26 27 M 27 M 27 28 30 25 M M 28 28 30 M 28 25 28 21 25 M 30 29] [M M M 30 M M M M M M M M M M 30 M M M M M M M M M M M M M] [23 M-1 M-1 M M 30 27 28 30 28 30 M 24 M M M-1 29 23 M-1 M-1 27 M M M 29 27 25 M M 27 27 30] [27 21 M-1 29 28 M M 26 28 30 30 29 24 29 25 26 29 M 27 30 30 M M 27 M 26 M 30] [M-1 M 30 M-1 M M M-1 21 28 M 26 28 30 M-1 30 26 27 30 M-1 29 M M 27 M-1 M-1 M-1 26 28 27] [26 M 28 25 M M M 30 27 M-1 M M 23 M M M 26 27 M 21 23 M-1 M M 28 M 30 30 30 M 28] [M M M M M 28 M M 27 M M 29 M M M M 28 M M M M M M M 30 M M M M] [M M M M M M M-1 M M M 30 M M M M M M M M M M M M M M M M M] [M M M M M M 30 M M M M M M M M-1 M M M M M M M 28 M-1 M M M] [29 28 29 26 M 30 28 28 M M-1 26 29 30 27 M-1 29 M M-1 26 28 25 M M 30 M-1 M-1 24 26 M-1 27] [23 29 28 30 30 M M M 30 29 29 M-1 24 28 29 29 28 M M 23 M 27 30 M-1 M 30 25 24 30 M-1 26] [27 30 21 26 M M M-1 M M 29 21 27 23 M-1 M-1 M M M-1 23 27 26 M-1 M-1 M-1 M] [M-1 30 29 29 28 25 M-1 M M M-1 M 28 29 22 24 29 M M M M 27 25 23 29 22 M M] [28 28 30 M 26 29 27 25 M M 29 25 24 M 27 M M 28 29 M-1 M M M M 29 M 28] [M 29 28 M M 24 28 M M M 29 M-1 25 28 M M-1 29 30 M M 27 M M 29 30 27 M M 29 26 22 M] T21"
+            ]
+            // TODO: Try to shrink this test down to a smaller minimal representation
+
+            let vecs =
+                reprs
+                |> List.map RRBVectorGen.treeReprStrToVec
+
+            let actual =
+                vecs
+                |> RRBVector.concat
+
+            let arrs =
+                vecs
+                |> List.map RRBVector.toArray
+
+            let expected =
+                arrs
+                |> Array.concat
+
+            let actualArr =
+                (actual
+                 |> RRBVector.toArray)
+
+
+            for i = 0 to expected.Length
+                         - 1 do
+                Expect.equal actualArr.[i] expected.[i]
+                <| sprintf "Mismatch at index %d" i
+
+            Expect.equal actualArr expected "RRBVector.concat did not produce the right results"
+
+        testCase "Regression test for append bug where tail won't fit"
+        <| fun _ ->
+            let vecL = RRBVectorGen.treeReprStrToVec "[M*M]*13 T16"
+            let vecR = RRBVectorGen.treeReprStrToVec "[M*M]*2 T5"
+
+            let actual = RRBVector.append vecL vecR
+
+            let arrL = RRBVector.toArray vecL
+            let arrR = RRBVector.toArray vecR
+
+            let expected = Array.append arrL arrR
+
+            let actualArr =
+                (actual
+                 |> RRBVector.toArray)
+
+            for i = 0 to expected.Length
+                         - 1 do
+                Expect.equal actualArr.[i] expected.[i]
+                <| sprintf "Mismatch at index %d" i
+
+            Expect.equal actualArr expected "RRBVector.concat did not produce the right results"
 
         // Too slow, make this a testCase instead
         // testProp "compareWith" <| fun (vec1 : RRBVector<string>) (vec2 : RRBVector<string>) ->
@@ -5312,7 +5425,7 @@ let isolatedTest =
             // pop 72
             // TODO: This is a failure in IterLeaves() when there's an ExpandedNode in there that could have nulls in its leaf arrays. Need to fix that.
             let vec =
-                { 0..500 }
+                seq { 0..500 }
                 |> RRBVector.ofSeq
 
             let mutable current = vec
@@ -5336,7 +5449,7 @@ let isolatedTest =
             // let actions = [mergeR "M T13"; push 166; scan scanf 8; pop 157; remove 51]
             // TODO: Check if starting with the `scan` results, then doing 157 pops, is enough here
             let vec =
-                { 0..848 }
+                seq { 0..848 }
                 |> RRBVector.ofSeq
 
             let mutable current = vec
@@ -5642,12 +5755,14 @@ let mkTestSuite name (startingVec: RRBVector<int>) =
                 (if RRBVector.length startingVec = 0 then
                      id, id
                  else
-                     RRBVector.pop, Array.copyAndPop)
-            mkTest "push" (RRBVector.push -512, Array.copyAndAppend -512)
+                     RRBVector.pop, RRBArrayExtensions.CopyAndPop)
+            mkTest
+                "push"
+                (RRBVector.push -512, fun arr -> RRBArrayExtensions.CopyAndPush(arr, -512))
             mkTest
                 "push many"
                 ((fun vec ->
-                    { 0 .. Literals.blockSize }
+                    seq { 0 .. Literals.blockSize }
                     |> Seq.fold
                         (fun v i ->
                             v
@@ -5702,14 +5817,12 @@ let mkTestSuite name (startingVec: RRBVector<int>) =
                 ((fun vec -> RRBVector.append vec vec), (fun arr -> Array.append arr arr))
             mkTest
                 "splitL"
-                (RRBVector.split pos
-                 >> fst,
+                ((fun vec -> let struct (a, _) = RRBVector.split pos vec in a),
                  Array.splitAt pos
                  >> fst)
             mkTest
                 "splitR"
-                (RRBVector.split pos
-                 >> snd,
+                ((fun vec -> let struct (_, b) = RRBVector.split pos vec in b),
                  Array.splitAt pos
                  >> snd)
             mkTest
@@ -5717,8 +5830,11 @@ let mkTestSuite name (startingVec: RRBVector<int>) =
                 (if RRBVector.length startingVec = 0 then
                      id, id
                  else
-                     RRBVector.remove pos, Array.copyAndRemoveAt pos)
-            mkTest "insert" (RRBVector.insert pos -512, Array.copyAndInsertAt pos -512)
+                     RRBVector.remove pos, fun arr -> RRBArrayExtensions.CopyAndRemoveAt(arr, pos))
+            mkTest
+                "insert"
+                (RRBVector.insert pos -512,
+                 fun arr -> RRBArrayExtensions.CopyAndInsertAt(arr, pos, -512))
 
             testCase "toArray"
             <| fun _ ->
@@ -6635,14 +6751,12 @@ let mkTestSuite name (startingVec: RRBVector<int>) =
                 (let f n = -n in RRBVector.sortByDescending f, Array.sortByDescending f)
             mkTest
                 "splitAt 1"
-                (RRBVector.splitAt pos
-                 >> fst,
+                ((fun vec -> let struct (a, _) = RRBVector.splitAt pos vec in a),
                  Array.splitAt pos
                  >> fst)
             mkTest
                 "splitAt 2"
-                (RRBVector.splitAt pos
-                 >> snd,
+                ((fun vec -> let struct (_, b) = RRBVector.splitAt pos vec in b),
                  Array.splitAt pos
                  >> snd)
             mkTest
@@ -6975,7 +7089,7 @@ let mkTestSuite name (startingVec: RRBVector<int>) =
                                Expect.equal
                                    e.Message
                                    "Index must not be past the end of the vector"
-                                   "RRBVector.pop on empty vector threw wrong exception"
+                                   "RRBVector.remove on empty vector threw wrong exception"
                            )
 
                ]
@@ -6984,9 +7098,11 @@ let mkTestSuite name (startingVec: RRBVector<int>) =
 
 let startingVecForTransientResidueTests =
     let mutable current =
-        { 0 .. (Literals.blockSize
-                * Literals.blockSize
-                + Literals.blockSize) }
+        seq {
+            0 .. (Literals.blockSize
+                  * Literals.blockSize
+                  + Literals.blockSize)
+        }
         |> RRBVector.ofSeq
     // for i = 0 to Literals.blockSize do
     //   current <- current.Pop()
@@ -6998,9 +7114,11 @@ let transientResidueTests =
     mkTestSuite "Tests on transient-residue vectors" startingVecForTransientResidueTests
 
 let moreTransientResidueTests =
-    { 0 .. (Literals.blockSize
-            * (Literals.blockSize
-               - 3)) }
+    seq {
+        0 .. (Literals.blockSize
+              * (Literals.blockSize
+                 - 3))
+    }
     |> RRBVector.ofSeq
     |> mkTestSuite "Tests on some more transient-residue vectors"
 // That produces an ExpandedNode with a few nulls at the end
@@ -7017,41 +7135,49 @@ let dualTests =
 let halfFullTailTests =
     mkTestSuite
         "Tests on vectors with half-full tails"
-        ({ 1 .. Literals.blockSize
-                / 2 }
+        (seq {
+            1 .. Literals.blockSize
+                 / 2
+         }
          |> RRBVector.ofSeq)
 
 let fullTailTests =
     mkTestSuite
         "Tests on vectors with full tails"
-        ({ 1 .. Literals.blockSize }
+        (seq { 1 .. Literals.blockSize }
          |> RRBVector.ofSeq)
 
 let fullTailPlusOneTests =
     mkTestSuite
         "Tests on vectors with full tails plus one"
-        ({ 0 .. Literals.blockSize }
+        (seq { 0 .. Literals.blockSize }
          |> RRBVector.ofSeq)
 
 let fullSaplingMinusOneTests =
     mkTestSuite
         "Tests on full saplings minus one"
-        ({ 2 .. Literals.blockSize
-                * 2 }
+        (seq {
+            2 .. Literals.blockSize
+                 * 2
+         }
          |> RRBVector.ofSeq)
 
 let fullSaplingTests =
     mkTestSuite
         "Tests on full saplings"
-        ({ 1 .. Literals.blockSize
-                * 2 }
+        (seq {
+            1 .. Literals.blockSize
+                 * 2
+         }
          |> RRBVector.ofSeq)
 
 let fullSaplingPlusOneTests =
     mkTestSuite
         "Tests on full saplings plus one"
-        ({ 0 .. Literals.blockSize
-                * 2 }
+        (seq {
+            0 .. Literals.blockSize
+                 * 2
+         }
          |> RRBVector.ofSeq)
 
 let threeLevelVectorTests =
@@ -7064,7 +7190,7 @@ let tests =
         testCase "Single isolated test for pushing in transients"
         <| fun _ ->
             let size = 65568
-            let mutable vec = RRBTransientVector() :> RRBVector<_>
+            let mutable vec = RRBTransientVector.MkEmpty() :> RRBVector<_>
             RRBVectorProps.checkProperties vec "Empty transient vector"
 
             for i = 1 to size do
@@ -7092,9 +7218,11 @@ let tests =
         testCase "Single isolated test for popping in persistents"
         <| fun _ ->
             let mutable current =
-                { 0 .. (Literals.blockSize
-                        * Literals.blockSize
-                        + Literals.blockSize) }
+                seq {
+                    0 .. (Literals.blockSize
+                          * Literals.blockSize
+                          + Literals.blockSize)
+                }
                 |> RRBVector.ofSeq
 
             RRBVectorProps.checkProperties current "Persistent vector before pops"
