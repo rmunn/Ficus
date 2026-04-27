@@ -140,5 +140,8 @@ let main argv =
         printfn "%d" pid
 
         runTestsWithCLIArgs [] argv
-        <| testList "First test" [ RRBVectorExpectoTest.tests (*arrayTests*) ]
+        <| testList "First test" [
+            RRBVectorExpectoTest.tests
+            RRBVectorNodesExpectoTest.tests
+        ]
 // runTestsWithArgs defaultConfig argv experimentalTests
