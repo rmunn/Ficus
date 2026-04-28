@@ -67,6 +67,27 @@ let rec height (node: RRBNode<'T>) =
 
 // === Generators ===
 
+let rec digitValues =
+    function
+    | n when n < 0 -> digitValues (abs n)
+    | n when n < 10 -> n
+    | n ->
+        (n % 10)
+        + digitValues (n / 10)
+
+let clampSize maxSize size =
+    // Ensure size remains between 1 and 100, skewing towards larger values for numbers greater than 100 but still ensuring small numbers can sometimes show up
+    //
+    // First take size % 100, which will be in the range 0-99. Now add the *value of the digits* of size, which will always be at least 1, so the range is 1-(unbounded, but around 130ish when max size is 10,000)
+    // Now clamp that to a 1-100 range, so that anything 100 or above gets hard-set to 100
+    // Now use that size in generation code that expects a 1-100 result, such as tree-generation code
+    let rem = size % 100
+
+    min
+        maxSize
+        (rem
+         + digitValues size)
+
 let mkCounter () =
     let mutable i = 0
 
@@ -506,9 +527,12 @@ let genMediumPersistentTree =
     // 1-32: number of leaves
     // 33-64: subtract 32 -> 1-32 twigs (but since it's Gen.choose(1,x), that's anywhere between 1-2 to 1-32 twigs)
     // 65-96: subtract 64 -> 1-32 branches (height 2)
-    // 97-100: subtract 96 -> 1-4 limbs (height 3)
+    // 97-128: subtract 96 -> 1-4 limbs (height 3) for size up to 100 (non-stress), 1-32 limbs for size up to 128
+    // 129-132: subtract 128 -> 1-4 trunks (height 4), can only happen in stress testing
     Gen.sized (fun s ->
         let counter = mkCounter ()
+
+        let s = clampSize 132 s
 
         logger.debug (
             eventX "Generating tree of size {n}"
@@ -565,7 +589,7 @@ let genMediumPersistentTree =
                         )
                     )
             }
-        else
+        elif s <= 128 then
             let limbMax = s - 96
 
             gen {
@@ -581,6 +605,27 @@ let genMediumPersistentTree =
                                     nullOwner,
                                     (Literals.shiftSize
                                      * 4),
+                                    arr
+                                )
+                        )
+                    )
+            }
+        else
+            let trunkMax = s - 128
+
+            gen {
+                let! n = Gen.choose (1, trunkMax)
+
+                return!
+                    Gen.listOfLength n (genLimbForLargeTrees counter)
+                    |> Gen.map (
+                        Array.ofList
+                        >> (fun arr ->
+                            RRBNode<int>
+                                .MkNode(
+                                    nullOwner,
+                                    (Literals.shiftSize
+                                     * 5),
                                     arr
                                 )
                         )
@@ -602,6 +647,8 @@ let genLargePersistentTree =
             eventX "Generating tree of size {n}"
             >> setField "n" s
         )
+
+        let s = clampSize 100 s
 
         if s <= 8 then
             let leafMax = s * 4 // Up to 32
@@ -732,6 +779,116 @@ type LeafNode<'T> = LeafNode of RRBLeafNode<'T>
 type LargeRootNode<'T> = LargeRootNode of RRBFullNode<'T> // TODO: Use toTransient() to sometimes make transient-ish trees here
 type ShowSizedInt = ShowSizedInt of int
 // TODO: Write shrinkers for nodes and for trees
+// TODO: REALLY REALLY TODO. Shrinkers are what I need most now, so that my regression tests can be as small as possible.
+
+let nodeWithout (n: RRBFullNode<'T>) i =
+    let size = n.NodeSize
+
+    let newChildren =
+        RRBArrayExtensions.RRBArrayExtensions.CopyAndRemoveAt(n.SafeChildrenArr, i)
+
+    let isRelaxed = n :? RRBRelaxedNode<_>
+
+    if isRelaxed then
+        let isExpanded = n :? RRBExpandedRelaxedNode<_>
+        let r = n :?> RRBRelaxedNode<_>
+        let sizeToRemove = r.SizeTable.[i]
+        let prevSize = if i > 0 then r.SizeTable.[i - 1] else 0
+
+        let sizeDiff =
+            sizeToRemove
+            - prevSize
+
+        let newSizeTable =
+            Array.init (size - 1)
+            <| fun j ->
+                if j < i then
+                    r.SizeTable.[j]
+                else
+                    r.SizeTable.[j + 1]
+                    - sizeDiff
+
+        if isExpanded then
+            RRBExpandedRelaxedNode<_>(n.Owner, newChildren, newSizeTable) :> RRBFullNode<_>
+        else
+            RRBRelaxedNode<_>(n.Owner, newChildren, newSizeTable) :> RRBFullNode<_>
+    else
+        let isExpanded = n :? RRBExpandedFullNode<_>
+
+        if isExpanded then
+            RRBExpandedFullNode<_>(n.Owner, newChildren) :> RRBFullNode<_>
+        else
+            RRBFullNode<_>(n.Owner, newChildren)
+
+let leafWithout (n: RRBLeafNode<'T>) i =
+    let newItems = RRBArrayExtensions.RRBArrayExtensions.CopyAndRemoveAt(n.Items, i)
+    RRBLeafNode<'T>(n.Owner, newItems)
+
+let shrinkRootNode (RootNode n) =
+    // Nodes of size 1 shouldn't be shrunk to 0, because empty nodes cause test failures
+    let size = n.NodeSize
+
+    if size < 2 then
+        Seq.empty
+    else
+        seq { 0 .. size - 1 }
+        |> Seq.map (nodeWithout n)
+
+let shrinkLeafNode (LeafNode n) =
+    let size = n.NodeSize
+
+    if size < 2 then
+        Seq.empty
+    else
+        seq { 0 .. size - 1 }
+        |> Seq.map (leafWithout n)
+
+
+let shrinkLeaf (n: RRBLeafNode<'T>) =
+    let size = n.NodeSize
+
+    if size < 2 then
+        Seq.empty
+    else
+        seq { 0 .. size - 1 }
+        |> Seq.map (leafWithout n)
+
+let shrinkLeaves (leaves: RRBLeafNode<'T>[]) =
+    if leaves.Length < 2 then
+        Seq.empty
+    else
+        seq {
+            0 .. leaves.Length
+                 - 1
+        }
+        |> Seq.map (fun i -> RRBArrayExtensions.RRBArrayExtensions.CopyAndRemoveAt(leaves, i))
+
+let shrinkLargeRootNode (LargeRootNode n) =
+    let size = n.NodeSize
+
+    if size < 2 then
+        Seq.empty
+    else
+        seq { 0 .. size - 1 }
+        |> Seq.map (nodeWithout n)
+
+let shrinkIsolatedNode (IsolatedNode n) =
+    let size = n.NodeSize
+
+    if size < 2 then
+        Seq.empty
+    else
+        seq { 0 .. size - 1 }
+        |> Seq.map (nodeWithout n)
+
+let shrinkIsolatedShortNode (IsolatedShortNode n) =
+    let size = n.NodeSize
+
+    if size < 2 then
+        Seq.empty
+    else
+        seq { 0 .. size - 1 }
+        |> Seq.map (nodeWithout n)
 
 type MyGenerators =
     static member arbTree() =
@@ -739,6 +896,10 @@ type MyGenerators =
             override x.Generator =
                 genSmallTree
                 |> Gen.map (fun node -> RootNode(node :?> RRBFullNode<int>))
+
+            override x.Shrinker n =
+                shrinkRootNode n
+                |> Seq.map RootNode
         }
 
     static member arbLargeTree() =
@@ -746,6 +907,10 @@ type MyGenerators =
             override x.Generator =
                 genMediumOrLargeTree
                 |> Gen.map (fun node -> LargeRootNode(node :?> RRBFullNode<int>))
+
+            override x.Shrinker n =
+                shrinkLargeRootNode n
+                |> Seq.map LargeRootNode
         }
 
     static member arbLeaf() =
@@ -755,11 +920,16 @@ type MyGenerators =
 
                 genLeaf counter
                 |> Gen.map LeafNode
+
+            override x.Shrinker n =
+                shrinkLeafNode n
+                |> Seq.map LeafNode
         }
 
     static member arbLeaves() =
         { new Arbitrary<RRBLeafNode<int>[]>() with
             override x.Generator = genLeaves
+            override x.Shrinker leaves = shrinkLeaves leaves
         }
 
     static member arbNode() =
@@ -767,6 +937,10 @@ type MyGenerators =
             override x.Generator =
                 genNode
                 |> Gen.map (fun node -> IsolatedNode(node :?> RRBFullNode<int>))
+
+            override x.Shrinker n =
+                shrinkIsolatedNode n
+                |> Seq.map IsolatedNode
         }
 
     static member arbShortNode() =
@@ -774,6 +948,10 @@ type MyGenerators =
             override x.Generator =
                 genShortNode
                 |> Gen.map (fun node -> IsolatedShortNode(node :?> RRBFullNode<int>))
+
+            override x.Shrinker n =
+                shrinkIsolatedShortNode n
+                |> Seq.map IsolatedShortNode
         }
 
 // Now we can write test properties that take an IsolatedNode<int> or a RootNode<int>
