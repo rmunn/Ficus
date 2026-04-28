@@ -639,9 +639,7 @@ public class RRBFullNode<T> : RRBNode<T>
         return (parent, RRBMath.Up(shift));
     }
 
-    // TODO: Consider [MethodImpl(MethodImplOptions.AggressiveInlining)] for the Slide, InsertAndSlide, and InsertAndSplit methods here. They are only used in a single place each,
-    // and are not recursive so inlining them won't expand to larger code. And it will save the overhead of a method call.
-
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public (RRBNode<T>, RRBNode<T>) SlideChildrenLeft(
         OwnerToken owner, int shift, int n, RRBFullNode<T> leftSibling)
     {
@@ -655,6 +653,7 @@ public class RRBFullNode<T> : RRBNode<T>
         return (leftNode, rightNode);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public (RRBNode<T>, RRBNode<T>) SlideChildrenRight(
         OwnerToken owner, int shift, int n, RRBFullNode<T> rightSibling)
     {
@@ -668,6 +667,7 @@ public class RRBFullNode<T> : RRBNode<T>
         return (leftNode, rightNode);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public (RRBNode<T> l, RRBNode<T> r) InsertAndSlideChildrenLeft(OwnerToken owner, int shift, int localIdx, RRBNode<T> newChild, RRBFullNode<T> leftSibling)
     {
         // GOAL: we make left and right balanced, with any extra going on the left.
@@ -701,6 +701,7 @@ public class RRBFullNode<T> : RRBNode<T>
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public (RRBNode<T> l, RRBNode<T> r) InsertAndSlideChildrenRight(OwnerToken owner, int shift, int localIdx, RRBNode<T> newChild, RRBFullNode<T> rightSibling)
     {
         int thisSize = this.NodeSize;
@@ -738,6 +739,7 @@ public class RRBFullNode<T> : RRBNode<T>
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public (RRBNode<T> l, RRBNode<T> r) InsertAndSplitNode(OwnerToken owner, int shift, int localIdx, RRBNode<T> newChild)
     {
         int size = this.NodeSize;
