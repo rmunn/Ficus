@@ -30,7 +30,7 @@ public class RRBFullNode<T> : RRBNode<T>
         if (NodeSize == 0) return "[]";
         // if (FirstChild is RRBLeafNode<T> leaf)
         // {
-            return $"[{string.Join(" ", Children.Select(c => c.StringRepr))}]";
+            return $"[{string.Join(" ", SafeChildrenArr.Select(c => c.StringRepr))}]";
         // }
         // else
         // {
