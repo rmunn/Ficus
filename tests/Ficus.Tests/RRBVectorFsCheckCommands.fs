@@ -333,11 +333,11 @@ let specExtraLargeFromData data =
         member __.Next model = Gen.elements cmdsExtraLarge
     }
 
-let specExtraSmallFromEmpty = specExtraSmallFromData (RRBVector.empty<int>)
-let specSmallFromEmpty = specSmallFromData (RRBVector.empty<int>)
-let specMediumFromEmpty = specMediumFromData (RRBVector.empty<int>)
-let specLargeFromEmpty = specLargeFromData (RRBVector.empty<int>)
-let specExtraLargeFromEmpty = specExtraLargeFromData (RRBVector.empty<int>)
+let specExtraSmallFromEmpty = specExtraSmallFromData RRBVector.empty<int>
+let specSmallFromEmpty = specSmallFromData RRBVector.empty<int>
+let specMediumFromEmpty = specMediumFromData RRBVector.empty<int>
+let specLargeFromEmpty = specLargeFromData RRBVector.empty<int>
+let specExtraLargeFromEmpty = specExtraLargeFromData RRBVector.empty<int>
 
 let almostFullSapling = RRBVector.ofArray [| 1..63 |]
 
