@@ -1348,8 +1348,6 @@ public class RRBFullNode<T> : RRBNode<T>
                 var parentL = (RRBFullNode<T>)this.UpdateChildSAbs(owner, shift, this.NodeSize - 1, newLeft, newLeft.TreeSize(RRBMath.Down(shift)));
                 var newChildR = (RRBFullNode<T>)newRight;
 
-                // TODO: Prove that this "if (right.NodeSize > 1) then shrink right spine" step is needed, by commenting it out and seeing what fails
-                // Then create a targeted regression test with a minimal example for that scenario
                 if (right.NodeSize > 1)
                 {
                     newChildR = (RRBFullNode<T>)newChildR.ShrinkRightSpine(owner, RRBMath.Down(rightShift));
