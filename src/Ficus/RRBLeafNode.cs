@@ -126,7 +126,7 @@ public sealed class RRBLeafNode<T> : RRBNode<T>
                     RRBArrayExtensions.RRBArrayExtensions.AppendAndInsertAndSplitEvenly(items, right.Items, localIdx, item);
 
                 // var newLeft = RRBNode<T>.MkLeaf(owner, newLeftItems);
-                var newLeft = LeafNodeWithItems(owner, newLeftItems); // TODO: Verify that this doesn't cause bugs
+                var newLeft = LeafNodeWithItems(owner, newLeftItems);
                 var newRight = RRBNode<T>.MkLeaf(owner, newRightItems);
 
                 return InsertResult<RRBNode<T>>.SlidItemsRight(newLeft, newRight);

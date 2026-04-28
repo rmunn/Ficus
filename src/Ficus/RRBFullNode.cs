@@ -1376,7 +1376,7 @@ public class RRBFullNode<T> : RRBNode<T>
                 var parentR = right.UpdateChildSAbs(owner, rightShift, 0, newChild, newChild.TreeSize(RRBMath.Down(rightShift)));
                 // TODO: Likewise test whether shrinking parentR is needed, by seeing what fails if we don't shrink here
                 return shrinkLeftNode((parentR, null));
-                // return (parentR, null); // TODO: I believe I've confirmed that this one isn't needed. Run stress tests just to be very certain.
+                // return (parentR, null); // TODO: I believe I've confirmed that this shrinkLeftNode isn't needed. Run stress tests just to be very certain.
             }
             else
             {
@@ -1404,12 +1404,14 @@ public class RRBFullNode<T> : RRBNode<T>
                 // Right tree merged entirely into left, so we will not grow
                 var parentL = this.UpdateChildSAbs(owner, shift, this.NodeSize - 1, newLeft, newLeft.TreeSize(RRBMath.Down(shift)));
                 return shrinkLeftNode((parentL, null));
+                // return (parentL, null); // TODO: I believe I've confirmed that this shrinkLeftNode isn't needed. Run stress tests just to be very certain.
             }
             else
             {
                 var parentL = (RRBFullNode<T>)this.UpdateChildSAbs(owner, shift, this.NodeSize - 1, newLeft, newLeft.TreeSize(RRBMath.Down(shift)));
                 var parentR = (RRBFullNode<T>)this.NewParent(owner, RRBMath.Down(shift), new[] { newRight });
                 return shrinkLeftNode(parentL.ConcatNodes(owner, shift, parentR));
+                // return parentL.ConcatNodes(owner, shift, parentR); // TODO: I believe I've confirmed that this shrinkLeftNode isn't needed. Run stress tests just to be very certain.
             }
         }
     }
