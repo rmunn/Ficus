@@ -8,6 +8,15 @@ open RRBVectorProps
 open FsCheck
 open Ficus
 
+// TODO: This file and RRBVectorExpectoTest.fs are getting huge. Split them up into subcategories.
+// Move the common code below into TestCommon.fs and place that first (or nearly first) in the .fsproj
+// Then each test list can get its own file
+// Also, property tests all should have "FsCheck" in the name of the test list, for easy filtering
+// Then we can replace the complicated filter code in Main.fs with a simple "--filter-test-list FsCheck" for more effective stress testing
+// (allowing us to run more FsCheck tests for longer, and also create something similar to stress.sh but that runs each test up to 1,000 times instead of 100)
+
+// All of that will make it easier to go for advanced testing scenarios. It starts with dividing the tests into better categories and giving them better names
+
 let logger = Log.create "Expecto"
 
 // TODO: Test all the low-level node-manipulation functions in all four node variants: compact/extended, full/relaxed
@@ -3098,9 +3107,10 @@ let longRunningTests =
 
 [<Tests>]
 let tests =
-    testList "Basic node tests" [
+    testList "Node tests" [
         // debugGenTests
 
+        // longRunningTests
         appendAndPrependChildrenPropertyTests // Put this first since it's so long
         splitTreeTests
         mergeTreeTestsWIP

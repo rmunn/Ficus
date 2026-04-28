@@ -47,7 +47,7 @@ let main argv =
             (argv
              |> Array.except [ "--debug-vscode" ])
         <| testList "Nodes and vectors" [
-            // RRBVectorNodesExpectoTest.tests
+            RRBVectorNodesExpectoTest.tests
             RRBVectorExpectoTest.tests
         // RRBVectorExpectoTest.arrayTests
         ]
@@ -126,22 +126,9 @@ let main argv =
             RRBVectorExpectoTest.tests
         ]
     else
-        let pid = System.Diagnostics.Process.GetCurrentProcess().Id
-        // Or Environment.ProcessId
-
-        // Regular
-        // runTestsWithCLIArgs [] argv
-        // <| testList "Nodes and vectors" [
-        //     RRBVectorNodesExpectoTest.tests
-        //     RRBVectorExpectoTest.tests
-        // ]
-
-        // Custom:
-        printfn "%d" pid
-
         runTestsWithCLIArgs [] argv
-        <| testList "First test" [
-            RRBVectorExpectoTest.tests
+        <| testList "Nodes and vectors" [
             RRBVectorNodesExpectoTest.tests
+            RRBVectorExpectoTest.tests
         ]
 // runTestsWithArgs defaultConfig argv experimentalTests

@@ -7186,7 +7186,7 @@ let threeLevelVectorTests =
 
 [<Tests>]
 let tests =
-    testList "All tests" [
+    testList "Vector tests" [
         // longRunningTests
         testCase "Single isolated test for pushing in transients"
         <| fun _ ->
