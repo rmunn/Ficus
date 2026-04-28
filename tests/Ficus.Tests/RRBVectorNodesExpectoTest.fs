@@ -837,6 +837,19 @@ let rec shrinkRRBNode (n: RRBFullNode<'T>) =
     else
         let shift = height n
 
+        // For tall trees (above twig level), we can first try to shorten the *entire* tree, by grabbing one child at a time to be the new root
+        let shortenTree =
+            if
+                shift
+                <= Literals.shiftSize
+            then
+                // Twig nodes are the shortest root allowed, not able to shorten tree any further
+                Seq.empty
+            else
+                n.ChildrenSeq
+                |> Seq.cast<RRBFullNode<_>>
+        // That's really it! Each child, in turn, is used as the new root of a tree, to shrink down to smaller counterexamples
+
         let removeChildren =
             seq { 0 .. size - 1 }
             |> Seq.map (nodeWithout n)
@@ -872,7 +885,8 @@ let rec shrinkRRBNode (n: RRBFullNode<'T>) =
                     )
                 )
 
-        removeChildren
+        shortenTree
+        |> Seq.append removeChildren
         |> Seq.append shrinkChildren
 
 let shrinkRootNode (RootNode n) = shrinkRRBNode n
