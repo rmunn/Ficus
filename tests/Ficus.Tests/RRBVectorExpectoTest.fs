@@ -4106,7 +4106,7 @@ let splitJoinTests =
             Expect.sequenceEqual sliced (Array.skip i a) "Sliced things didn't match"
     ]
 
-let manualInsertTestWithVec idx item vec =
+let manualInsertTestWithVec idx item treeRepr vec =
     let a =
         vec
         |> RRBVector.toArray
@@ -4117,7 +4117,8 @@ let manualInsertTestWithVec idx item vec =
         vec
         |> RRBVector.insert idx item
 
-    RRBVectorProps.checkProperties actual "Vector after insertion"
+    RRBVectorProps.checkProperties actual
+    <| sprintf "Vector %s after insertion at %d" treeRepr idx
 
     Expect.equal
         (actual
@@ -4129,10 +4130,10 @@ let manualInsertTest idx item treeRepr =
     let vec = RRBVectorGen.treeReprStrToVec treeRepr
 
     vec
-    |> manualInsertTestWithVec idx item
+    |> manualInsertTestWithVec idx item treeRepr
 
     vec.Transient()
-    |> manualInsertTestWithVec idx item
+    |> manualInsertTestWithVec idx item treeRepr
 
 let insertTests =
     testList "Insert tests" [
@@ -4231,12 +4232,12 @@ let insertTests =
         <| fun _ ->
             seq { 0..1024 }
             |> RRBVector.ofSeq
-            |> manualInsertTestWithVec 0 512
+            |> manualInsertTestWithVec 0 512 "vec-1025"
         testCase "insert into full vector of size 264"
         <| fun _ ->
             seq { 0..263 }
             |> RRBVector.ofSeq
-            |> manualInsertTestWithVec 0 512
+            |> manualInsertTestWithVec 0 512 "vec-264"
 
         testCase "insert that requires a shift left"
         <| fun _ ->
