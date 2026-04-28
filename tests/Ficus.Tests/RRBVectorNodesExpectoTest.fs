@@ -2792,15 +2792,13 @@ let mergeTreeTestsWIP =
         <| fun _ ->
             let vecL =
                 RRBVectorGen.treeReprStrToVec
-                    // "[M 26 M 22 M 22 M M-1 M M M 17 M 26 M 20 M 29 M 23 M M M 26 M M M M 26 M 18 M] [29 M 21] T1"
-                    "[M*M] [M*9] T1"
+                    "[M*M] [M*10] T1"
 
             let transientL = vecL.Transient()
 
             let vecR =
                 RRBVectorGen.treeReprStrToVec
-                    // "[29 M M-1 M M M 17 M 18 M 20 M 21 M 23 M M M 26 23 M 22 M 26 M 25 M 29 M 21 M M] [M 24 M 23] T1"
-                    "[16 M 18 M 19 M 21 M 22 M M 21 M 20 M 24 M 23 M 22 21 M 30 M 17 M 26 M 20 M 29 M] [23 M M M 26 M 18 M 29 M 21 M M] T1"
+                    "[16 M 18 M 19 M 21 M 22 M M 21 M 20 M 24 M 23 M 22 21 M 30 M 17] [23 M M 21 M M] T1"
 
             let transientR = vecR.Transient()
 
