@@ -5329,6 +5329,7 @@ let longRunningTests =
                 RRBVectorProps.checkProperties joinedOrig "Joined orig vector"
                 let joinedOrigThenPop = RRBVector.pop joinedOrig
                 RRBVectorProps.checkProperties joinedOrigThenPop "Joined orig vector, then popped"
+                // TODO: Only allowed to do this last test, with vR', if vR wasn't a transient originally, otherwise vR has been invalidated at this point
                 let joined = RRBVector.append vL vR'
                 RRBVectorProps.checkProperties joined "Joined vector"
 
