@@ -8,6 +8,9 @@ open RRBVectorProps
 open FsCheck
 open Ficus
 
+// TODO: Look for "testProp" and make sure all those tests are being discovered and run
+// We want to make sure that stress testing can stress-test *all* the properties, not just a subset
+
 // TODO: This file and RRBVectorExpectoTest.fs are getting huge. Split them up into subcategories.
 // Move the common code below into TestCommon.fs and place that first (or nearly first) in the .fsproj
 // Then each test list can get its own file
