@@ -523,6 +523,11 @@ module ParameterizedVecCommands =
 
 open ParameterizedVecCommands
 
+// TODO: See if there's a way I can get the failures to print my custom tree repr strings, because currently it's printing the vectors as `seq { 1; 2; 3; 4 ... }` which is far too short to be useful.
+// That has to do with how Expecto prints things, probably with %A.
+// I might have to temporarily have the Ficus package reference FSharp.Core just to pull in the structured representation attribute, then drop the FSharp.Core package reference before releasing
+// so that I won't be causing other people to pull in FSharp.Core as a transitive dependency (which was the whole point of moving the core classes to C#)
+
 let specFromData data =
     { new ICommandGenerator<RRBVector<int>, int[]> with
         member __.InitialActual = data
