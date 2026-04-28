@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using Ficus.RRBArrayExtensions;
 
 namespace Ficus;
@@ -13,12 +14,14 @@ public class RRBRelaxedNode<T> : RRBFullNode<T>
         this.sizeTable = sizeTable;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static RRBFullNode<T> Create(OwnerToken owner, int shift, RRBNode<T>[] children)
     {
         var sizeTbl = RRBNode<T>.CreateSizeTable(shift, children);
         return CreateWithSizeTable(owner, shift, children, sizeTbl);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static RRBFullNode<T> CreateWithSizeTable(
         OwnerToken owner,
         int shift,

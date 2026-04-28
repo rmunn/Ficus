@@ -46,13 +46,11 @@ public static class RRBMath
     }
 
     // This takes a `len` parameter that should be the size of the size table, so that it can handle expanded nodes
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsSizeTableFullAtShift(int shift, int[] sizeTbl, int len)
     {
-        if (len <= 1)
-            return true;
-
+        if (len <= 1) return true;
         int checkIdx = len - 2;
-
         return sizeTbl[checkIdx] == ((checkIdx + 1) << shift);
     }
 

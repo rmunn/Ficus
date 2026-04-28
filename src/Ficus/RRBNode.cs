@@ -57,6 +57,7 @@ public abstract class RRBNode<T>
 
     public abstract RRBNode<T> GetEditableNode(OwnerToken owner);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsEditableBy(OwnerToken owner)
     {
         return ReferenceEquals(owner, ownerToken)
@@ -80,6 +81,7 @@ public abstract class RRBNode<T>
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int[] CreateSizeTableS(int shift, RRBNode<T>[] array, int len)
     {
         var sizeTable = new int[len];
@@ -87,6 +89,7 @@ public abstract class RRBNode<T>
         return sizeTable;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int[] CreateSizeTable(int shift, RRBNode<T>[] array)
     {
         return CreateSizeTableS(shift, array, array.Length);
@@ -94,16 +97,19 @@ public abstract class RRBNode<T>
 
     // TODO: Have this one return an RRBLeafNode rather than an RRBNode, we can upcast it to the parent if we need to but having a child type is useful to avoid a bunch of downcasts
     // If the downcast would ever fail, the compiler can tell us about it
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static RRBNode<T> MkLeaf(OwnerToken owner, T[] items)
     {
         return new RRBLeafNode<T>(owner, items);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static RRBNode<T> MkNode(OwnerToken owner, int shift, RRBNode<T>[] children)
     {
         return RRBRelaxedNode<T>.Create(owner, shift, children);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static RRBNode<T> MkNodeKnownSize(
         OwnerToken owner,
         int shift,

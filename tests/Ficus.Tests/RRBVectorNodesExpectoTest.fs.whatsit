@@ -740,7 +740,7 @@ let doRebalance2Test shift (nodeL : RRBNode<'T>) (nodeR : RRBNode<'T>) =
     needsRebalancing ==> lazy (
         // Need to do this before the rebalance, because after the rebalance the original nodeL may be invalid if it was an expanded node
         let expected = Seq.append (nodeItems shift nodeL) (nodeItems shift nodeR) |> Array.ofSeq
-        let newL, newR = (nodeL :?> RRBFullNode<'T>).Rebalance2Plus1 nullOwner shift None (nodeR :?> RRBFullNode<'T>)
+        let newL, newR = (nodeL :?> RRBFullNode<'T>).Rebalance2PlusLeaf nullOwner shift None (nodeR :?> RRBFullNode<'T>)
         match newR with
         | None ->
             Expect.isLessThanOrEqual minSize Literals.blockSize "If both nodes add up to a NodeSize of M or less, should end up with just one node at the end"

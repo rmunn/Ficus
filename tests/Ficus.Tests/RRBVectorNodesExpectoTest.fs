@@ -2054,7 +2054,7 @@ let doRebalance2Test shift (nodeL: RRBNode<'T>) (nodeR: RRBNode<'T>) =
 
          let struct (newL, newR) =
              (nodeL :?> RRBFullNode<'T>)
-                 .Rebalance2Plus1(nullOwner, shift, null, (nodeR :?> RRBFullNode<'T>))
+                 .Rebalance2PlusLeaf(nullOwner, shift, null, (nodeR :?> RRBFullNode<'T>))
 
          match newR with
          | null ->

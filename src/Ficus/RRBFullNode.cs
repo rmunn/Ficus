@@ -16,6 +16,7 @@ public class RRBFullNode<T> : RRBNode<T>
         Children = children;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static RRBFullNode<T> Create(OwnerToken ownerToken, RRBNode<T>[] children)
         => new(ownerToken, children);
 
@@ -71,6 +72,7 @@ public class RRBFullNode<T> : RRBNode<T>
     // No-op; only used in expanded nodes
     public override void SetNodeSize(int size) { }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool FullNodeIsTrulyFull(int shift)
     {
         return NodeSize == 0 || LastChild.TreeSize(RRBMath.Down(shift)) >= (1 << shift);
@@ -188,7 +190,6 @@ public class RRBFullNode<T> : RRBNode<T>
 
     public virtual RRBNode<T> UpdateChildSRel(OwnerToken owner, int shift, int idx, RRBNode<T> newChild, int sizeDiff)
     {
-        // TODO: Why doesn't sizeDiff get used in here?
         int size = NodeSize;
         var sizeTable = BuildSizeTable(shift, size, size - 1);
 
@@ -534,7 +535,6 @@ public class RRBFullNode<T> : RRBNode<T>
 
         int shift = Literals.shiftSize;
 
-        // TODO: Figure out if these casts to RRBFullNode are actually needed in C# (F#'s type system was subtly different)
         var node = (RRBFullNode<T>)this.NewParent(
             owner,
             shift,
@@ -639,11 +639,13 @@ public class RRBFullNode<T> : RRBNode<T>
         return (parent, RRBMath.Up(shift));
     }
 
+    // TODO: Consider [MethodImpl(MethodImplOptions.AggressiveInlining)] for the Slide, InsertAndSlide, and InsertAndSplit methods here. They are only used in a single place each,
+    // and are not recursive so inlining them won't expand to larger code. And it will save the overhead of a method call.
+
     public (RRBNode<T>, RRBNode<T>) SlideChildrenLeft(
         OwnerToken owner, int shift, int n, RRBFullNode<T> leftSibling)
     {
-        if (n == 0)
-            return (leftSibling, this);
+        if (n == 0) return (leftSibling, this);
 
         int keep = NodeSize - n;
 
@@ -656,8 +658,7 @@ public class RRBFullNode<T> : RRBNode<T>
     public (RRBNode<T>, RRBNode<T>) SlideChildrenRight(
         OwnerToken owner, int shift, int n, RRBFullNode<T> rightSibling)
     {
-        if (n == 0)
-            return (this, rightSibling);
+        if (n == 0) return (this, rightSibling);
 
         int keep = NodeSize - n;
 
@@ -1073,20 +1074,20 @@ public class RRBFullNode<T> : RRBNode<T>
     // DESIGN: Two approaches possible. One would use SlideChildrenLeft/Right to move things around... but that doesn't (currently) exist for leaves.
     // Another approach would be to always build arrays and then rebuild size tables. Which is better? We'll just have to try it.
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public RRBNode<T> Rebalance(OwnerToken owner, int shift)
     {
         int len = this.NodeSize;
-
         return this.RebalanceImpl(owner, shift, len, this.Children.Take(len)).Item1;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public (RRBNode<T> left, RRBNode<T>? right) Rebalance2(OwnerToken owner, int shift, RRBFullNode<T> right)
     {
-        return this.Rebalance2Plus1(owner, shift, null, right);
+        return this.Rebalance2PlusLeaf(owner, shift, null, right);
     }
 
-    // TODO: Consolidate the names of these variants into method overloads in C#
-    public (RRBNode<T> left, RRBNode<T>? right) Rebalance2Plus1(OwnerToken owner, int shift, RRBLeafNode<T>? middle, RRBFullNode<T> right)
+    public (RRBNode<T> left, RRBNode<T>? right) Rebalance2PlusLeaf(OwnerToken owner, int shift, RRBLeafNode<T>? middle, RRBFullNode<T> right)
     {
         // The left node, but not the right, needs to have its right spine shrunk before merging
         // Note, though, that we do *not* want to shrink *this* node yet; that will be done in MkNodeForRebalance
@@ -1178,6 +1179,7 @@ public class RRBFullNode<T> : RRBNode<T>
         return RRBNode<T>.MkNode(owner, shift, arr);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal IEnumerable<C> GetGrandchildren<C>(IEnumerator<RRBNode<T>> childrenEnum, Func<RRBNode<T>, C[]> getGrandChildren)
     {
         while (childrenEnum.MoveNext())
@@ -1246,7 +1248,7 @@ public class RRBFullNode<T> : RRBNode<T>
         // Will ONLY be called when there's room to merge in the middle leaf, whether directly or by rebalancing
         if (this.NeedsRebalance2PlusLeaf(shift, middle.NodeSize, right))
         {
-            return this.Rebalance2Plus1(owner, shift, middle, right);
+            return this.Rebalance2PlusLeaf(owner, shift, middle, right);
         }
         else if (this.NodeSize + 1 + right.NodeSize <= Literals.blockSize)
         {
