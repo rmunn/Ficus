@@ -781,68 +781,9 @@ type ShowSizedInt = ShowSizedInt of int
 // TODO: Write shrinkers for nodes and for trees
 // TODO: REALLY REALLY TODO. Shrinkers are what I need most now, so that my regression tests can be as small as possible.
 
-let nodeWithout (n: RRBFullNode<'T>) i =
-    let size = n.NodeSize
-
-    let newChildren =
-        RRBArrayExtensions.RRBArrayExtensions.CopyAndRemoveAt(n.SafeChildrenArr, i)
-
-    let isRelaxed = n :? RRBRelaxedNode<_>
-
-    if isRelaxed then
-        let isExpanded = n :? RRBExpandedRelaxedNode<_>
-        let r = n :?> RRBRelaxedNode<_>
-        let sizeToRemove = r.SizeTable.[i]
-        let prevSize = if i > 0 then r.SizeTable.[i - 1] else 0
-
-        let sizeDiff =
-            sizeToRemove
-            - prevSize
-
-        let newSizeTable =
-            Array.init (size - 1)
-            <| fun j ->
-                if j < i then
-                    r.SizeTable.[j]
-                else
-                    r.SizeTable.[j + 1]
-                    - sizeDiff
-
-        if isExpanded then
-            RRBExpandedRelaxedNode<_>(n.Owner, newChildren, newSizeTable) :> RRBFullNode<_>
-        else
-            RRBRelaxedNode<_>(n.Owner, newChildren, newSizeTable) :> RRBFullNode<_>
-    else
-        let isExpanded = n :? RRBExpandedFullNode<_>
-
-        if isExpanded then
-            RRBExpandedFullNode<_>(n.Owner, newChildren) :> RRBFullNode<_>
-        else
-            RRBFullNode<_>(n.Owner, newChildren)
-
 let leafWithout (n: RRBLeafNode<'T>) i =
     let newItems = RRBArrayExtensions.RRBArrayExtensions.CopyAndRemoveAt(n.Items, i)
     RRBLeafNode<'T>(n.Owner, newItems)
-
-let shrinkRootNode (RootNode n) =
-    // Nodes of size 1 shouldn't be shrunk to 0, because empty nodes cause test failures
-    let size = n.NodeSize
-
-    if size < 2 then
-        Seq.empty
-    else
-        seq { 0 .. size - 1 }
-        |> Seq.map (nodeWithout n)
-
-let shrinkLeafNode (LeafNode n) =
-    let size = n.NodeSize
-
-    if size < 2 then
-        Seq.empty
-    else
-        seq { 0 .. size - 1 }
-        |> Seq.map (leafWithout n)
-
 
 let shrinkLeaf (n: RRBLeafNode<'T>) =
     let size = n.NodeSize
@@ -863,32 +804,74 @@ let shrinkLeaves (leaves: RRBLeafNode<'T>[]) =
         }
         |> Seq.map (fun i -> RRBArrayExtensions.RRBArrayExtensions.CopyAndRemoveAt(leaves, i))
 
-let shrinkLargeRootNode (LargeRootNode n) =
+let nodeWithout (n: RRBFullNode<'T>) i =
+    let shift = height n
+    n.RemoveChild(n.Owner, shift, i) :?> RRBFullNode<_>
+
+let rec shrinkRRBNode (n: RRBFullNode<'T>) =
     let size = n.NodeSize
 
     if size < 2 then
+        // Short nodes shouldn't be shrunk further
+        Seq.empty
+    elif
+        n.Owner
+        <> nullOwner
+    then
+        // Transient nodes update themselves in place, which is not compatible with the shrink logic that FsCheck uses (which assumes immutable data)
+        // TODO: See if we can find some way to make this safe for transient nodes as well, perhaps by cloning the node before calling UpdateChild so that each shrink is using a different node after all, yet the "new" node has the same owner
+        // But for now, we just don't shink transients
         Seq.empty
     else
-        seq { 0 .. size - 1 }
-        |> Seq.map (nodeWithout n)
+        let shift = height n
 
-let shrinkIsolatedNode (IsolatedNode n) =
-    let size = n.NodeSize
+        let removeChildren =
+            seq { 0 .. size - 1 }
+            |> Seq.map (nodeWithout n)
 
-    if size < 2 then
-        Seq.empty
-    else
-        seq { 0 .. size - 1 }
-        |> Seq.map (nodeWithout n)
+        let shrinkChildren =
+            let shift = height n
 
-let shrinkIsolatedShortNode (IsolatedShortNode n) =
-    let size = n.NodeSize
+            if shift < Literals.shiftSize then
+                Seq.empty
+            elif shift = Literals.shiftSize then
+                // Twig level, children are leaves
+                n.ChildrenSeq
+                |> Seq.cast<RRBLeafNode<'T>>
+                |> Seq.mapi (fun idx leaf -> (idx, leaf))
+                |> Seq.collect (fun (idx, leaf) ->
+                    let leafShrinks = shrinkLeaf leaf
 
-    if size < 2 then
-        Seq.empty
-    else
-        seq { 0 .. size - 1 }
-        |> Seq.map (nodeWithout n)
+                    leafShrinks
+                    |> Seq.map (fun leaf' ->
+                        n.UpdateChild(n.Owner, shift, idx, leaf') :?> RRBFullNode<_>
+                    )
+                )
+            else
+                // Above twig level, children are nodes
+                n.ChildrenSeq
+                |> Seq.mapi (fun idx child -> (idx, child))
+                |> Seq.collect (fun (idx, child) ->
+                    let childShrinks = shrinkRRBNode (child :?> RRBFullNode<_>)
+
+                    childShrinks
+                    |> Seq.map (fun child' ->
+                        n.UpdateChild(n.Owner, shift, idx, child') :?> RRBFullNode<_>
+                    )
+                )
+
+        removeChildren
+        |> Seq.append shrinkChildren
+
+let shrinkRootNode (RootNode n) = shrinkRRBNode n
+
+let shrinkLeafNode (LeafNode n) = shrinkLeaf n
+
+let shrinkLargeRootNode (LargeRootNode n) = shrinkRRBNode n
+
+let shrinkIsolatedNode (IsolatedNode n) = shrinkRRBNode n
+
+let shrinkIsolatedShortNode (IsolatedShortNode n) = shrinkRRBNode n
 
 type MyGenerators =
     static member arbTree() =
