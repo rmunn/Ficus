@@ -1154,7 +1154,7 @@ let appendTests =
 
 let appendPropertyTests =
     testList "Append property tests" [
-        testProp "AppendChild on a generated node"
+        testProp "FsCheck AppendChild on a generated node"
         <| fun (IsolatedShortNode node) ->
             checkNodeProperties Literals.shiftSize node "Starting node"
             let newChild = mkSimpleLeaf (M - 2)
@@ -1164,7 +1164,7 @@ let appendPropertyTests =
             result.NodeSize = node.NodeSize
                               + 1
 
-        testProp "AppendChildS on a generated node"
+        testProp "FsCheck AppendChildS on a generated node"
         <| fun (IsolatedShortNode node) ->
             checkNodeProperties Literals.shiftSize node "Starting node"
             let newChild = mkSimpleLeaf (M - 2)
@@ -1452,7 +1452,7 @@ let insertTests =
 
 let insertPropertyTests =
     testList "Insert property tests" [
-        testProp "InsertChild on a generated node"
+        testProp "FsCheck InsertChild on a generated node"
         <| fun (IsolatedShortNode node) (NonNegativeInt idx) ->
             let idx =
                 idx % (node.NodeSize
@@ -1466,7 +1466,7 @@ let insertPropertyTests =
             result.NodeSize = node.NodeSize
                               + 1
 
-        testProp "InsertChildS on a generated node"
+        testProp "FsCheck InsertChildS on a generated node"
         <| fun (IsolatedShortNode node) (NonNegativeInt idx) ->
             let idx =
                 idx % (node.NodeSize
@@ -1486,7 +1486,7 @@ let insertPropertyTests =
 
 let removePropertyTests =
     testList "Remove property tests" [
-        testProp "RemoveChild on a generated node"
+        testProp "FsCheck RemoveChild on a generated node"
         <| fun (IsolatedNode node: IsolatedNode<int>) (NonNegativeInt idx) ->
             node.NodeSize > 1
             ==> lazy
@@ -1498,7 +1498,7 @@ let removePropertyTests =
                  result.NodeSize = node.NodeSize
                                    - 1)
 
-        testProp "RemoveLastChild on a generated node"
+        testProp "FsCheck RemoveLastChild on a generated node"
         <| fun (IsolatedNode node: IsolatedNode<int>) ->
             node.NodeSize > 1
             ==> lazy
@@ -1512,7 +1512,7 @@ let removePropertyTests =
 
 let updatePropertyTests =
     testList "Update property tests" [
-        testProp "UpdateChild on a generated node"
+        testProp "FsCheck UpdateChild on a generated node"
         <| fun (IsolatedNode node) (NonNegativeInt idx) ->
             let idx = idx % node.NodeSize
             let oldLeaf = node.Children.[idx]
@@ -1524,7 +1524,7 @@ let updatePropertyTests =
             result.NodeSize = node.NodeSize
             && result.TreeSize Literals.shiftSize = node.TreeSize Literals.shiftSize
 
-        testProp "UpdateChildSAbs on a generated node"
+        testProp "FsCheck UpdateChildSAbs on a generated node"
         <| fun (IsolatedNode node: IsolatedNode<int>) (NonNegativeInt idx) (LeafNode newLeaf) ->
             let idx = idx % node.NodeSize
             let oldLeaf = node.Children.[idx]
@@ -1544,7 +1544,7 @@ let updatePropertyTests =
             && result.TreeSize Literals.shiftSize = node.TreeSize Literals.shiftSize
                                                     + sizeDiff
 
-        testProp "UpdateChildSRel on a generated node"
+        testProp "FsCheck UpdateChildSRel on a generated node"
         <| fun (IsolatedNode node: IsolatedNode<int>) (NonNegativeInt idx) (LeafNode newLeaf) ->
             let idx = idx % node.NodeSize
             let oldLeaf = node.Children.[idx]
@@ -1567,7 +1567,7 @@ let updatePropertyTests =
 
 let keepPropertyTests =
     testList "KeepN(Left/Right) property tests" [
-        testProp (*1913961525, 296651679*) "KeepNLeft on a generated node"
+        testProp (*1913961525, 296651679*) "FsCheck KeepNLeft on a generated node"
         <| fun (IsolatedNode node: IsolatedNode<int>) (PositiveInt n) ->
             let n =
                 n % (node.NodeSize
@@ -1590,7 +1590,7 @@ let keepPropertyTests =
             result.NodeSize = n
             && result.TreeSize Literals.shiftSize = totalKeptSize
 
-        testProp (*1914116381, 296651679*) "KeepNRight on a generated node"
+        testProp (*1914116381, 296651679*) "FsCheck KeepNRight on a generated node"
         <| fun (IsolatedNode node: IsolatedNode<int>) (PositiveInt n) ->
             let n =
                 n % (node.NodeSize
@@ -1619,7 +1619,7 @@ let keepPropertyTests =
 
 let splitAndKeepPropertyTests =
     testList "SplitAndKeep property tests" [
-        testProp "SplitAndKeepNLeft on a generated node"
+        testProp "FsCheck SplitAndKeepNLeft on a generated node"
         <| fun (IsolatedNode node: IsolatedNode<int>) (PositiveInt n) ->
             let n =
                 n % (node.NodeSize
@@ -1653,7 +1653,7 @@ let splitAndKeepPropertyTests =
                 totalKeptL
                 "Node after split should have same tree size as total of remaining N items"
 
-        testProp "SplitAndKeepNRight on a generated node"
+        testProp "FsCheck SplitAndKeepNRight on a generated node"
         <| fun (IsolatedNode node: IsolatedNode<int>) (PositiveInt n) ->
             let n =
                 n % (node.NodeSize
@@ -1690,7 +1690,7 @@ let splitAndKeepPropertyTests =
                 totalKeptR
                 "Node after split should have same tree size as total of remaining N items"
 
-        testProp "SplitAndKeepNLeftS on a generated node"
+        testProp "FsCheck SplitAndKeepNLeftS on a generated node"
         <| fun (IsolatedNode node: IsolatedNode<int>) (PositiveInt n) ->
             let n =
                 n % (node.NodeSize
@@ -1736,7 +1736,7 @@ let splitAndKeepPropertyTests =
                 totalKeptL
                 "Node after split should have same tree size as total of remaining N items"
 
-        testProp "SplitAndKeepNRightS on a generated node"
+        testProp "FsCheck SplitAndKeepNRightS on a generated node"
         <| fun (IsolatedNode node: IsolatedNode<int>) (PositiveInt n) ->
             let n =
                 n % (node.NodeSize
@@ -1788,7 +1788,7 @@ let splitAndKeepPropertyTests =
 
 let appendAndPrependChildrenPropertyTests =
     testList "(Ap/Pre)pendChildren property tests" [
-        testProp "AppendNChildren on a generated node"
+        testProp "FsCheck AppendNChildren on a generated node"
         <| fun (IsolatedShortNode node: IsolatedShortNode<int>) (newLeaves: RRBLeafNode<int>[]) ->
             let remaining =
                 Literals.blockSize
@@ -1835,7 +1835,7 @@ let appendAndPrependChildrenPropertyTests =
                 expectedLeafArrays
                 "Leaves should have been placed in the correct locations"
 
-        testProp "AppendNChildrenS on a generated node"
+        testProp "FsCheck AppendNChildrenS on a generated node"
         <| fun (IsolatedShortNode node: IsolatedShortNode<int>) (newLeaves: RRBLeafNode<int>[]) ->
             let remaining =
                 Literals.blockSize
@@ -1895,7 +1895,7 @@ let appendAndPrependChildrenPropertyTests =
                 expectedLeafArrays
                 "Leaves should have been placed in the correct locations"
 
-        testProp "PrependNChildren on a generated node"
+        testProp "FsCheck PrependNChildren on a generated node"
         <| fun (IsolatedShortNode node: IsolatedShortNode<int>) (newLeaves: RRBLeafNode<int>[]) ->
             let remaining =
                 Literals.blockSize
@@ -1942,7 +1942,7 @@ let appendAndPrependChildrenPropertyTests =
                 expectedLeafArrays
                 "Leaves should have been placed in the correct locations"
 
-        testProp "PrependNChildrenS on a generated node"
+        testProp "FsCheck PrependNChildrenS on a generated node"
         <| fun (IsolatedShortNode node: IsolatedShortNode<int>) (newLeaves: RRBLeafNode<int>[]) ->
             let remaining =
                 Literals.blockSize
@@ -2132,12 +2132,12 @@ let findMergeCandidatesExhaustive (sizeSeq: #seq<int>) len =
 
 let rebalanceTestsWIP =
     testList "WIP: Rebalance tests" [
-        testProp "Try this"
+        testProp "FsCheck Try this"
         <| fun (IsolatedNode nodeL: IsolatedNode<int>) (IsolatedNode nodeR: IsolatedNode<int>) ->
             doRebalance2Test Literals.shiftSize nodeL nodeR
 
         testProp
-            "findMergeCandidates with two passes either finds a better match than with one pass, or finds the same match if there isn't a better one"
+            "FsCheck findMergeCandidates with two passes either finds a better match than with one pass, or finds the same match if there isn't a better one"
         <| fun (IsolatedNode nodeL: IsolatedNode<int>) (IsolatedNode nodeR: IsolatedNode<int>) ->
             let sizesL =
                 nodeL.ChildrenSeq
@@ -2275,7 +2275,7 @@ let rebalanceTestsWIP =
                 (23, 9, 2)
                 "Two-pass solution reduces by 2 but does half the work"
 
-        testProp "NeedsRebalancing function uses correct formula"
+        testProp "FsCheck NeedsRebalancing function uses correct formula"
         <| fun (IsolatedNode nodeL: IsolatedNode<int>) (IsolatedNode nodeR: IsolatedNode<int>) ->
             let shift = Literals.shiftSize
 
@@ -2315,7 +2315,7 @@ let rebalanceTestsWIP =
             Expect.equal (nodeL.NeedsRebalance2(shift, nodeR)) needsRebalancing
             <| sprintf "NeedsRebalancing was wrong for left %A and right %A" nodeL nodeR
 
-        testProp "Concat test"
+        testProp "FsCheck Concat test"
         <| fun (IsolatedNode nodeL: IsolatedNode<int>) (IsolatedNode nodeR: IsolatedNode<int>) ->
             let shift = Literals.shiftSize
             // Need to do this before the concatenation, because after the concatenation the original nodeL may be invalid if it was an expanded node
@@ -2373,7 +2373,7 @@ let rebalanceTestsWIP =
                 checkNodeProperties shift newL "Newly-concatenated left node"
                 checkNodeProperties shift nodeR' "Newly-concatenated right node"
 
-        testProp "Concat-with-leaf test"
+        testProp "FsCheck Concat-with-leaf test"
         <| fun
                (IsolatedNode nodeL: IsolatedNode<int>)
                (LeafNode leaf: LeafNode<int>)
@@ -2532,7 +2532,7 @@ let doIndividualMergeTestLeftTwigRightTwoNodeTree L R1 R2 =
 
 let splitTreeTests =
     testList "Split tests" [
-        testProp (*871740682, 296591768*) "Keep"
+        testProp (*871740682, 296591768*) "FsCheck Keep"
         <| fun (IsolatedNode root: IsolatedNode<int>) (NonNegativeInt idx) ->
             let shift = Literals.shiftSize
 
@@ -2560,7 +2560,7 @@ let splitTreeTests =
                 expected
                 "Items after keep are still the same"
 
-        testProp "Skip"
+        testProp "FsCheck Skip"
         <| fun (IsolatedNode root: IsolatedNode<int>) (NonNegativeInt idx) ->
             let shift = Literals.shiftSize
 
@@ -2588,7 +2588,7 @@ let splitTreeTests =
                 expected
                 "Items after skip are still the same"
 
-        testProp "Split"
+        testProp "FsCheck Split"
         <| fun (IsolatedNode root: IsolatedNode<int>) (NonNegativeInt idx) ->
             let shift = Literals.shiftSize
 
@@ -2710,7 +2710,7 @@ let doMergeTest (shiftL, (nodeL: RRBNode<'T>)) (shiftR, nodeR) =
 
 let mergeTreeTestsWIP =
     testList "WIP: Merge tests" [
-        testProp "Merging twigs"
+        testProp "FsCheck Merging twigs"
         <| fun (IsolatedNode nodeL: IsolatedNode<int>) (IsolatedNode nodeR: IsolatedNode<int>) ->
             let shift = Literals.shiftSize
 
@@ -2777,7 +2777,7 @@ let mergeTreeTestsWIP =
                 checkNodeProperties shift newL "Newly merged left node"
                 checkNodeProperties shift nodeR' "Newly merged right node"
 
-        testProp (*7886235, 296578399*) "Merging left twig with right tree"
+        testProp (*7886235, 296578399*) "FsCheck Merging left twig with right tree"
         <| fun (IsolatedNode nodeL: IsolatedNode<int>) (RootNode nodeR: RootNode<int>) ->
             let shiftL = Literals.shiftSize
 
@@ -2787,7 +2787,7 @@ let mergeTreeTestsWIP =
 
             doMergeTest (shiftL, nodeL) (shiftR, nodeR)
 
-        testProp (*17045485, 296578399*) "Merging left tree with right twig"
+        testProp (*17045485, 296578399*) "FsCheck Merging left tree with right twig"
         <| fun (RootNode nodeL: RootNode<int>) (IsolatedNode nodeR: IsolatedNode<int>) ->
             let shiftL =
                 Literals.shiftSize
@@ -2839,7 +2839,7 @@ let mergeTreeTestsWIP =
 
             doMergeTest (shiftL, rootL) (shiftR, rootR)
 
-        testProp "Merging left tree with right tree"
+        testProp "FsCheck Merging left tree with right tree"
         <| fun (RootNode nodeL: RootNode<int>) (RootNode nodeR: RootNode<int>) ->
             let shiftL =
                 Literals.shiftSize
@@ -2979,7 +2979,7 @@ let mergeTreeTestsWIP =
 
 let largeMergeTreeTestsWIP =
     testList "WIP: Large tree-merge tests" [
-        testProp (*3644257, 296578399*) "Merging left twig with right large tree"
+        testProp (*3644257, 296578399*) "FsCheck Merging left twig with right large tree"
         <| fun (IsolatedNode nodeL: IsolatedNode<int>) (LargeRootNode nodeR: LargeRootNode<int>) ->
             let shiftL = Literals.shiftSize
 
@@ -2989,7 +2989,7 @@ let largeMergeTreeTestsWIP =
 
             doMergeTest (shiftL, nodeL) (shiftR, nodeR)
 
-        testProp (*3643640, 296578399*) "Merging left large tree with right twig"
+        testProp (*3643640, 296578399*) "FsCheck Merging left large tree with right twig"
         <| fun (LargeRootNode nodeL: LargeRootNode<int>) (IsolatedNode nodeR: IsolatedNode<int>) ->
             let shiftL =
                 Literals.shiftSize
@@ -2998,7 +2998,7 @@ let largeMergeTreeTestsWIP =
             let shiftR = Literals.shiftSize
             doMergeTest (shiftL, nodeL) (shiftR, nodeR)
 
-        testProp "Merging left large tree with right large tree"
+        testProp "FsCheck Merging left large tree with right large tree"
         <| fun (LargeRootNode nodeL: LargeRootNode<int>) (LargeRootNode nodeR: LargeRootNode<int>) ->
             let shiftL =
                 Literals.shiftSize
@@ -3014,7 +3014,7 @@ let largeMergeTreeTestsWIP =
 
 let manualTests =
     testList "Tests of node methods that aren't covered by random testing" [
-        testProp "ToRelaxedNodeIfNeeded never changes an already-full node"
+        testProp "FsCheck ToRelaxedNodeIfNeeded never changes an already-full node"
         <| fun (IsolatedNode node: IsolatedNode<int>) ->
             node
             |> isFull
@@ -3074,7 +3074,7 @@ let manualTests =
                  |> isFull)
                 "Node should still be full"
 
-        testProp "ToFullNodeIfNeeded never changes an already-relaxed node"
+        testProp "FsCheck ToFullNodeIfNeeded never changes an already-relaxed node"
         <| fun (IsolatedNode node: IsolatedNode<int>) ->
             node
             |> isRelaxed
@@ -3091,7 +3091,7 @@ let manualTests =
 
 // let debugGenTests =
 //   ftestList "Debugging generators" [
-//     testProp "Sized int" <| fun (ShowSizedInt n) ->
+//     testProp "FsCheck Sized int" <| fun (ShowSizedInt n) ->
 //         ()
 //   ]
 
