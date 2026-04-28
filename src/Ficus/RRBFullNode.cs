@@ -1376,6 +1376,7 @@ public class RRBFullNode<T> : RRBNode<T>
                 var parentR = right.UpdateChildSAbs(owner, rightShift, 0, newChild, newChild.TreeSize(RRBMath.Down(rightShift)));
                 // TODO: Likewise test whether shrinking parentR is needed, by seeing what fails if we don't shrink here
                 return shrinkLeftNode((parentR, null));
+                // return (parentR, null); // TODO: I believe I've confirmed that this one isn't needed. Run stress tests just to be very certain.
             }
             else
             {
@@ -1383,8 +1384,6 @@ public class RRBFullNode<T> : RRBNode<T>
                 var parentL = (RRBFullNode<T>)this.NewParent(owner, RRBMath.Down(rightShift), new[] { newLeft });
                 var childR = (RRBFullNode<T>)newRight;
 
-                // TODO: Same as above, delete this and see what tests fail, then create targeted regression test for specific scenario
-                // NOTE: I've already proven that at some point, but I forget which test fails when this step isn't done. Make a note of it in the test itself.
                 if (right.NodeSize > 1)
                 {
                     childR = (RRBFullNode<T>)childR.ShrinkRightSpine(owner, RRBMath.Down(rightShift));

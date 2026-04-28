@@ -2790,9 +2790,7 @@ let mergeTreeTestsWIP =
         testCase
             "Regression test for merging two trees that end up growing in height but requiring right spine to be shrunk"
         <| fun _ ->
-            let vecL =
-                RRBVectorGen.treeReprStrToVec
-                    "[M*M] [M*10] T1"
+            let vecL = RRBVectorGen.treeReprStrToVec "[M*M] [M*10] T1"
 
             let transientL = vecL.Transient()
 
@@ -2814,6 +2812,23 @@ let mergeTreeTestsWIP =
                     .MergeTree(nullOwner, shift, null, shift, rootR :?> RRBFullNode<int>, false)
 
             checkNodeProperties shift mergedL "Merged tree"
+
+        testCase
+            "Regression test for merging left twig with right tree where right spine needs to be shrunk"
+        <| fun _ ->
+            let vecL = RRBVectorGen.treeReprStrToVec "16 17 19 20 23 26 18 29 24 T1"
+            let vecR = RRBVectorGen.treeReprStrToVec "[M*M] [M 26] T1"
+
+            let shiftL = Literals.shiftSize
+
+            let shiftR =
+                Literals.shiftSize
+                * 2
+
+            let rootL = (vecL.Transient() :?> RRBTransientVector<int>).Root
+            let rootR = (vecR.Transient() :?> RRBTransientVector<int>).Root :?> RRBFullNode<_>
+
+            doMergeTest (shiftL, rootL) (shiftR, rootR)
 
         testProp "Merging left tree with right tree"
         <| fun (RootNode nodeL: RootNode<int>) (RootNode nodeR: RootNode<int>) ->
